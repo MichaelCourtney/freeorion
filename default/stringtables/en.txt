@@ -14062,7 +14062,7 @@ SHP_WEAPON_2_2
 Laser 2
 
 SHP_WEAPON_2_2_DESC
-Upgrades [[shippart SR_WEAPON_2_1]] parts on all ships within [[metertype METER_SUPPLY]] (or after entering it later). The improved weapon part has shot damage of 42.
+Upgrades [[shippart SR_WEAPON_2_1]] parts on all ships within [[metertype METER_SUPPLY]] (or after entering it later). The improved weapon part has shot damage of [[value PEDIA_SHP_WEAPON_2_2_DAMAGE]].
 
 SHP_WEAPON_2_3
 Laser 3
