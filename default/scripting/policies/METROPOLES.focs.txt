@@ -5,7 +5,7 @@ Policy
     category = "ECONOMIC_CATEGORY"
     adoptioncost = 1.0 * floor(15 + 0.25 * Statistic Sum value = LocalCandidate.Population
                                            condition = And [ Planet OwnedBy empire = Source.Owner ])
-    exclusions = [ "PLC_CONFEDERATION" "PLC_COLONIZATION" ]
+    exclusions = [ "PLC_COLONIZATION" "PLC_CONFEDERATION" ]
     effectsgroups = [
         [[SPECIES_LIKES_OR_DISLIKES_POLICY_STABILITY_EFFECTS]]
 
@@ -20,12 +20,13 @@ Policy
                                                            OwnedBy empire = Source.Owner
                                                            Species
                                                        ] / (NamedInteger name = "METROPOLES_MIN_PLANETS" value = 4)))
-                                    sortkey = LocalCandidate.Population condition = And [
-                Planet
-                OwnedBy empire = Source.Owner
-                Population low = (NamedReal name = "METROPOLES_MINIMUM_POPULATION" value = 20.0)
-                Happiness low = (NamedReal name = "METROPOLES_MIN_STABILITY" value = 12)
-            ]
+                                    sortkey = LocalCandidate.Population
+                                    condition = And [
+                                        Planet
+                                        OwnedBy empire = Source.Owner
+                                        Population low = (NamedReal name = "METROPOLES_MINIMUM_POPULATION" value = 20.0)
+                                        Happiness low = (NamedReal name = "METROPOLES_MIN_STABILITY" value = 12)
+                                    ]
             effects = [
                 SetTargetIndustry value = Value + Target.Population
                     * (NamedReal name = "METROPOLES_TARGET_INDUSTRY_PERPOP"
@@ -63,7 +64,7 @@ Policy
             effects =
                 SetTargetHappiness value = Value - (NamedReal name = "METROPOLES_STABILITY_PENALTY" value = 5.0)
     ]
-    graphic = "icons/policies/metropoles.png"
+    graphic = "icons/policies/economic_metropoles.png"
 
 #include "/scripting/common/base_prod.macros"
 #include "/scripting/policies/policies.macros"

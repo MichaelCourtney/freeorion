@@ -1,7 +1,8 @@
 import freeOrionAIInterface as fo
 import math
+from collections.abc import Sequence
 from logging import debug, error, warning
-from typing import List, Sequence, Set, Tuple, Union
+from typing import Union
 
 import AIDependencies
 import MoveUtilsAI
@@ -53,7 +54,7 @@ def count_troops_in_fleet(fleet_id: int) -> float:
     return fleet_troop_capacity
 
 
-def get_targeted_planet_ids(planet_ids: Sequence[PlanetId], mission_type: MissionType) -> List[PlanetId]:
+def get_targeted_planet_ids(planet_ids: Sequence[PlanetId], mission_type: MissionType) -> list[PlanetId]:
     """Find the planets that are targets of the specified mission type.
 
     :param planet_ids: planets to be queried
@@ -73,16 +74,16 @@ def get_targeted_planet_ids(planet_ids: Sequence[PlanetId], mission_type: Missio
 
 # TODO: Avoid mutable arguments and use return values instead
 # TODO: Use Dijkstra's algorithm instead of BFS to consider starlane length
-def get_fleets_for_mission(
+def get_fleets_for_mission(  # noqa: max-complexity
     target_stats: dict,
     min_stats: dict,
     cur_stats: dict,
     starting_system: int,
-    fleet_pool_set: Set[int],
-    fleet_list: List[int],
+    fleet_pool_set: set[int],
+    fleet_list: list[int],
     species: str = "",
     ensure_return: bool = False,
-) -> List[int]:
+) -> list[int]:
     """Get fleets for a mission.
 
     Implements breadth-first search through systems starting at the **starting_sytem**.
@@ -200,7 +201,7 @@ def get_fleets_for_mission(
         return []
 
 
-def split_fleet(fleet_id: int) -> List[int]:
+def split_fleet(fleet_id: int) -> list[int]:
     """Split a fleet into its ships.
 
     :param fleet_id: fleet to be split.
@@ -232,20 +233,24 @@ def split_fleet(fleet_id: int) -> List[int]:
     return new_fleets
 
 
-def split_ship_from_fleet(fleet_id, ship_id):
+def split_ship_from_fleet(fleet_id, ship_id) -> int:
+    """Try to split a ship from the fleet, creating a new fleet.
+
+    :return: ID of the newly created fleet or INVALID_ID if failed
+    """
     universe = fo.getUniverse()
     fleet = universe.getFleet(fleet_id)
     if assertion_fails(fleet is not None):
-        return
+        return INVALID_ID
 
     if assertion_fails(ship_id in fleet.shipIDs):
-        return
+        return INVALID_ID
 
     if assertion_fails(fleet.numShips > 1, "Can't split last ship from fleet"):
-        return
+        return INVALID_ID
 
     new_fleet_id = fo.issueNewFleetOrder("Fleet %4d" % ship_id, ship_id)
-    if new_fleet_id:
+    if new_fleet_id != INVALID_ID:
         aistate = get_aistate()
         new_fleet = universe.getFleet(new_fleet_id)
         if not new_fleet:
@@ -372,7 +377,7 @@ def extract_fleet_ids_without_mission_types(fleets_ids):
     return [fleet_id for fleet_id in fleets_ids if not aistate.get_fleet_mission(fleet_id).type]
 
 
-def assess_fleet_role(fleet_id):
+def assess_fleet_role(fleet_id):  # noqa: max-complexity
     """
     Assesses ShipRoles represented in a fleet and
     returns a corresponding overall fleetRole (of type MissionType).
@@ -428,7 +433,7 @@ def assess_fleet_role(fleet_id):
     return selected_role
 
 
-def assess_ship_design_role(design):
+def assess_ship_design_role(design):  # noqa: max-complexity
     parts = [get_ship_part(partname) for partname in design.parts if partname and get_ship_part(partname)]
 
     if any(p.partClass == fo.shipPartClass.colony and p.capacity == 0 for p in parts):
@@ -450,7 +455,13 @@ def assess_ship_design_role(design):
             return ShipRoleType.BASE_INVASION
 
     if design.speed == 0:
-        if not parts or parts[0].partClass == fo.shipPartClass.shields:  # ToDo: Update logic for new ship designs
+        if not parts or parts[0].partClass in (
+            fo.shipPartClass.shortRange,
+            fo.shipPartClass.fighterBay,
+            fo.shipPartClass.fighterHangar,
+            fo.shipPartClass.shields,
+            fo.shipPartClass.armour,
+        ):
             return ShipRoleType.BASE_DEFENSE
         else:
             return ShipRoleType.INVALID
@@ -464,7 +475,7 @@ def assess_ship_design_role(design):
         return ShipRoleType.CIVILIAN_EXPLORATION
 
 
-def generate_fleet_orders_for_fleet_missions():
+def generate_fleet_orders_for_fleet_missions():  # noqa: max-complexity
     """Generates fleet orders from targets."""
     debug("Generating fleet orders")
 
@@ -619,7 +630,7 @@ def _print_systems_and_supply(system_ids):
         )
 
 
-def get_fighter_capacity_of_fleet(fleet_id: int) -> Tuple[int, int]:
+def get_fighter_capacity_of_fleet(fleet_id: int) -> tuple[int, int]:
     """
     Return current and max fighter capacity.
     """
@@ -680,7 +691,7 @@ def get_fleet_system(fleet: Union[TargetFleet, int]) -> int:
     return fleet.systemID if fleet.systemID != INVALID_ID else fleet.nextSystemID
 
 
-def get_current_and_max_structure(fleet: int) -> Tuple[float, float]:
+def get_current_and_max_structure(fleet: int) -> tuple[float, float]:
     """Return a 2-tuple of the sums of structure and maxStructure meters of all ships in the fleet."""
 
     universe = fo.getUniverse()

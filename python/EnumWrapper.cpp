@@ -1,4 +1,5 @@
 #include "../universe/BuildingType.h"
+#include "../universe/Condition.h"
 #include "../universe/Effect.h"
 #include "../universe/Enums.h"
 #include "../universe/Fleet.h"
@@ -7,6 +8,7 @@
 #include "../universe/ShipPart.h"
 #include "../universe/Species.h"
 #include "../universe/System.h"
+#include "../universe/ValueRef.h"
 #include "../universe/UniverseObject.h"
 #include "../universe/UnlockableItem.h"
 #include "../Empire/Diplomacy.h"
@@ -78,9 +80,9 @@ namespace FreeOrionPython {
         ;
         TraceLogger() << "WrapGameStateEnums: Wrap BuildType enum";
         auto buildType = py::enum_<BuildType>("buildType");
-        for (const auto& p : IterateEnum(EnumIterator<BuildType>{})) {
-            TraceLogger() << "WrapGameStateEnums: Wrap BuildType enum " << &p;
-            buildType.value(p.second, p.first);
+        for (const auto& [bt, sv] : BuildTypeValues()) {
+            TraceLogger() << "WrapGameStateEnums: Wrap BuildType enum " << sv;
+            buildType.value(sv.data(), bt);
         }
         TraceLogger() << "WrapGameStateEnums: BuildType enum wrapped";
         py::enum_<ResourceType>("resourceType")
@@ -214,13 +216,25 @@ namespace FreeOrionPython {
             .value("aggressive",    Aggression::AGGRESSIVE)
             .value("maniacal",      Aggression::MANIACAL)
         ;
-        py::enum_<GalaxySetupOption>("galaxySetupOption")
-            .value("invalid",       GalaxySetupOption::INVALID_GALAXY_SETUP_OPTION)
-            .value("none",          GalaxySetupOption::GALAXY_SETUP_NONE)
-            .value("low",           GalaxySetupOption::GALAXY_SETUP_LOW)
-            .value("medium",        GalaxySetupOption::GALAXY_SETUP_MEDIUM)
-            .value("high",          GalaxySetupOption::GALAXY_SETUP_HIGH)
-            .value("random",        GalaxySetupOption::GALAXY_SETUP_RANDOM)
+        py::enum_<GalaxySetupOptionGeneric>("galaxySetupOptionGeneric")
+            .value("invalid",       GalaxySetupOptionGeneric::INVALID_GALAXY_SETUP_OPTION)
+            .value("none",          GalaxySetupOptionGeneric::GALAXY_SETUP_NONE)
+            .value("low",           GalaxySetupOptionGeneric::GALAXY_SETUP_LOW)
+            .value("medium",        GalaxySetupOptionGeneric::GALAXY_SETUP_MEDIUM)
+            .value("high",          GalaxySetupOptionGeneric::GALAXY_SETUP_HIGH)
+            .value("random",        GalaxySetupOptionGeneric::GALAXY_SETUP_RANDOM)
+        ;
+        py::enum_<GalaxySetupOptionMonsterFreq>("galaxySetupOptionMonsterFreq")
+            .value("invalid",       GalaxySetupOptionMonsterFreq::INVALID_MONSTER_SETUP_OPTION)
+            .value("none",          GalaxySetupOptionMonsterFreq::MONSTER_SETUP_NONE)
+            .value("extremelyLow",  GalaxySetupOptionMonsterFreq::MONSTER_SETUP_EXTREMELY_LOW)
+            .value("veryLow",       GalaxySetupOptionMonsterFreq::MONSTER_SETUP_VERY_LOW)
+            .value("low",           GalaxySetupOptionMonsterFreq::MONSTER_SETUP_LOW)
+            .value("medium",        GalaxySetupOptionMonsterFreq::MONSTER_SETUP_MEDIUM)
+            .value("high",          GalaxySetupOptionMonsterFreq::MONSTER_SETUP_HIGH)
+            .value("veryHigh",      GalaxySetupOptionMonsterFreq::MONSTER_SETUP_VERY_HIGH)
+            .value("extremelyHigh", GalaxySetupOptionMonsterFreq::MONSTER_SETUP_EXTREMELY_HIGH)
+            .value("random",        GalaxySetupOptionMonsterFreq::MONSTER_SETUP_RANDOM)
         ;
         py::enum_<Shape>("galaxyShape")
             .value("invalid",       Shape::INVALID_SHAPE)

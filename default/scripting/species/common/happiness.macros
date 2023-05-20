@@ -1,6 +1,22 @@
-STABILITY_PER_LIKED_OR_DISLIKED_FOCUS
-'''2.0 * (1.0 + (Statistic If condition = And [Source EmpireHasAdoptedPolicy empire = Target.Owner name = "PLC_LIBERTY"])
-          - 0.5*(Statistic If condition = And [Source EmpireHasAdoptedPolicy empire = Target.Owner name = "PLC_CONFORMANCE"]))'''
+STABILITY_PER_LIKED_FOCUS
+'''2.0'''
+
+// Policy Liberty doubles de focus dislike effect, policy Conformance halves it, macro is in common/opinion.macros
+STABILITY_PER_DISLIKED_FOCUS
+'''2.0 * [[POLICY_DISLIKE_SCALING]]'''
+
+VERY_BAD_HAPPINESS
+'''
+[[COMMON_HAPPINESS_EFFECTS]]
+[[STANDARD_SPECIES_CAPITAL_SUPPLY_CONNECTION_STABILITY]]
+
+        EffectsGroup
+            description = "VERY_BAD_HAPPINESS_DESC"
+            scope = Source
+            activation = Planet
+            accountinglabel = "VERY_BAD_HAPPINESS_LABEL"
+            effects = SetTargetHappiness value = Value + (NamedReal name = "VERY_BAD_HAPPINESS_VAL" value = -5)
+'''
 
 BAD_HAPPINESS
 '''
@@ -61,12 +77,15 @@ ULTIMATE_HAPPINESS
 '''
 
 INDEPENDENT_HAPPINESS
-'''
+'''[[DESCRIPTION_EFFECTSGROUP_MACRO(INDEPENDENT_HAPPINESS_DESC)]]
 [[COMMON_HAPPINESS_EFFECTS]]
 '''
 
 COMMON_HAPPINESS_EFFECTS
 '''
+        [[ENVIRONMENT_STABILITY_MODIFIER]]
+        [[PLANET_SIZE_STABILITY_MODIFIER]]
+
         EffectsGroup    // increase or decrease 1 per turn towards target
             scope = Source
             activation = And [
@@ -76,7 +95,7 @@ COMMON_HAPPINESS_EFFECTS
             priority = [[AFTER_ALL_TARGET_MAX_METERS_PRIORITY]]
             effects = SetHappiness value = Value +
                 min(abs(Value(Target.TargetHappiness) - Value), 1) *
-                    (1 - 2*(Statistic If condition = And [Target (Value > Value(Target.TargetHappiness))]))
+                    (1 - 2*(Value > Value(Target.TargetHappiness)))
 
         EffectsGroup
             scope = Source
@@ -88,20 +107,20 @@ COMMON_HAPPINESS_EFFECTS
             scope = Source
             activation = And [
                 Population low = 0.001
-                (SpeciesContentOpinion species = LocalCandidate.Species name = LocalCandidate.Focus > 0)
+                SpeciesLikes name = LocalCandidate.Focus
             ]
             accountinglabel = "LIKES_FOCUS_LABEL"
-            effects = SetTargetHappiness value = Value + [[STABILITY_PER_LIKED_OR_DISLIKED_FOCUS]] * SpeciesContentOpinion species = Target.Species name = Target.Focus
+            effects = SetTargetHappiness value = Value + [[STABILITY_PER_LIKED_FOCUS]]
 
         EffectsGroup    // less stable when disliked focuses are adopted
             scope = Source
             activation = And [
                 Not Unowned
                 Population low = 0.001
-                (SpeciesContentOpinion species = LocalCandidate.Species name = LocalCandidate.Focus < 0)
+                SpeciesDislikes name = LocalCandidate.Focus
             ]
             accountinglabel = "DISLIKES_FOCUS_LABEL"
-            effects = SetTargetHappiness value = Value + [[STABILITY_PER_LIKED_OR_DISLIKED_FOCUS]] * SpeciesContentOpinion species = Target.Species name = Target.Focus
+            effects = SetTargetHappiness value = Value - [[STABILITY_PER_DISLIKED_FOCUS]]
 
         EffectsGroup    // species on their own homeworld are more stable
             scope = Source
@@ -169,6 +188,7 @@ STANDARD_SPECIES_CAPITAL_SUPPLY_CONNECTION_STABILITY
                 Planet
                 Not Unowned
                 Not Capital
+                Not EmpireHasAdoptedPolicy empire = Source.Owner name = "PLC_CONFEDERATION"
                 [[SUPPLY_CONNECTED_TO_CAPITAL_OR_REGAD]]
                 ([[JUMPS_TO_CAPITAL_OR_REGAD]] > 5)
             ]
@@ -181,8 +201,126 @@ STANDARD_SPECIES_CAPITAL_SUPPLY_CONNECTION_STABILITY
                 Planet
                 Not Unowned
                 Not Capital
+                Not EmpireHasAdoptedPolicy empire = Source.Owner name = "PLC_CONFEDERATION"
                 Not [[SUPPLY_CONNECTED_TO_CAPITAL_OR_REGAD]]
             ]
             accountinglabel = "CAPITAL_DISCONNECTION_LABEL"
             effects = SetTargetHappiness value = Value - (NamedReal name = "DISCONNECTED_FROM_CAPITAL_AND_REGIONAL_ADMIN_STABILITY_PENALTY" value = 10)
 '''
+
+ENVIRONMENT_STABILITY_MODIFIER
+'''     EffectsGroup
+            scope = Source
+            activation = And [
+                Planet
+                Planet environment = Uninhabitable
+                ((GameRule name = "RULE_HOSTILE_ENVIRONMENT_STABILITY") != 0)
+            ]
+            accountinglabel = "UNINHABTIABLE_ENVIRONMENT_STABILITY_LABEL"
+            effects = SetTargetHappiness value = Value + (GameRule name = "RULE_HOSTILE_ENVIRONMENT_STABILITY")
+
+        EffectsGroup
+            scope = Source
+            activation = And [
+                Planet
+                Planet environment = Hostile
+                ((GameRule name = "RULE_HOSTILE_ENVIRONMENT_STABILITY") != 0)
+            ]
+            accountinglabel = "HOSTILE_ENVIRONMENT_STABILITY_LABEL"
+            effects = SetTargetHappiness value = Value + (GameRule name = "RULE_HOSTILE_ENVIRONMENT_STABILITY")
+
+        EffectsGroup
+            scope = Source
+            activation = And [
+                Planet
+                Planet environment = Poor
+                ((GameRule name = "RULE_POOR_ENVIRONMENT_STABILITY") != 0)
+            ]
+            accountinglabel = "POOR_ENVIRONMENT_STABILITY_LABEL"
+            effects = SetTargetHappiness value = Value + (GameRule name = "RULE_POOR_ENVIRONMENT_STABILITY")
+
+        EffectsGroup
+            scope = Source
+            activation = And [
+                Planet
+                Planet environment = Adequate
+                ((GameRule name = "RULE_ADEQUATE_ENVIRONMENT_STABILITY") != 0)
+            ]
+            accountinglabel = "ADEQUATE_ENVIRONMENT_STABILITY_LABEL"
+            effects = SetTargetHappiness value = Value + (GameRule name = "RULE_ADEQUATE_ENVIRONMENT_STABILITY")
+
+        EffectsGroup
+            scope = Source
+            activation = And [
+                Planet
+                Planet environment = Good
+                ((GameRule name = "RULE_GOOD_ENVIRONMENT_STABILITY") != 0)
+            ]
+            accountinglabel = "GOOD_ENVIRONMENT_STABILITY_LABEL"
+            effects = SetTargetHappiness value = Value + (GameRule name = "RULE_GOOD_ENVIRONMENT_STABILITY")
+'''
+
+PLANET_SIZE_STABILITY_MODIFIER
+'''
+       EffectsGroup
+            scope = Source
+            activation = And [
+                Planet
+                Planet size = Tiny
+                ((GameRule name = "RULE_TINY_SIZE_STABILITY") != 0)
+            ]
+            accountinglabel = "TINY_PLANET_STABILITY_LABEL"
+            effects = SetTargetHappiness value = Value + (GameRule name = "RULE_TINY_SIZE_STABILITY")
+
+        EffectsGroup
+            scope = Source
+            activation = And [
+                Planet
+                Planet size = Small
+                ((GameRule name = "RULE_SMALL_SIZE_STABILITY") != 0)
+            ]
+            accountinglabel = "SMALL_PLANET_STABILITY_LABEL"
+            effects = SetTargetHappiness value = Value + (GameRule name = "RULE_SMALL_SIZE_STABILITY")
+
+        EffectsGroup
+            scope = Source
+            activation = And [
+                Planet
+                Planet size = Medium
+                ((GameRule name = "RULE_MEDIUM_SIZE_STABILITY") != 0)
+            ]
+            accountinglabel = "SMALL_MEDIUM_STABILITY_LABEL"
+            effects = SetTargetHappiness value = Value + (GameRule name = "RULE_MEDIUM_SIZE_STABILITY")
+
+        EffectsGroup
+            scope = Source
+            activation = And [
+                Planet
+                Planet size = Large
+                ((GameRule name = "RULE_LARGE_SIZE_STABILITY") != 0)
+            ]
+            accountinglabel = "LARGE_PLANET_STABILITY_LABEL"
+            effects = SetTargetHappiness value = Value + (GameRule name = "RULE_LARGE_SIZE_STABILITY")
+
+        EffectsGroup
+            scope = Source
+            activation = And [
+                Planet
+                Planet size = Huge
+                ((GameRule name = "RULE_HUGE_SIZE_STABILITY") != 0)
+            ]
+            accountinglabel = "HUGE_PLANET_STABILITY_LABEL"
+            effects = SetTargetHappiness value = Value + (GameRule name = "RULE_HUGE_SIZE_STABILITY")
+
+        EffectsGroup
+            scope = Source
+            activation = And [
+                Planet
+                Planet type = GasGiant
+                ((GameRule name = "RULE_GAS_GIANT_SIZE_STABILITY") != 0)
+            ]
+            accountinglabel = "GAS_GIANT_STABILITY_LABEL"
+            effects = SetTargetHappiness value = Value + (GameRule name = "RULE_GAS_GIANT_SIZE_STABILITY")
+'''
+
+#include "/scripting/common/opinion.macros"

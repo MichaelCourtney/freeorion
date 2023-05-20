@@ -48,7 +48,7 @@ struct GG_API MenuItem
         label(std::forward<S>(str)),
         disabled(disable),
         checked(check),
-        m_selected_on_close_callback{selected_on_close_callback}
+        m_selected_on_close_callback{std::move(selected_on_close_callback)}
     {}
 
     std::string           label;            ///< text shown for this menu item
@@ -73,17 +73,17 @@ class GG_API PopupMenu : public Wnd
 public:
     /** Ctor.  Parameter \a m should contain the desired menu in its
         next_level member. */
-    PopupMenu(X x, Y y, const std::shared_ptr<Font>& font,
+    PopupMenu(X x, Y y, std::shared_ptr<Font> font,
               Clr text_color = CLR_WHITE, Clr border_color = CLR_BLACK,
               Clr interior_color = CLR_SHADOW, Clr hilite_color = CLR_GRAY);
 
-    Pt ClientUpperLeft() const override;
+    Pt ClientUpperLeft() const noexcept override { return m_origin; }
 
-    Clr BorderColor() const;       ///< returns the color used to render the border of the control
-    Clr InteriorColor() const;     ///< returns the color used to render the interior of the control
-    Clr TextColor() const;         ///< returns the color used to render menu item text
-    Clr HiliteColor() const;       ///< returns the color used to indicate a hilited menu item
-    Clr SelectedTextColor() const; ///< returns the color used to render a hilited menu item's text
+    Clr BorderColor() const noexcept { return m_border_color; }         ///< returns the color used to render the border of the control
+    Clr InteriorColor() const noexcept { return m_int_color; }          ///< returns the color used to render the interior of the control
+    Clr TextColor() const noexcept { return m_text_color; }             ///< returns the color used to render menu item text
+    Clr HiliteColor() const noexcept { return m_hilite_color; }         ///< returns the color used to indicate a hilited menu item
+    Clr SelectedTextColor() const noexcept { return m_sel_text_color; } ///< returns the color used to render a hilited menu item's text
 
     /** Add \p menu_item to the end of the popup menu and store its callback.*/
     void AddMenuItem(MenuItem&& menu_item);
@@ -91,12 +91,12 @@ public:
                      std::function<void()> selected_on_close_callback = std::function<void()>());
 
     void Render() override;
-    void LButtonUp(const Pt& pt, Flags<ModKey> mod_keys) override;
-    void LClick(const Pt& pt, Flags<ModKey> mod_keys) override;
-    void LDrag(const Pt& pt, const Pt& move, Flags<ModKey> mod_keys) override;
-    void RButtonUp(const Pt& pt, Flags<ModKey> mod_keys) override;
-    void RClick(const Pt& pt, Flags<ModKey> mod_keys) override;
-    void MouseHere(const Pt& pt, Flags<ModKey> mod_keys) override;
+    void LButtonUp(Pt pt, Flags<ModKey> mod_keys) override;
+    void LClick(Pt pt, Flags<ModKey> mod_keys) override;
+    void LDrag(Pt pt, Pt move, Flags<ModKey> mod_keys) override;
+    void RButtonUp(Pt pt, Flags<ModKey> mod_keys) override;
+    void RClick(Pt pt, Flags<ModKey> mod_keys) override;
+    void MouseHere(Pt pt, Flags<ModKey> mod_keys) override;
 
     bool Run() override;
 
@@ -106,7 +106,7 @@ public:
     void SetHiliteColor(Clr clr);       ///< sets the color used to indicate a hilited menu item
     void SetSelectedTextColor(Clr clr); ///< sets the color used to render a hilited menu item's text
 
-    static const std::size_t INVALID_CARET;
+    static constexpr std::size_t INVALID_CARET = std::numeric_limits<std::size_t>::max();;
 
 protected:
     /** Returns the font used to render text in the control. */

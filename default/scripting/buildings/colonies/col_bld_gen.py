@@ -9,8 +9,9 @@ When executed, definition files will be generated in the current working directo
 import os
 import os.path
 import string
+from itertools import chain
 
-# List of all species in game: definition key, graphic file(relative to default/data/art)
+# List of all colonizable species in game: definition key, graphic file(relative to default/data/art)
 species_list = [
     ("SP_SUPER_TEST", "icons/species/other-04.png"),
     ("SP_ABADDONI", "icons/species/abaddonnian.png"),
@@ -63,7 +64,7 @@ species_colony_gamerules = {"SP_SUPER_TEST": "RULE_ENABLE_SUPER_TESTER"}
 buildcost_default = 50
 
 # Species specific overrides to base buildcost
-species_buildcost = {"SP_EXOBOT": 70}
+species_buildcost = {"SP_EXOBOT": 60}
 
 # default buildtime factor
 buildtime_factor_default = "1.0"
@@ -79,7 +80,7 @@ t_main = string.Template(
 BuildingType
     name = "BLD_COL_${name}"
     description = "BLD_COL_${name}_DESC"
-    buildcost = ${cost} * [[COLONY_UPKEEP_MULTIPLICATOR]] * [[BUILDING_COST_MULTIPLIER]]
+    buildcost = ${cost} * [[COLONY_UPKEEP_MULTIPLICATOR]] * [[BUILDING_COST_MULTIPLIER]] * [[COLONIZATION_POLICY_MULTIPLIER]]
     buildtime = ${time}
     tags = [ ${tags} ]
     location = And [
@@ -87,7 +88,6 @@ BuildingType
         OwnedBy empire = Source.Owner
         Population high = 0
         Not Planet environment = Uninhabitable species = "${id}"
-        Not Contains Building name = "BLD_COL_${name}"
         ${species_condition}
     ]
     enqueuelocation = And [
@@ -95,8 +95,7 @@ BuildingType
         OwnedBy empire = Source.Owner
         Population high = 0
         Not Planet environment = Uninhabitable species = "${id}"
-        Not Contains Building name = "BLD_COL_${name}"
-        Not Enqueued type = Building name = "BLD_COL_${name}"
+        ${exclude_parallel_colonies}
         ${species_condition}
     ]
     effectsgroups = [
@@ -183,17 +182,17 @@ t_buildtime_stat_cond_extinct = string.Template(
     """condition = And [
                 Planet
                 OwnedBy empire = Source.Owner
-            Or [
-               And [
-                   Species name = "${id}"
-                   Population low = [[MIN_RECOLONIZING_SIZE]]
-                   Happiness low = 5
+                Or [
+                   And [
+                       Species name = "${id}"
+                       Population low = [[MIN_RECOLONIZING_SIZE]]
+                       Happiness low = 5
+                    ]
+                    And [
+                        HasSpecial name = "EXTINCT_${name}_SPECIAL"
+                        Contains Building name = "BLD_XENORESURRECTION_LAB"
+                    ]
                 ]
-                And [
-                    HasSpecial name = "EXTINCT_${name}_SPECIAL"
-                    Contains Building name = "BLD_XENORESURRECTION_LAB"
-                ]
-            ]
                 ResourceSupplyConnected empire = Source.Owner condition = Target
             ]"""
 )
@@ -206,6 +205,7 @@ t_buildtime = string.Template(
         ) / (60
              + 20 * (Statistic If condition = Or [
                  And [ Source OwnerHasTech name = "SHP_MIL_ROBO_CONT" ]
+                 And [ Source OwnerHasTech name = "SHP_SPACE_FLUX_BUBBLE" ]
                  And [ Source OwnerHasTech name = "SHP_ORG_HULL" ]
                  And [ Source OwnerHasTech name = "SHP_QUANT_ENRG_MAG" ]
              ])
@@ -222,6 +222,16 @@ t_buildtime = string.Template(
         )
     )"""
 )
+
+exclude_parallel_colonies = ""
+for species in chain((x[0] for x in species_list), species_extinct_techs.keys()):
+    name = species[3:]
+    exclude_parallel_colonies += f"""\
+        Not Contains And [ Building name = "BLD_COL_{name}" OwnedBy empire = Source.Owner ]
+        Not Enqueued type = Building name = "BLD_COL_{name}"
+"""
+# remove indent from first line and newline at the end to match format expected by the template
+exclude_parallel_colonies = exclude_parallel_colonies[8:-1]
 
 outpath = os.getcwd()
 print("Output folder: %s" % outpath)
@@ -240,6 +250,7 @@ for sp_id, sp_graphic in species_list:
         "graphic": sp_graphic,
         "cost": species_buildcost.get(sp_id, buildcost_default),
         "time": "",
+        "exclude_parallel_colonies": exclude_parallel_colonies,
         "species_condition": "",
     }
 

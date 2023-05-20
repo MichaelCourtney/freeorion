@@ -17,10 +17,9 @@ std::shared_ptr<GG::BrowseInfoWnd> TechRowBrowseWnd(const std::string& tech_name
   * the tech layout, the tech navigator, and the tech detail window. */
 class TechTreeWnd : public GG::Wnd {
 public:
-    typedef boost::signals2::signal<void (const std::string&)>                   TechSignalType;
-    typedef boost::signals2::signal<void (const std::string&,
-                                          const GG::Flags<GG::ModKey>&)>         TechClickSignalType;
-    typedef boost::signals2::signal<void (const std::vector<std::string>&, int)> QueueAddTechsSignalType;
+    using TechSignalType = boost::signals2::signal<void (std::string)>;
+    using TechClickSignalType = boost::signals2::signal<void (std::string, GG::Flags<GG::ModKey>)>;
+    using QueueAddTechsSignalType = boost::signals2::signal<void (std::vector<std::string>, int)>;
 
     /** TechTreeWnd contructor is usually called before client has
         access to techs.  Attempting to show the tech tree takes a long
@@ -36,7 +35,7 @@ public:
     /** If tech @p tech_name is currently visible */
     bool TechIsVisible(const std::string& tech_name) const;
 
-    void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
+    void SizeMove(GG::Pt ul, GG::Pt lr) override;
     void Show() override;
     void Update();
     void Clear();
@@ -71,7 +70,7 @@ private:
     class TechListBox;
 
     void TechLeftClickedSlot(const std::string& tech_name,
-                             const GG::Flags<GG::ModKey>& modkeys);
+                             GG::Flags<GG::ModKey> modkeys);
     void AddTechToResearchQueue(const std::string& tech_name,
                                 bool to_front);
     void TechPediaDisplaySlot(const std::string& tech_name);

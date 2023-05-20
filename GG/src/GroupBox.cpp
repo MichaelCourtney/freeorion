@@ -31,8 +31,8 @@ GroupBox::GroupBox()
 {}
 
 GroupBox::GroupBox(X x, Y y, X w, Y h, std::string label, const std::shared_ptr<Font>& font,
-                   Clr color, Clr text_color/* = CLR_BLACK*/, Clr interior/* = CLR_ZERO*/,
-                   Flags<WndFlag> flags/* = NO_WND_FLAGS*/) :
+                   Clr color, Clr text_color, Clr interior,
+                   Flags<WndFlag> flags) :
     m_color(color),
     m_text_color(text_color),
     m_int_color(interior),
@@ -50,7 +50,7 @@ void GroupBox::CompleteConstruction()
     }
 }
 
-Pt GroupBox::ClientUpperLeft() const
+Pt GroupBox::ClientUpperLeft() const noexcept
 {
     Pt retval = UpperLeft();
     if (!m_set_client_corners_equal_to_box_corners)
@@ -59,7 +59,7 @@ Pt GroupBox::ClientUpperLeft() const
     return retval;
 }
 
-Pt GroupBox::ClientLowerRight() const
+Pt GroupBox::ClientLowerRight() const noexcept
 {
     Pt retval = LowerRight();
     if (!m_set_client_corners_equal_to_box_corners)
@@ -73,7 +73,7 @@ void GroupBox::Render()
     ul.y += TopOfFrame(m_label != nullptr, m_font);
     Clr light = LightenClr(m_color);
     Clr dark = DarkenClr(m_color);
-    constexpr int GAP_FROM_TEXT = 2;
+    static constexpr int GAP_FROM_TEXT = 2;
     int vertices[24] = {
         Value(ul.x) + FRAME_THICK + PIXEL_MARGIN - GAP_FROM_TEXT, Value(ul.y),
         Value(ul.x), Value(ul.y),

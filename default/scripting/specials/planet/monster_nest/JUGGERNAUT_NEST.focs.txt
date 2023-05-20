@@ -6,7 +6,7 @@ Special
         Planet
         (GalaxyMonsterFrequency >= 1)
         Planet type = Asteroids
-        Not WithinStarlaneJumps jumps = 4 condition = And [
+        Not WithinStarlaneJumps jumps = max(4, (NamedIntegerLookup name = "MIN_MONSTER_DISTANCE")) condition = And [
             System
             Contains And [
                 Planet
@@ -16,9 +16,11 @@ Special
     ]
     effectsgroups = [
         [[MONSTER_NEST(JUGGERNAUT,juggernaut,0.06)]]
+        [[CHANCE_OF_HIDE_1]]
         [[SPECIAL_LIKES_OR_DISLIKES_SPECIAL_STABILITY_EFFECTS]]
     ]
     graphic = "icons/specials_huge/juggernaut-nest.png"
 
 #include "monster_nest.macros"
+#include "../monster_guard.macros"
 #include "/scripting/specials/specials.macros.txt"

@@ -1,8 +1,5 @@
 #include "AIClientApp.h"
 
-#include <codecvt>
-#include <locale>
-
 #include "../../util/OptionsDB.h"
 #include "../../util/Directories.h"
 #include "../../util/Logger.h"
@@ -25,6 +22,10 @@ unroll and hide the stack trace, print a message and still crash anyways. */
 #define FREEORION_CAMAIN_KEEP_STACKTRACE
 #endif
 
+#if defined(FREEORION_WIN32)
+#  include <windows.h>
+#endif
+
 #ifndef FREEORION_WIN32
 int main(int argc, char* argv[]) {
     InitDirs(argv[0]);
@@ -39,10 +40,23 @@ int wmain(int argc, wchar_t* argv[], wchar_t* envp[]) {
     std::vector<std::string> args;
     for (int i = 0; i < argc; ++i) {
         std::wstring argi16(argv[i]);
-        std::string argi8 = std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}.to_bytes(argi16);
-        args.push_back(argi8);
+
+        // convert UTF-16 native path to UTF-8
+        int utf8_sz = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
+                                          argi16.data(), argi16.size(),
+                                          NULL, 0, NULL, NULL);
+        std::string argi8(utf8_sz, 0);
+
+        if (utf8_sz > 0) {
+            WideCharToMultiByte(CP_UTF8, 0, argi16.data(), argi16.size(),
+                                argi8.data(), utf8_sz, NULL, NULL);
+            args.push_back(argi8);
+        } else {
+            ErrorLogger() << "main() couldn't convert argument to UTF8: " << argi16;
+            std::cerr << "main() couldn't convert argument to UTF8" << std::endl;
+        }
     }
-    InitDirs((args.empty() ? "" : *args.begin()));
+    InitDirs((args.empty() ? "" : args.front()));
 #endif
 
     GetOptionsDB().AddFlag("testing", UserStringNop("OPTIONS_DB_TESTING"), false);

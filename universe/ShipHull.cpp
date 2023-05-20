@@ -39,30 +39,26 @@ namespace {
 
     // create effectsgroup that increases the value of \a meter_type
     // by the result of evalulating \a increase_vr
-    std::shared_ptr<Effect::EffectsGroup>
-    IncreaseMeter(MeterType meter_type,
-                  std::unique_ptr<ValueRef::ValueRef<double>>&& increase_vr)
+    auto IncreaseMeter(MeterType meter_type,
+                       std::unique_ptr<ValueRef::ValueRef<double>>&& increase_vr)
     {
         auto scope = std::make_unique<Condition::Source>();
         auto activation = std::make_unique<Condition::Source>();
 
-        auto vr =
-            std::make_unique<ValueRef::Operation<double>>(
-                ValueRef::OpType::PLUS,
-                std::make_unique<ValueRef::Variable<double>>(ValueRef::ReferenceType::EFFECT_TARGET_VALUE_REFERENCE),
-                std::move(increase_vr)
-            );
+        auto vr = std::make_unique<ValueRef::Operation<double>>(
+            ValueRef::OpType::PLUS,
+            std::make_unique<ValueRef::Variable<double>>(ValueRef::ReferenceType::EFFECT_TARGET_VALUE_REFERENCE),
+            std::move(increase_vr)
+        );
         std::vector<std::unique_ptr<Effect::Effect>> effects;
-        effects.emplace_back(std::make_unique<Effect::SetMeter>(meter_type, std::move(vr)));
+        effects.push_back(std::make_unique<Effect::SetMeter>(meter_type, std::move(vr)));
 
-        return std::make_shared<Effect::EffectsGroup>(std::move(scope), std::move(activation),
-                                                      std::move(effects));
+        return Effect::EffectsGroup{std::move(scope), std::move(activation), std::move(effects)};
     }
 
     // create effectsgroup that increases the value of \a meter_type
     // by the specified amount \a fixed_increase
-    std::shared_ptr<Effect::EffectsGroup>
-    IncreaseMeter(MeterType meter_type, float fixed_increase) {
+    auto IncreaseMeter(MeterType meter_type, float fixed_increase) {
         auto increase_vr = std::make_unique<ValueRef::Constant<double>>(fixed_increase);
         return IncreaseMeter(meter_type, std::move(increase_vr));
     }
@@ -70,9 +66,8 @@ namespace {
     // create effectsgroup that increases the value of \a meter_type
     // by the product of \a base_increase and the value of the game
     // rule of type double with the name \a scaling_factor_rule_name
-    std::shared_ptr<Effect::EffectsGroup>
-    IncreaseMeter(MeterType meter_type, float base_increase,
-                  const std::string& scaling_factor_rule_name)
+    auto IncreaseMeter(MeterType meter_type, float base_increase,
+                       const std::string& scaling_factor_rule_name)
     {
         // if no rule specified, revert to fixed constant increase
         if (scaling_factor_rule_name.empty())
@@ -90,6 +85,31 @@ namespace {
         return IncreaseMeter(meter_type, std::move(increase_vr));
     }
 
+    auto InitEffects(std::vector<std::unique_ptr<Effect::EffectsGroup>>&& effects,
+                     const std::string& name,
+                     bool default_fuel_effects, bool default_speed_effects,
+                     bool default_stealth_effects, bool default_structure_effects,
+                     float fuel, float stealth, float structure, float speed)
+    {
+        std::vector<Effect::EffectsGroup> retval;
+        retval.reserve(effects.size() + 4);
+
+        if (default_fuel_effects && fuel != 0)
+            retval.push_back(IncreaseMeter(MeterType::METER_MAX_FUEL,      fuel));
+        if (default_stealth_effects && stealth != 0)
+            retval.push_back(IncreaseMeter(MeterType::METER_STEALTH,       stealth));
+        if (default_structure_effects && structure != 0)
+            retval.push_back(IncreaseMeter(MeterType::METER_MAX_STRUCTURE, structure, "RULE_SHIP_STRUCTURE_FACTOR"));
+        if (default_speed_effects && speed != 0)
+            retval.push_back(IncreaseMeter(MeterType::METER_SPEED,         speed,     "RULE_SHIP_SPEED_FACTOR"));
+
+        for (auto& e : effects) {
+            e->SetTopLevelContent(name);
+            retval.push_back(std::move(*e));
+        }
+
+        return retval;
+    }
 }
 
 
@@ -100,33 +120,74 @@ ShipHull::ShipHull(float fuel, float speed, float stealth, float structure,
                    std::string&& name, std::string&& description,
                    std::set<std::string>&& exclusions, std::vector<Slot>&& slots,
                    std::string&& icon, std::string&& graphic) :
-    m_name(std::move(name)),
+    m_name(name), // no move to make available later in member initializer list
     m_description(std::move(description)),
     m_speed(speed),
     m_fuel(fuel),
     m_stealth(stealth),
     m_structure(structure),
-    m_production_cost(std::move(common_params.production_cost)),
-    m_production_time(std::move(common_params.production_time)),
+    m_default_speed_effects(default_speed_effects && speed != 0),
+    m_default_structure_effects(default_structure_effects && structure != 0),
     m_producible(common_params.producible),
+    m_production_cost([](auto&& pc, const std::string& name) {
+        if (pc)
+            pc->SetTopLevelContent(name);
+        return std::move(pc);
+    }(std::move(common_params.production_cost), name)),
+    m_production_time([](auto&& pt, const std::string& name) {
+        if (pt)
+            pt->SetTopLevelContent(name);
+        return std::move(pt);
+    }(std::move(common_params.production_time), name)),
     m_slots(std::move(slots)),
+    m_tags_concatenated([&common_params]() {
+        // ensure tags are all upper-case
+        std::for_each(common_params.tags.begin(), common_params.tags.end(),
+                      [](auto& t) { boost::to_upper<std::string>(t); });
+
+        // allocate storage for concatenated tags
+        std::string retval;
+        // TODO: transform_reduce when available on all platforms...
+        std::size_t params_sz = 0;
+        for (const auto& t : common_params.tags)
+            params_sz += t.size();
+        retval.reserve(params_sz);
+
+        // concatenate tags
+        std::for_each(common_params.tags.begin(), common_params.tags.end(),
+                      [&retval](const auto& t) { retval.append(t); });
+        return retval;
+    }()),
+    m_tags([&common_params, this]() {
+        std::vector<std::string_view> retval;
+        std::size_t next_idx = 0;
+        retval.reserve(common_params.tags.size());
+        std::string_view sv{m_tags_concatenated};
+
+        // store views into concatenated tags string
+        std::for_each(common_params.tags.begin(), common_params.tags.end(),
+                      [&next_idx, &retval, sv](const auto& t)
+        {
+            retval.push_back(sv.substr(next_idx, t.size()));
+            next_idx += t.size();
+        });
+        return retval;
+    }()),
     m_production_meter_consumption(std::move(common_params.production_meter_consumption)),
     m_production_special_consumption(std::move(common_params.production_special_consumption)),
-    m_location(std::move(common_params.location)),
-    m_exclusions(std::move(exclusions)),
+    m_location([](auto&& l, const std::string& name) {
+        if (l)
+            l->SetTopLevelContent(name);
+        return std::move(l);
+    }(std::move(common_params.location), name)),
+    m_exclusions(exclusions.begin(), exclusions.end()),
+    m_effects(InitEffects(std::move(common_params.effects), name,
+                          default_fuel_effects, default_speed_effects,
+                          default_stealth_effects, default_structure_effects,
+                          fuel, stealth, structure, speed)),
     m_graphic(std::move(graphic)),
     m_icon(std::move(icon))
-{
-    TraceLogger() << "hull type: " << m_name << " producible: " << m_producible << "\n";
-    Init(std::move(common_params.effects),
-         default_fuel_effects,
-         default_speed_effects,
-         default_stealth_effects,
-         default_structure_effects);
-
-    for (const std::string& tag : common_params.tags)
-        m_tags.insert(boost::to_upper_copy<std::string>(tag));
-}
+{}
 
 ShipHull::~ShipHull() = default;
 
@@ -152,23 +213,8 @@ bool ShipHull::operator==(const ShipHull& rhs) const {
     CHECK_COND_VREF_MEMBER(m_production_time)
     CHECK_COND_VREF_MEMBER(m_location)
 
-    if (m_effects.size() != rhs.m_effects.size())
+    if (m_effects != rhs.m_effects)
         return false;
-    try {
-        for (std::size_t idx = 0; idx < m_effects.size(); ++idx) {
-            const auto& my_op = m_effects.at(idx);
-            const auto& rhs_op = rhs.m_effects.at(idx);
-
-            if (my_op == rhs_op) // could both be nullptr
-                continue;
-            if (!my_op || !rhs_op)
-                return false;
-            if (*my_op != *rhs_op)
-                return false;
-        }
-    } catch (...) {
-        return false;
-    }
 
     if (m_production_meter_consumption.size() != rhs.m_production_meter_consumption.size())
         return false;
@@ -219,45 +265,15 @@ bool ShipHull::operator==(const ShipHull& rhs) const {
     return true;
 }
 
-void ShipHull::Init(std::vector<std::unique_ptr<Effect::EffectsGroup>>&& effects,
-                    bool default_fuel_effects,
-                    bool default_speed_effects,
-                    bool default_stealth_effects,
-                    bool default_structure_effects)
-{
-    if (default_fuel_effects && m_fuel != 0)
-        m_effects.emplace_back(IncreaseMeter(MeterType::METER_MAX_FUEL,      m_fuel));
-    if (default_stealth_effects && m_stealth != 0)
-        m_effects.emplace_back(IncreaseMeter(MeterType::METER_STEALTH,       m_stealth));
-    if (default_structure_effects && m_structure != 0)
-        m_effects.emplace_back(IncreaseMeter(MeterType::METER_MAX_STRUCTURE, m_structure, "RULE_SHIP_STRUCTURE_FACTOR"));
-    if (default_speed_effects && m_speed != 0)
-        m_effects.emplace_back(IncreaseMeter(MeterType::METER_SPEED,         m_speed,     "RULE_SHIP_SPEED_FACTOR"));
-
-    if (m_production_cost)
-        m_production_cost->SetTopLevelContent(m_name);
-    if (m_production_time)
-        m_production_time->SetTopLevelContent(m_name);
-    if (m_location)
-        m_location->SetTopLevelContent(m_name);
-    for (auto&& effect : effects) {
-        effect->SetTopLevelContent(m_name);
-        m_effects.emplace_back(std::move(effect));
-    }
-}
-
 float ShipHull::Speed() const
-{ return m_speed * GetGameRules().Get<double>("RULE_SHIP_SPEED_FACTOR"); }
+{ return m_speed * (m_default_speed_effects ? GetGameRules().Get<double>("RULE_SHIP_SPEED_FACTOR") : 1.0f); }
 
 float ShipHull::Structure() const
-{ return m_structure * GetGameRules().Get<double>("RULE_SHIP_STRUCTURE_FACTOR"); }
+{ return m_structure * (m_default_structure_effects ? GetGameRules().Get<double>("RULE_SHIP_STRUCTURE_FACTOR") : 1.0f); }
 
-unsigned int ShipHull::NumSlots(ShipSlotType slot_type) const {
-    unsigned int count = 0;
-    for (const Slot& slot : m_slots)
-        if (slot.type == slot_type)
-            ++count;
-    return count;
+uint32_t ShipHull::NumSlots(ShipSlotType slot_type) const noexcept {
+    return std::count_if(m_slots.begin(), m_slots.end(),
+                         [slot_type](const auto& slot) { return slot.type == slot_type; });
 }
 
 // ShipHull:: and ShipPart::ProductionCost and ProductionTime are almost identical.
@@ -282,28 +298,32 @@ float ShipHull::ProductionCost(int empire_id, int location_id,
     if (m_production_cost->ConstantExpr())
         return static_cast<float>(m_production_cost->Eval());
 
+    static constexpr int PRODUCTION_BLOCK_SIZE = 1;
+
     if (m_production_cost->SourceInvariant() && m_production_cost->TargetInvariant()) {
-        ScriptingContext design_context{parent_context, in_design_id};
-        return static_cast<float>(m_production_cost->Eval(design_context));
+        const ScriptingContext design_id_context{
+            parent_context, nullptr, nullptr, in_design_id, PRODUCTION_BLOCK_SIZE};
+        return static_cast<float>(m_production_cost->Eval(design_id_context));
     }
 
-    auto location = parent_context.ContextObjects().get(location_id);
+    auto location = parent_context.ContextObjects().getRaw(location_id);
     if (!location && !m_production_cost->TargetInvariant())
         return ARBITRARY_LARGE_COST;
 
     auto empire = parent_context.GetEmpire(empire_id);
-    std::shared_ptr<const UniverseObject> source = empire ? empire->Source(parent_context.ContextObjects()) : nullptr;
+    auto source = empire ? empire->Source(parent_context.ContextObjects()) : nullptr;
     if (!source && !m_production_cost->SourceInvariant())
         return ARBITRARY_LARGE_COST;
 
-    ScriptingContext local_context{parent_context, in_design_id};
-    local_context.source = std::move(source);
-    local_context.effect_target = std::const_pointer_cast<UniverseObject>(location); // not actually modified by evaluating a ValueRef
-    return static_cast<float>(m_production_cost->Eval(local_context));
+    const ScriptingContext design_id_context{
+        parent_context, source.get(),
+        const_cast<UniverseObject*>(location), // won't be modified when evaluating a ValueRef, but needs to be a pointer to mutable to be passed as the target object
+        in_design_id, PRODUCTION_BLOCK_SIZE};
+    return static_cast<float>(m_production_cost->Eval(design_id_context));
 }
 
 int ShipHull::ProductionTime(int empire_id, int location_id,
-                               const ScriptingContext& parent_context, int in_design_id) const
+                             const ScriptingContext& parent_context, int in_design_id) const
 {
     if (GetGameRules().Get<bool>("RULE_CHEAP_AND_FAST_SHIP_PRODUCTION") || !m_production_time)
         return 1;
@@ -311,26 +331,32 @@ int ShipHull::ProductionTime(int empire_id, int location_id,
     if (m_production_time->ConstantExpr())
         return m_production_time->Eval();
 
-    ScriptingContext design_context{parent_context, in_design_id};
-    if (m_production_time->SourceInvariant() && m_production_time->TargetInvariant())
-        return m_production_time->Eval(design_context);
+    static constexpr int PRODUCTION_BLOCK_SIZE = 1;
 
-    auto location = parent_context.ContextObjects().get(location_id);
+    if (m_production_time->SourceInvariant() && m_production_time->TargetInvariant()) {
+        const ScriptingContext design_id_context{
+            parent_context, nullptr, nullptr, in_design_id, PRODUCTION_BLOCK_SIZE};
+        return m_production_time->Eval(design_id_context);
+    }
+
+    auto location = parent_context.ContextObjects().getRaw(location_id);
     if (!location && !m_production_time->TargetInvariant())
         return ARBITRARY_LARGE_TURNS;
 
     auto empire = parent_context.GetEmpire(empire_id);
-    std::shared_ptr<const UniverseObject> source = empire ? empire->Source(parent_context.ContextObjects()) : nullptr;
+    auto source = empire ? empire->Source(parent_context.ContextObjects()) : nullptr;
     if (!source && !m_production_time->SourceInvariant())
         return ARBITRARY_LARGE_TURNS;
 
-    design_context.source = std::move(source);
-    design_context.effect_target = std::const_pointer_cast<UniverseObject>(location); // not actually modified by evaluating a ValueRef
-    return m_production_time->Eval(design_context);
+    const ScriptingContext design_id_context{
+        parent_context, source.get(),
+        const_cast<UniverseObject*>(location), // won't be modified when evaluating a ValueRef, but needs to be a pointer to mutable to be passed as the target object
+        in_design_id, PRODUCTION_BLOCK_SIZE};
+    return m_production_time->Eval(design_id_context);
 }
 
-unsigned int ShipHull::GetCheckSum() const {
-    unsigned int retval{0};
+uint32_t ShipHull::GetCheckSum() const {
+    uint32_t retval{0};
 
     CheckSums::CheckSumCombine(retval, m_name);
     CheckSums::CheckSumCombine(retval, m_description);
@@ -365,7 +391,7 @@ ShipHullManager::ShipHullManager() {
     s_instance = this;
 }
 
-const ShipHull* ShipHullManager::GetShipHull(const std::string& name) const {
+const ShipHull* ShipHullManager::GetShipHull(std::string_view name) const {
     CheckPendingShipHulls();
     auto it = m_hulls.find(name);
     return it != m_hulls.end() ? it->second.get() : nullptr;
@@ -391,9 +417,9 @@ std::size_t ShipHullManager::size() const {
     return m_hulls.size();
 }
 
-unsigned int ShipHullManager::GetCheckSum() const {
+uint32_t ShipHullManager::GetCheckSum() const {
     CheckPendingShipHulls();
-    unsigned int retval{0};
+    uint32_t retval{0};
     for (auto const& name_hull_pair : m_hulls)
         CheckSums::CheckSumCombine(retval, name_hull_pair);
     CheckSums::CheckSumCombine(retval, m_hulls.size());
@@ -424,7 +450,7 @@ void ShipHullManager::CheckPendingShipHulls() const {
 
 
 namespace CheckSums {
-    void CheckSumCombine(unsigned int& sum, const ShipHull::Slot& slot) {
+    void CheckSumCombine(uint32_t& sum, const ShipHull::Slot& slot) {
         TraceLogger() << "CheckSumCombine(Slot): " << typeid(slot).name();
         CheckSumCombine(sum, slot.x);
         CheckSumCombine(sum, slot.y);
@@ -436,5 +462,6 @@ namespace CheckSums {
 ShipHullManager& GetShipHullManager()
 { return ShipHullManager::GetShipHullManager(); }
 
-const ShipHull* GetShipHull(const std::string& name)
-{ return GetShipHullManager().GetShipHull(name); }
+const ShipHull* GetShipHull(std::string_view name)
+{ return GetShipHullManager().GetShipHull(std::string{name}); }
+

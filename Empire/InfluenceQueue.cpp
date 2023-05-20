@@ -22,7 +22,7 @@ namespace {
     //                                     float available_IP, float allocated_IP, float allocated_stockpile_IP)
     //{
     //    TraceLogger() << "CalculateNewInfluenceStockpile for empire " << empire_id;
-    //    const Empire* empire = GetEmpire(empire_id);
+    //    const Empire* empire = GetEmpire(empire_id); // TODO: get from input context?
     //    if (!empire) {
     //        ErrorLogger() << "CalculateNewInfluenceStockpile() passed null empire.  doing nothing.";
     //        return 0.0f;
@@ -91,8 +91,8 @@ bool InfluenceQueue::InQueue(const std::string& name) const {
                        [name](const Element& e){ return e.name == name; });
 }
 
-float InfluenceQueue::AllocatedStockpileIP() const
-{ return 0.0f; } // todo
+float InfluenceQueue::AllocatedStockpileIP() const noexcept
+{ return 0.0f; } // TODO: implement this...
 
 InfluenceQueue::const_iterator InfluenceQueue::find(const std::string& item_name) const
 { return std::find_if(begin(), end(), [&](const auto& e) { return e.name == item_name; }); }
@@ -106,8 +106,8 @@ const InfluenceQueue::Element& InfluenceQueue::operator[](std::size_t i) const {
 const InfluenceQueue::Element& InfluenceQueue::operator[](int i) const
 { return operator[](static_cast<std::size_t>(i)); }
 
-void InfluenceQueue::Update(const ObjectMap& objects) {
-    const Empire* empire = GetEmpire(m_empire_id);
+void InfluenceQueue::Update(const ScriptingContext& context) {
+    auto empire = context.GetEmpire(m_empire_id);
     if (!empire) {
         ErrorLogger() << "InfluenceQueue::Update passed null empire.  doing nothing.";
         m_projects_in_progress = 0;
@@ -116,19 +116,19 @@ void InfluenceQueue::Update(const ObjectMap& objects) {
 
     ScopedTimer update_timer("InfluenceQueue::Update");
 
-    float available_IP = empire->ResourceOutput(ResourceType::RE_INFLUENCE);
-    float stockpiled_IP = empire->ResourceStockpile(ResourceType::RE_INFLUENCE);
+    const float available_IP = empire->ResourceOutput(ResourceType::RE_INFLUENCE);
+    const float stockpiled_IP = empire->ResourceStockpile(ResourceType::RE_INFLUENCE);
 
     float spending_on_policy_adoption_ip = 0.0f;
     for (const auto& [policy_name, adoption_turn] : empire->TurnsPoliciesAdopted()) {
-        if (adoption_turn != CurrentTurn())
+        if (adoption_turn != context.current_turn)
             continue;
-        auto policy = GetPolicy(policy_name);
+        const auto policy = GetPolicy(policy_name);
         if (!policy) {
             ErrorLogger() << "InfluenceQueue::Update couldn't get policy supposedly adopted this turn: " << policy_name;
             continue;
         }
-        spending_on_policy_adoption_ip += policy->AdoptionCost(m_empire_id, objects);
+        spending_on_policy_adoption_ip += policy->AdoptionCost(m_empire_id, context);
     }
 
     m_total_IPs_spent = spending_on_policy_adoption_ip;

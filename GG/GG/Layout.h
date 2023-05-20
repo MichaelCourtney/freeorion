@@ -90,13 +90,13 @@ public:
     Layout(X x, Y y, X w, Y h, std::size_t rows, std::size_t columns,
            unsigned int border_margin = 0, unsigned int cell_margin = INVALID_CELL_MARGIN);
 
-    Pt MinUsableSize() const override;
+    Pt               MinUsableSize() const noexcept override { return m_min_usable_size; }
 
-    std::size_t      Rows() const;
+    auto             Rows() const noexcept { return m_cells.size(); }
     std::size_t      Columns() const;
     Flags<Alignment> ChildAlignment(const Wnd* wnd) const;          //! returns the aligment of child \a wnd.  \throw GG::Layout::NoSuchChild Throws if no such child exists.
-    unsigned int     BorderMargin() const;                          //! returns the number of pixels that the layout will leave between its edges and the windows it contains
-    unsigned int     CellMargin() const;                            //! returns the number of pixels the layout leaves between the edges of windows in adjacent cells
+    auto             BorderMargin() const noexcept { return m_border_margin; } //! returns the number of pixels that the layout will leave between its edges and the windows it contains
+    auto             CellMargin() const noexcept { return m_cell_margin; }     //! returns the number of pixels the layout leaves between the edges of windows in adjacent cells
     double           RowStretch(std::size_t row) const;             //! returns the stretch factor for row \a row.  Note that \a row is not range-checked.
     double           ColumnStretch(std::size_t column) const;       //! returns the stretch factor for column \a column.  Note that \a column is not range-checked.
     Y                MinimumRowHeight(std::size_t row) const;       //! returns the minimum height allowed for row \a row.  Note that \a row is not range-checked.
@@ -108,17 +108,12 @@ public:
 
     //! Returns true iff this layout will render an outline of itself; this is
     //! sometimes useful for debugging purposes
-    bool   RenderOutline() const;
+    auto RenderOutline() const noexcept { return m_render_outline; }
 
-    //! Returns the outline color used to render this layout (this is only
-    //! used if RenderOutline() returns true).  This is sometimes useful for
-    //! debugging purposes
-    Clr    OutlineColor() const;
-
-    void StartingChildDragDrop(const Wnd* wnd, const Pt& offset) override;
+    void StartingChildDragDrop(const Wnd* wnd, Pt offset) override;
     void CancellingChildDragDrop(const std::vector<const Wnd*>& wnds) override;
     void ChildrenDraggedAway(const std::vector<Wnd*>& wnds, const Wnd* destination) override;
-    void SizeMove(const Pt& ul, const Pt& lr) override;
+    void SizeMove(Pt ul, Pt lr) override;
     void Render() override;
 
     //! Inserts \a w into the layout in the indicated cell, expanding the
@@ -214,7 +209,7 @@ public:
     static constexpr unsigned int INVALID_CELL_MARGIN = std::numeric_limits<unsigned int>::max();
 
 protected:
-    void MouseWheel(const Pt& pt, int move, Flags<ModKey> mod_keys) override;
+    void MouseWheel(Pt pt, int move, Flags<ModKey> mod_keys) override;
     void KeyPress(Key key, std::uint32_t key_code_point, Flags<ModKey> mod_keys) override;
     void KeyRelease(Key key, std::uint32_t key_code_point, Flags<ModKey> mod_keys) override;
 
@@ -246,7 +241,7 @@ private:
         WndPosition() = default;
         WndPosition(std::size_t first_row_, std::size_t first_column_,
                     std::size_t last_row_, std::size_t last_column_,
-                    Flags<Alignment> alignment_, const Pt& original_ul_, const Pt& original_size_);
+                    Flags<Alignment> alignment_, Pt original_ul_, Pt original_size_);
 
         std::size_t      first_row = 0;
         std::size_t      first_column = 0;

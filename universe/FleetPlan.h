@@ -19,7 +19,7 @@
 class FO_COMMON_API FleetPlan {
 public:
     FleetPlan(const std::string& fleet_name, const std::vector<std::string>& ship_design_names,
-              bool lookup_name_userstring = false) :
+              bool lookup_name_userstring = false) : // TODO: pass string and vector<string> with move
         m_name(fleet_name),
         m_ship_designs(ship_design_names),
         m_name_in_stringtable(lookup_name_userstring)
@@ -29,8 +29,7 @@ public:
 
     auto Name() const -> const std::string&;
 
-    auto ShipDesigns() const -> const std::vector<std::string>&
-    { return m_ship_designs; }
+    const auto& ShipDesigns() const noexcept { return m_ship_designs; }
 
 protected:
     std::string              m_name;
@@ -40,7 +39,7 @@ protected:
 
 
 //! Spawning instruction for Monster Fleets during universe generation.
-class FO_COMMON_API MonsterFleetPlan : public FleetPlan {
+class FO_COMMON_API MonsterFleetPlan final : public FleetPlan {
 public:
     MonsterFleetPlan(const std::string& fleet_name, const std::vector<std::string>& ship_design_names,
                      double spawn_rate = 1.0, int spawn_limit = 9999,
@@ -54,14 +53,9 @@ public:
 
     MonsterFleetPlan() = default;
 
-    auto SpawnRate() const -> auto
-    { return m_spawn_rate; }
-
-    auto SpawnLimit() const -> int
-    { return m_spawn_limit; }
-
-    auto Location() const -> const Condition::Condition*
-    { return m_location.get(); }
+    auto SpawnRate() const noexcept { return m_spawn_rate; }
+    auto SpawnLimit() const noexcept { return m_spawn_limit; }
+    auto* Location() const noexcept { return m_location.get(); }
 
 protected:
     double                                      m_spawn_rate = 1.0;

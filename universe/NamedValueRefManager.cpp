@@ -24,7 +24,6 @@
 #include "Species.h"
 #include "System.h"
 #include "Tech.h"
-#include "UniverseObjectVisitors.h"
 #include "UniverseObject.h"
 #include "Universe.h"
 #include "../Empire/EmpireManager.h"
@@ -47,7 +46,7 @@ NamedValueRefManager::NamedValueRefManager() {
 }
 
 template <>
-const ValueRef::ValueRef<int>* NamedValueRefManager::GetValueRef(const std::string& name,
+const ValueRef::ValueRef<int>* NamedValueRefManager::GetValueRef(std::string_view name,
                                                                  bool wait_for_named_value_focs_txt_parse) const
 {
     if (wait_for_named_value_focs_txt_parse)
@@ -56,7 +55,7 @@ const ValueRef::ValueRef<int>* NamedValueRefManager::GetValueRef(const std::stri
 }
 
 template <>
-const ValueRef::ValueRef<double>* NamedValueRefManager::GetValueRef(const std::string& name,
+const ValueRef::ValueRef<double>* NamedValueRefManager::GetValueRef(std::string_view name,
                                                                     bool wait_for_named_value_focs_txt_parse) const
 {
     if (wait_for_named_value_focs_txt_parse)
@@ -65,7 +64,7 @@ const ValueRef::ValueRef<double>* NamedValueRefManager::GetValueRef(const std::s
 }
 
 template <>
-ValueRef::ValueRef<int>* NamedValueRefManager::GetMutableValueRef(const std::string& name,
+ValueRef::ValueRef<int>* NamedValueRefManager::GetMutableValueRef(std::string_view name,
                                                                   bool wait_for_named_value_focs_txt_parse)
 {
     if (wait_for_named_value_focs_txt_parse)
@@ -74,7 +73,7 @@ ValueRef::ValueRef<int>* NamedValueRefManager::GetMutableValueRef(const std::str
 }
 
 template <>
-ValueRef::ValueRef<double>* NamedValueRefManager::GetMutableValueRef(const std::string& name,
+ValueRef::ValueRef<double>* NamedValueRefManager::GetMutableValueRef(std::string_view name,
                                                                      bool wait_for_named_value_focs_txt_parse)
 {
     if (wait_for_named_value_focs_txt_parse)
@@ -83,34 +82,44 @@ ValueRef::ValueRef<double>* NamedValueRefManager::GetMutableValueRef(const std::
 }
 
 
-template const ValueRef::ValueRef<PlanetEnvironment>* NamedValueRefManager::GetValueRef(const std::string&, bool) const;
-template const ValueRef::ValueRef<PlanetType>* NamedValueRefManager::GetValueRef(const std::string&, bool) const;
-template const ValueRef::ValueRef<Visibility>* NamedValueRefManager::GetValueRef(const std::string&, bool) const;
-template const ValueRef::ValueRef<PlanetSize>* NamedValueRefManager::GetValueRef(const std::string&, bool) const;
-template const ValueRef::ValueRef<UniverseObjectType>* NamedValueRefManager::GetValueRef(const std::string&, bool) const;
-template const ValueRef::ValueRef<StarType>* NamedValueRefManager::GetValueRef(const std::string&, bool) const;
+template const ValueRef::ValueRef<PlanetEnvironment>* NamedValueRefManager::GetValueRef(std::string_view, bool) const;
+template const ValueRef::ValueRef<PlanetType>* NamedValueRefManager::GetValueRef(std::string_view, bool) const;
+template const ValueRef::ValueRef<Visibility>* NamedValueRefManager::GetValueRef(std::string_view, bool) const;
+template const ValueRef::ValueRef<PlanetSize>* NamedValueRefManager::GetValueRef(std::string_view, bool) const;
+template const ValueRef::ValueRef<UniverseObjectType>* NamedValueRefManager::GetValueRef(std::string_view, bool) const;
+template const ValueRef::ValueRef<StarType>* NamedValueRefManager::GetValueRef(std::string_view, bool) const;
 
 
-const ValueRef::ValueRefBase* NamedValueRefManager::GetValueRefBase(const std::string& name) const {
+const ValueRef::ValueRefBase* NamedValueRefManager::GetValueRefBase(std::string_view name) const {
     if (auto* drefp = GetValueRef<double>(name))
         return drefp;
-    if (auto* irefp = GetValueRef<int>(name))
+    if (auto* irefp = GetValueRef<int>(name)) {
+        DebugLogger() << "NamedValueRefManager::GetValueRefBase found registered (int) valueref for \"" << name << "\" "
+                      << "(After trying (double) registry)";
         return irefp;
+    }
     CheckPendingNamedValueRefs();
     const auto it = m_value_refs.find(name);
-    return it != m_value_refs.end() ? it->second.get() : nullptr;
+    if (it != m_value_refs.end()) {
+        DebugLogger() << "NamedValueRefManager::GetValueRefBase found no registered (generic) valueref for \"" << name << "\" "
+                      << "(After trying (int|double) registries.";
+        return it->second.get();
+    }
+    ErrorLogger() << "NamedValueRefManager::GetValueRefBase found no registered (double|int|generic) valueref for \"" << name << "\". "
+                  << "This should not happen once \"#3225 Refactor initialisation of invariants in value refs to happen after parsing\" is implemented";
+    return nullptr;
 }
 
 NamedValueRefManager& NamedValueRefManager::GetNamedValueRefManager() {
-    TraceLogger() << "NamedValueRefManager::GetNamedValueRefManager starts (check the thread)";
+    //TraceLogger() << "NamedValueRefManager::GetNamedValueRefManager starts (check the thread)";
     static NamedValueRefManager manager; // function local
-    TraceLogger() << "NamedValueRefManager::GetNamedValueRefManager at " << &manager;
+    //TraceLogger() << "NamedValueRefManager::GetNamedValueRefManager at " << &manager;
     return manager;
 }
 
-unsigned int NamedValueRefManager::GetCheckSum() const {
+uint32_t NamedValueRefManager::GetCheckSum() const {
     CheckPendingNamedValueRefs();
-    unsigned int retval{0};
+    uint32_t retval{0};
     for (auto const& name_type_pair : m_value_refs)
         CheckSums::CheckSumCombine(retval, name_type_pair);
     DebugLogger() << "NamedValueRefManager partial checksum: " << retval;
@@ -145,7 +154,7 @@ namespace {
                               std::string&& valueref_name, std::unique_ptr<VR>&& vref)
     {
         TraceLogger() << "Register " << label << " valueref for " << valueref_name << ": " << vref->Description();
-        if (container.count(valueref_name) > 0) {
+        if (container.contains(valueref_name)) {
             TraceLogger() << "Skip registration for already registered " << label << " valueref for " << valueref_name;
             TraceLogger() << "Number of registered " << label << " ValueRefs: " << container.size();
             return;
@@ -178,6 +187,11 @@ void NamedValueRefManager::RegisterValueRef(std::string&& valueref_name,
 
 template <>
 void NamedValueRefManager::RegisterValueRef(std::string&& valueref_name,
+                                            std::unique_ptr<ValueRef::ValueRef<std::string>>&& vref)
+{ RegisterValueRefImpl(m_value_refs, m_value_refs_mutex, "string", std::move(valueref_name), std::move(vref)); }
+
+template <>
+void NamedValueRefManager::RegisterValueRef(std::string&& valueref_name,
                                             std::unique_ptr<ValueRef::ValueRef<int>>&& vref)
 { RegisterValueRefImpl(m_value_refs_int, m_value_refs_int_mutex, "int", std::move(valueref_name), std::move(vref)); }
 
@@ -192,10 +206,9 @@ void NamedValueRefManager::RegisterValueRef(std::string&& valueref_name,
 NamedValueRefManager& GetNamedValueRefManager()
 { return NamedValueRefManager::GetNamedValueRefManager(); }
 
-const ValueRef::ValueRefBase* GetValueRefBase(const std::string& name) {
-    TraceLogger() << "NamedValueRefManager::GetValueRefBase look for registered valueref for \"" << name << '"';
-    auto* vref = GetNamedValueRefManager().GetValueRefBase(name);
-    if (vref)
+const ValueRef::ValueRefBase* GetValueRefBase(std::string_view name) {
+    //TraceLogger() << "NamedValueRefManager::GetValueRefBase look for registered valueref for \"" << name << '"';
+    if (auto* vref = GetNamedValueRefManager().GetValueRefBase(name))
         return vref;
     InfoLogger() << "NamedValueRefManager::GetValueRefBase could not find registered valueref for \"" << name << '"';
     return nullptr;
@@ -203,8 +216,8 @@ const ValueRef::ValueRefBase* GetValueRefBase(const std::string& name) {
 
 
 // trigger instantiations
-template const ValueRef::ValueRef<int>* GetValueRef(const std::string& name, const bool wait_for_named_value_focs_txt_parse);
-template const ValueRef::ValueRef<double>* GetValueRef(const std::string& name, const bool wait_for_named_value_focs_txt_parse);
+template const ValueRef::ValueRef<int>* GetValueRef(std::string_view name, const bool wait_for_named_value_focs_txt_parse);
+template const ValueRef::ValueRef<double>* GetValueRef(std::string_view name, const bool wait_for_named_value_focs_txt_parse);
 template void RegisterValueRef(std::string name, std::unique_ptr<ValueRef::ValueRef<int>>&& vref);
 template void RegisterValueRef(std::string name, std::unique_ptr<ValueRef::ValueRef<double>>&& vref);
 template void RegisterValueRef(std::string name, std::unique_ptr<ValueRef::ValueRef<PlanetEnvironment>>&& vref);
@@ -221,6 +234,7 @@ namespace ValueRef {
     // trigger instantiations
     template struct NamedRef<double>;
     template struct NamedRef<int>;
+    template struct NamedRef<std::string>;
     template struct NamedRef<PlanetEnvironment>;
     template struct NamedRef<PlanetSize>;
     template struct NamedRef<PlanetType>;

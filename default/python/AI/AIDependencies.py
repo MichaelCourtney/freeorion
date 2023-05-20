@@ -20,7 +20,6 @@ Example usage:
     my_industry = AIDependencies.INDUSTRY_PER_POP * my_population
 """
 import freeOrionAIInterface as fo
-from typing import Dict
 
 # Note re common dictionary lookup structure, "PlanetSize-Dependent-Lookup":
 # Many dictionaries herein (a prime example being the building_supply dictionary) have a primary key (such as
@@ -48,9 +47,22 @@ TROOPS_PER_POP = 0.2
 PROT_FOCUS_MULTIPLIER = 2.0
 TECH_COST_MULTIPLIER = 2.0
 FOCUS_CHANGE_PENALTY = 1
+HOMEWORLD_INFLUENCE_COST = 1  # homeworld independency movement
+
+STABILITY_PER_LIKED_FOCUS = 2.0
+STABILITY_HOMEWORLD_BONUS = 5.0
+STABILITY_PER_LIKED_BUILDING_ON_PLANET = 4.0
+STABILITY_PER_LIKED_BUILDING_IN_SYSTEM = 1.0
+STABILITY_BASE_LIKED_BUILDING_ELSEWHERE = 0.5  # bonus is this time sqrt(number)
+STABILITY_BY_WORLDTREE = 1.0
+# specials (dis)likes are not affected by PlanetUtilsAI.dislike_factor() and also not by who owns them!
+STABILITY_PER_LIKED_SPECIAL_ON_PLANET = 3.0
+STABILITY_PER_LIKED_SPECIAL_IN_SYSTEM = 1.0
+
 
 SHIP_STRUCTURE_FACTOR = fo.getGameRules().getDouble("RULE_SHIP_STRUCTURE_FACTOR")
 SHIP_WEAPON_DAMAGE_FACTOR = fo.getGameRules().getDouble("RULE_SHIP_WEAPON_DAMAGE_FACTOR")
+SHIP_SHIELD_FACTOR = SHIP_WEAPON_DAMAGE_FACTOR
 FIGHTER_DAMAGE_FACTOR = fo.getGameRules().getDouble("RULE_FIGHTER_DAMAGE_FACTOR")
 PLANET_DEFENSE_FACTOR = SHIP_WEAPON_DAMAGE_FACTOR
 PLANET_SHIELD_FACTOR = SHIP_STRUCTURE_FACTOR
@@ -83,13 +95,20 @@ MINIMUM_GUARD_DISTANCE_TO_HOME_SYSTEM = 2
 class Tags:
     POPULATION = "POPULATION"
     INDUSTRY = "INDUSTRY"
+    INFLUENCE = "INFLUENCE"
     WEAPONS = "WEAPONS"
     RESEARCH = "RESEARCH"
     SUPPLY = "SUPPLY"
-    ATTACKTROOPS = "ATTACKTROOPS"
+    STABILITY = "HAPPINESS"
+    ATTACKTROOPS = "OFFENSE_TROOPS"
     STEALTH = "STEALTH"
-    SHIELDS = "SHIELDS"
+    SHIP_SHIELDS = "SHIP_SHIELDS"
+    PLANETARY_SHIELDS = "PLANETARY_SHIELDS"
     FUEL = "FUEL"
+    DETECTION = "DETECTION"
+    INDEPENDENT = "INDEPENDENT_HAPPINESS"
+    ARTISTIC = "ARTISTIC"
+    XENOPHOBIC = "XENOPHOBIC"
 
 
 # </editor-fold>
@@ -106,7 +125,6 @@ POP_SIZE_MOD_MAP_MODIFIED_BY_SPECIES = {
     "GRO_SYMBIOTIC_BIO": [0, 0, 1, 1, 1],
     "GRO_XENO_GENETICS": [0, 1, 2, 2, 0],
     "GRO_XENO_HYBRIDS": [0, 2, 1, 0, 0],
-    "GRO_CYBORG": [0, 2, 0, 0, 0],
 }
 
 # Population modifiers scaling with planet size
@@ -211,13 +229,49 @@ for metab, boosts in metabolismBoostMap.items():
         metabolismBoosts[boost] = metab
 # </editor-fold>
 
+# <editor-fold desc="Industry boosting specials">
+# Each adds INDUSTRY_PER_POP before production is multiplied by species skill modifier
+industry_boost_specials_modified = {
+    "TIDAL_LOCK_SPECIAL",
+}
+# Each adds INDUSTRY_PER_POP after all multipliers have been applied
+industry_boost_specials_unmodified = {
+    "CRYSTALS_SPECIAL",
+    "ELERIUM_SPECIAL",
+    "MINERALS_SPECIAL",
+    "MONOPOLE_SPECIAL",
+    "POSITRONIUM_SPECIAL",
+    "SUPERCONDUCTOR_SPECIAL",
+}
+# </editor-fold>
+
+luxury_specials = {
+    "FRACTAL_GEODES_SPECIAL",
+    "MIMETIC_ALLOY_SPECIAL",
+    "SHIMMER_SILK_SPECIAL",
+    "SPARK_FOSSILS_SPECIAL",
+    "SUCCULENT_BARNACLES_SPECIAL",
+}
+
 # <editor-fold desc="Other Population changing specials">
 # Please see the Note at top of this file regarding PlanetSize-Dependent-Lookup
 # Regardless of whether the sub-dictionary here has PlanetSize keys, the final
 # value will be applied as a *fixed-size mod* to the max population
+WORLDTREE_SPECIAL = "WORLDTREE_SPECIAL"
 POP_FIXED_MOD_SPECIALS = {
-    "DIM_RIFT_MASTER_SPECIAL": -4,
+    WORLDTREE_SPECIAL: 1,  # Not for SP_KHAKTURIAN...
 }
+GAIA_SPECIAL = "GAIA_SPECIAL"
+
+
+def not_affect_by_special(special: str, species: str) -> bool:
+    if special == WORLDTREE_SPECIAL:
+        return species == "SP_KHAKTURIAN"
+    # They do not have a good environment on normal planets (or none at all).
+    # TBD: could determine that list when there is a way to iterate over all species
+    if special == GAIA_SPECIAL:
+        return species in ("SP_EXOBOT", "SP_SLY", "SP_THENIAN")
+
 
 # Please see the Note at top of this file regarding PlanetSize-Dependent-Lookup
 # The return value from the respective sub-dictionary will be applied as a
@@ -235,6 +289,7 @@ POP_PROPORTIONAL_MOD_SPECIALS = {
 # </editor-fold>
 
 # <editor-fold desc="Industry related specials">
+HONEYCOMB_SPECIAL = "HONEYCOMB_SPECIAL"
 HONEYCOMB_IND_MULTIPLIER = 1.0
 # </editor-fold>
 
@@ -243,11 +298,14 @@ COMPUTRONIUM_SPECIAL = "COMPUTRONIUM_SPECIAL"
 COMPUTRONIUM_RES_MULTIPLIER = 0.5
 
 ANCIENT_RUINS_SPECIAL = "ANCIENT_RUINS_SPECIAL"
+ANCIENT_RUINS_SPECIAL2 = "ANCIENT_RUINS_DEPLETED_SPECIAL"  # nothing to excavate anymore, but some research bonus
+ASTEROID_COATING_OWNED_SPECIAL = "ASTEROID_COATING_OWNED_SPECIAL"
+ASTEROID_COATING_SPECIAL = "ASTEROID_COATING_SPECIAL"
 # </editor-fold>
 
 # <editor-fold desc="Supply related specials">
 SUPPLY_MOD_SPECIALS = {
-    "WORLDTREE_SPECIAL": {
+    WORLDTREE_SPECIAL: {
         -1: 1,
     },
     "ECCENTRIC_ORBIT_SPECIAL": {
@@ -286,6 +344,7 @@ PRO_MICROGRAV_MAN = "PRO_MICROGRAV_MAN"
 PRO_SINGULAR_GEN = "PRO_SINGULAR_GEN"
 PRO_AUTO_1 = "PRO_ADAPTIVE_AUTOMATION"
 PRO_AUTO_2 = "PRO_SENTIENT_AUTOMATION"
+PRO_NEUTRONIUM_EXTRACTION = "PRO_NEUTRONIUM_EXTRACTION"
 NEST_DOMESTICATION_TECH = "SHP_DOMESTIC_MONSTER"
 
 LRN_ARTIF_MINDS_1 = "LRN_NASCENT_AI"
@@ -295,6 +354,7 @@ GRO_SUBTER_HAB = "GRO_SUBTER_HAB"
 LRN_PHYS_BRAIN = "LRN_PHYS_BRAIN"
 LRN_QUANT_NET = "LRN_QUANT_NET"
 LRN_XENOARCH = "LRN_XENOARCH"
+LRN_EVERYTHING = "LRN_EVERYTHING"
 LRN_ART_BLACK_HOLE = "LRN_ART_BLACK_HOLE"
 
 GRO_XENO_GENETICS = "GRO_XENO_GENETICS"
@@ -307,6 +367,7 @@ SPY_STEALTH_1 = "SPY_STEALTH_1"
 SPY_STEALTH_2 = "SPY_STEALTH_2"
 
 EXOBOT_TECH_NAME = "PRO_EXOBOTS"
+SHP_ASTEROID_HULLS = "SHP_ASTEROID_HULLS"
 
 # </editor-fold>
 
@@ -541,7 +602,6 @@ POPULATION_BOOST_TECHS = (
     "GRO_PLANET_ECOL",
     "GRO_SYMBIOTIC_BIO",
     "GRO_XENO_HYBRIDS",
-    "GRO_CYBORG",
     "GRO_SUBTER_HAB",
     "CON_ORBITAL_HAB",
     "CON_NDIM_STRC",
@@ -673,11 +733,18 @@ SHIP_TECHS_REQUIRING_BLACK_HOLE = ("SHP_SOLAR_CONT",)
 SP_LEMBALALAM = "SP_LEMBALALAM"
 
 # Species modifiers
-SPECIES_RESEARCH_MODIFIER = {"NO": 0.0, "BAD": 0.75, "GOOD": 1.5, "GREAT": 2.0, "ULTIMATE": 3.0}
-SPECIES_INDUSTRY_MODIFIER = {"NO": 0.0, "BAD": 0.75, "GOOD": 1.5, "GREAT": 2.0, "ULTIMATE": 3.0}
-SPECIES_POPULATION_MODIFIER = {"BAD": 0.75, "GOOD": 1.25}
+SPECIES_RESEARCH_MODIFIER = {"NO": 0.0, "VERY_BAD": 0.5, "BAD": 0.75, "GOOD": 1.5, "GREAT": 2.0, "ULTIMATE": 3.0}
+SPECIES_INDUSTRY_MODIFIER = {"NO": 0.0, "VERY_BAD": 0.5, "BAD": 0.75, "GOOD": 1.5, "GREAT": 2.0, "ULTIMATE": 3.0}
+SPECIES_INFLUENCE_MODIFIER = {"NO": 0.0, "VERY_BAD": 0.5, "BAD": 0.75, "GOOD": 1.5, "GREAT": 2.0, "ULTIMATE": 3.0}
+SPECIES_POPULATION_MODIFIER = {"EXTREMELY_BAD": 0.25, "VERY_BAD": 0.5, "BAD": 0.75, "GOOD": 1.25}
 SPECIES_SUPPLY_MODIFIER = {"VERY_BAD": -1, "BAD": 0, "AVERAGE": 1, "GREAT": 2, "ULTIMATE": 3}
+SPECIES_STABILITY_MODIFIER = {"VERY_BAD": -5.0, "BAD": -2.5, "AVERAGE": 0, "GOOD": 2.5, "GREAT": 5.0, "ULTIMATE": 7.5}
 SPECIES_FUEL_MODIFIER = {"NO": -100, "BAD": -0.5, "AVERAGE": 0, "GOOD": 0.5, "GREAT": 1, "ULTIMATE": 1.5}
+# the actual effect depends on the type of shield, see CombatRatingsAI.species_shield_bonus
+SPECIES_SHIP_SHIELD_MODIFIER = {"BAD": -0.5, "AVERAGE": 0, "GOOD": 0.5, "GREAT": 1, "ULTIMATE": 1.5}
+# values for both offense and defense
+SPECIES_TROOP_MODIFIER = {"NO": 0.0, "BAD": 0.5, "": 1.0, "GOOD": 1.5, "GREAT": 2.0, "ULTIMATE": 3.0}
+# missing: HAPPINESS, ...
 
 # <editor-fold desc="XenoResurrectionSpecies">
 EXTINCT_SPECIES = ["BANFORO", "KILANDOW", "MISIORLA"]
@@ -730,7 +797,7 @@ HANGAR_LAUNCH_CAPACITY_MODIFIER_DICT = {
 }
 
 
-def _scale_part_damage(part_damage: Dict[str, int], factor: float) -> Dict[str, float]:
+def _scale_part_damage(part_damage: dict[str, int], factor: float) -> dict[str, float]:
     scaled_part_damage = {weapon_name: (damage * factor) for weapon_name, damage in part_damage.items()}
     return scaled_part_damage
 
@@ -772,9 +839,7 @@ SPECIES_TECH_UNLOCKS = {
 # Please see the Note at top of this file regarding PlanetSize-Dependent-Lookup
 # building supply bonuses are keyed by planet size; key -1 stands for any planet size
 building_supply = {
-    "BLD_IMPERIAL_PALACE": {
-        -1: 2,
-    },
+    # Palace also gives a bonus, but it is destroyed when being conquered, so we wouldn't get it.
     "BLD_MEGALITH": {
         -1: 2,
     },
@@ -787,37 +852,6 @@ building_supply = {
         fo.planetSize.gasGiant: 3,
     },
 }
-# </editor-fold>
-
-# <editor-fold desc="Shipyards">
-BLD_SHIPYARD_ORBITAL_DRYDOCK = "BLD_SHIPYARD_ORBITAL_DRYDOCK"
-# ship facilities info, dict keyed by building name, value is (min_aggression, prereq_bldg, base_cost, time)
-# not currently determined dynamically because it is initially used in a location-independent fashion
-# note that BLD_SHIPYARD_BASE is not an absolute prereq for BLD_NEUTRONIUM_FORGE, but is a practical one
-SHIP_FACILITIES = {
-    "BLD_SHIPYARD_BASE": (0, "", 10, 4),
-    "BLD_SHIPYARD_ORBITAL_DRYDOCK": (0, "BLD_SHIPYARD_BASE", 20, 5),
-    "BLD_SHIPYARD_CON_NANOROBO": (fo.aggression.aggressive, "BLD_SHIPYARD_ORBITAL_DRYDOCK", 250, 5),
-    "BLD_SHIPYARD_CON_GEOINT": (fo.aggression.aggressive, "BLD_SHIPYARD_ORBITAL_DRYDOCK", 750, 5),
-    "BLD_SHIPYARD_CON_ADV_ENGINE": (0, "BLD_SHIPYARD_ORBITAL_DRYDOCK", 500, 5),
-    "BLD_SHIPYARD_AST": (fo.aggression.typical, "", 75, 5),
-    "BLD_SHIPYARD_AST_REF": (fo.aggression.maniacal, "BLD_SHIPYARD_AST", 500, 5),
-    "BLD_SHIPYARD_ORG_ORB_INC": (0, "BLD_SHIPYARD_BASE", 40, 8),
-    "BLD_SHIPYARD_ORG_CELL_GRO_CHAMB": (fo.aggression.aggressive, "BLD_SHIPYARD_ORG_ORB_INC", 64, 8),
-    "BLD_SHIPYARD_ORG_XENO_FAC": (fo.aggression.aggressive, "BLD_SHIPYARD_ORG_ORB_INC", 120, 8),
-    "BLD_SHIPYARD_ENRG_COMP": (fo.aggression.aggressive, "BLD_SHIPYARD_BASE", 200, 5),
-    "BLD_SHIPYARD_ENRG_SOLAR": (fo.aggression.maniacal, "BLD_SHIPYARD_ENRG_COMP", 1200, 5),
-    "BLD_NEUTRONIUM_FORGE": (fo.aggression.cautious, "BLD_SHIPYARD_BASE", 100, 3),
-}
-
-# those facilities that need merely be in-system
-SYSTEM_SHIP_FACILITIES = frozenset(
-    (
-        "BLD_SHIPYARD_AST",
-        "BLD_SHIPYARD_AST_REF",
-    )
-)
-
 # </editor-fold>
 
 # </editor-fold>

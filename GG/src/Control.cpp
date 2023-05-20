@@ -20,7 +20,7 @@ Control::Control() :
     Wnd()
 {}
 
-Control::Control(X x, Y y, X w, Y h, Flags<WndFlag> flags/* = INTERACTIVE*/) :
+Control::Control(X x, Y y, X w, Y h, Flags<WndFlag> flags) :
     Wnd(x, y, w, h, flags)
 {}
 
@@ -33,10 +33,10 @@ bool Control::Disabled() const
 void Control::SetColor(Clr c)
 { m_color = c; }
 
-void Control::Disable(bool b/* = true*/)
+void Control::Disable(bool b)
 { m_disabled = b; }
 
-void Control::MouseWheel(const Pt& pt, int move, Flags<ModKey> mod_keys)
+void Control::MouseWheel(Pt pt, int move, Flags<ModKey> mod_keys)
 { ForwardEventToParent(); }
 
 void Control::KeyPress(Key key, std::uint32_t key_code_point, Flags<ModKey> mod_keys)

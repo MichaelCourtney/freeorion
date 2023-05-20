@@ -7,14 +7,12 @@ redirect_logging_to_freeorion_logger()
 
 import freeorion as fo
 from operator import itemgetter
-from typing import Dict, List, Tuple
 
 from empires import home_system_layout
-
 from util import unique_product
 
 
-def home_system_team_core(home_systems: List[int], teams: List[Tuple[int, int]]) -> Dict[int, int]:
+def home_system_team_core(home_systems: list[int], teams: list[tuple[int, int]]) -> dict[int, int]:
     """
     Choose core for teams which is a list of pairs team id and count of empires in the team.
     Returns map from team to core home system.
@@ -49,9 +47,9 @@ def home_system_team_core(home_systems: List[int], teams: List[Tuple[int, int]])
     return result
 
 
-def place_teams_layout(
-    layout: Dict[int, List[int]], cores: Dict[int, int], placement_teams: List[int]
-) -> Dict[int, int]:
+def place_teams_layout(  # noqa: max-complexity
+    layout: dict[int, list[int]], cores: dict[int, int], placement_teams: list[int]
+) -> dict[int, int]:
     """
     Place teams on home systems layout.
     Returns map from home system to team.
@@ -101,7 +99,7 @@ def place_teams_layout(
     return result.items()
 
 
-def place_teams(home_systems: List[int], systems: List[int], teams: Dict[int, int]) -> Dict[int, int]:
+def place_teams(home_systems: list[int], systems: list[int], teams: dict[int, int]) -> dict[int, int]:
     """
     Place teams on home systems layout.
     Returns map from home system to team.

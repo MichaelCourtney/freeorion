@@ -28,7 +28,7 @@ typedef std::shared_ptr<Order> OrderPtr;
     on the client do not change the server save game state.
 
     On game reload, reloaded orders need to be re-executed on the client because
-    the client state start from the last saved server state. Orders are
+    the client state starts from the last saved server state. Orders are
     saved/serialized as unexecuted so that when they are loaded they can be
     mixed with newly issued orders and both the loaded and newly issued orders
     will only execute once.
@@ -48,17 +48,17 @@ public:
     typedef OrderMap::difference_type difference_type;
     typedef OrderMap::key_compare key_compare;
 
-    const_iterator  begin() const           { return m_orders.begin(); }///< returns the begin const_iterator for the OrderSet
-    const_iterator  end() const             { return m_orders.end(); }  ///< returns the end const_iterator for the OrderSet
-    iterator        begin()                 { return m_orders.begin(); }///< returns the begin const_iterator for the OrderSet
-    iterator        end()                   { return m_orders.end(); }  ///< returns the end const_iterator for the OrderSet
-    std::size_t     size() const            { return m_orders.size(); }
-    bool            empty() const           { return m_orders.empty(); }
-    iterator        find(const key_type& k) { return m_orders.find(k); }
-    std::pair<iterator, bool> insert(const value_type& val) { return m_orders.insert(val); } ///< direct insert without saving changes
-    void            erase(const key_type& k){ m_orders.erase(k); } ///< direct erase without saving changes
-    OrderPtr&       operator[](std::size_t i);
-    key_compare     key_comp() const        { return m_orders.key_comp(); }
+    [[nodiscard]] const_iterator begin() const noexcept        { return m_orders.begin(); }
+    [[nodiscard]] const_iterator end() const noexcept          { return m_orders.end(); }
+    [[nodiscard]] iterator       begin() noexcept              { return m_orders.begin(); }
+    [[nodiscard]] iterator       end() noexcept                { return m_orders.end(); }
+    [[nodiscard]] std::size_t    size() const noexcept         { return m_orders.size(); }
+    [[nodiscard]] bool           empty() const noexcept        { return m_orders.empty(); }
+    [[nodiscard]] iterator       find(const key_type& k)       { return m_orders.find(k); }
+    auto                         insert(const value_type& val) { return m_orders.insert(val); }
+    auto                         erase(const key_type& k)      { return m_orders.erase(k); }
+    [[nodiscard]] OrderPtr&      operator[](std::size_t i);
+    [[nodiscard]] key_compare    key_comp() const              { return m_orders.key_comp(); }
 
     [[nodiscard]] std::string Dump() const;
 

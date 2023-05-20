@@ -11,8 +11,9 @@
 
 
 namespace {
-    void FindIsoscelesTriangleVertices(const GG::Pt& ul, const GG::Pt& lr, ShapeOrientation orientation,
-                                       double& x1_, double& y1_, double& x2_, double& y2_, double& x3_, double& y3_)
+    constexpr void FindIsoscelesTriangleVertices(const GG::Pt ul, const GG::Pt lr,
+                                                 ShapeOrientation orientation, double& x1_, double& y1_,
+                                                 double& x2_, double& y2_, double& x3_, double& y3_) noexcept
     {
         switch (orientation) {
         case ShapeOrientation::UP:
@@ -40,7 +41,6 @@ namespace {
             y3_ = Value((ul.y + lr.y) / 2.0);
             break;
         default:
-            ErrorLogger() << "FindIsoscelesTriangleVertices passed invalid orientation";
             [[fallthrough]];
         case ShapeOrientation::RIGHT:
             x1_ = Value(ul.x);
@@ -54,16 +54,17 @@ namespace {
     }
 }
 
-void BufferStoreCircleArcVertices(GG::GL2DVertexBuffer& buffer, const GG::Pt& ul, const GG::Pt& lr,
-                                  double theta1, double theta2, bool filled_shape, int num_slices,
-                                  bool fan)
+void BufferStoreCircleArcVertices(GG::GL2DVertexBuffer& buffer, const GG::Pt ul,
+                                  const GG::Pt lr, double theta1, double theta2,
+                                  bool filled_shape, int num_slices, bool fan)
 {
-    int wd = Value(lr.x - ul.x), ht = Value(lr.y - ul.y);
+    int wd = Value(lr.x - ul.x);
+    int ht = Value(lr.y - ul.y);
     double center_x = Value(ul.x + wd / 2.0);
     double center_y = Value(ul.y + ht / 2.0);
     double r = std::min(wd / 2.0, ht / 2.0);
-    constexpr double PI = 3.141594; // intentionally slightly more than pi
-    constexpr double TWO_PI = 2.0 * PI;
+    static constexpr double PI = 3.141594; // intentionally slightly more than pi
+    static constexpr double TWO_PI = 2.0 * PI;
 
     // correct theta* values to range [0, 2pi)
     if (theta1 < 0)
@@ -75,9 +76,9 @@ void BufferStoreCircleArcVertices(GG::GL2DVertexBuffer& buffer, const GG::Pt& ul
     else if (theta2 >= TWO_PI)
         theta2 -= int(theta2 / TWO_PI) * TWO_PI;
 
-    int SLICES = 50;
+    std::size_t SLICES = 30;
     if (num_slices <= 0)
-        SLICES = std::min(std::max(12, 3 + std::max(wd, ht)), 50);  // this is a good guess at how much to tesselate the circle coordinates (50 segments max)
+        SLICES = std::min(std::max(12u, 3u + std::max(wd, ht) / 4u), 30u);  // how much to tesselate the circle coordinates
     else
         SLICES = num_slices;
     const double HORZ_THETA = TWO_PI / SLICES;
@@ -87,44 +88,47 @@ void BufferStoreCircleArcVertices(GG::GL2DVertexBuffer& buffer, const GG::Pt& ul
     bool calc_vertices = unit_vertices.size() == 0;
     if (calc_vertices) {
         unit_vertices.resize(2 * (SLICES + 1), 0.0);
-        double theta = 0.0f;
-        for (int j = 0; j <= SLICES; theta += HORZ_THETA, ++j) { // calculate x,y values for each point on a unit circle divided into SLICES arcs
+        double theta = 0.0;
+        for (std::size_t j = 0; j <= SLICES; theta += HORZ_THETA, ++j) { // calculate x,y values for each point on a unit circle divided into SLICES arcs
             unit_vertices[j*2] = std::cos(-theta);
             unit_vertices[j*2+1] = std::sin(-theta);
         }
     }
-    int first_slice_idx = int(theta1 / HORZ_THETA + 1);
-    int last_slice_idx = int(theta2 / HORZ_THETA - 1);
-    if (theta1 >= theta2)
-        last_slice_idx += SLICES;
+    std::size_t first_slice_idx = static_cast<int>(theta1 / HORZ_THETA + 1);
+    std::size_t last_slice_idx = static_cast<int>(
+        theta2 / HORZ_THETA - 1 + ((theta1 >= theta2) ? SLICES : 0u));
 
     if (fan) {  // store a triangle fan vertex list, specifying each vertex just once
-
-        if (filled_shape)   // specify the central vertex first, to act as the pivot vertex for the fan
-            buffer.store(static_cast<GLfloat>(center_x),    static_cast<GLfloat>(center_y));
+        if (filled_shape)   // central vertex first, to act as the pivot vertex for the fan
+            buffer.store(static_cast<GLfloat>(center_x),
+                         static_cast<GLfloat>(center_y));
         // if not filled_shape, assumes a previously-specified vertex in the buffer will act as the pivot for the fan
 
         // point on circle at angle theta1
         double theta1_x = std::cos(-theta1), theta1_y = std::sin(-theta1);
-        buffer.store(static_cast<GLfloat>(center_x + theta1_x * r), static_cast<GLfloat>(center_y + theta1_y * r));
+        buffer.store(static_cast<GLfloat>(center_x + theta1_x * r),
+                     static_cast<GLfloat>(center_y + theta1_y * r));
 
         // angles in between theta1 and theta2, if any
-        for (int i = first_slice_idx; i <= last_slice_idx + 1; ++i) {
+        for (std::size_t i = first_slice_idx; i <= last_slice_idx + 1; ++i) {
             int X = (i > SLICES ? (i - SLICES) : i) * 2, Y = X + 1;
-            buffer.store(static_cast<GLfloat>(center_x + unit_vertices[X] * r), static_cast<GLfloat>(center_y + unit_vertices[Y] * r));
+            buffer.store(static_cast<GLfloat>(center_x + unit_vertices[X] * r),
+                         static_cast<GLfloat>(center_y + unit_vertices[Y] * r));
         }
 
         // theta2
         double theta2_x = std::cos(-theta2), theta2_y = std::sin(-theta2);
-        buffer.store(static_cast<GLfloat>(center_x + theta2_x * r), static_cast<GLfloat>(center_y + theta2_y * r));
+        buffer.store(static_cast<GLfloat>(center_x + theta2_x * r),
+                     static_cast<GLfloat>(center_y + theta2_y * r));
 
     } else {    // (not a fan) store a list of complete lines / triangles
         // if storing a filled_shape, the first point in each triangle should be the centre of the arc
-        std::pair<GLfloat, GLfloat> first_point = {static_cast<GLfloat>(center_x), static_cast<GLfloat>(center_y)};
+        std::pair<GLfloat, GLfloat> first_point{static_cast<GLfloat>(center_x),
+                                                static_cast<GLfloat>(center_y)};
         // (not used for non-filled-shape)
 
         // angles in between theta1 and theta2, if any
-        for (int i = first_slice_idx - 1; i <= last_slice_idx; ++i) {
+        for (std::size_t i = first_slice_idx - 1; i <= last_slice_idx; ++i) {
             if (filled_shape) {
                 buffer.store(first_point.first, first_point.second);
                 // list of triangles: need two more vertices on the arc per starting vertex
@@ -133,26 +137,29 @@ void BufferStoreCircleArcVertices(GG::GL2DVertexBuffer& buffer, const GG::Pt& ul
 
             int X = (i > SLICES ? (i - SLICES) : i) * 2;
             int Y = X + 1;
-            buffer.store(static_cast<GLfloat>(center_x + unit_vertices[X] * r), static_cast<GLfloat>(center_y + unit_vertices[Y] * r));
+            buffer.store(static_cast<GLfloat>(center_x + unit_vertices[X] * r),
+                         static_cast<GLfloat>(center_y + unit_vertices[Y] * r));
 
-            int next_i = i + 1;
+            auto next_i = i + 1;
             X = (next_i > SLICES ? (next_i - SLICES) : next_i) * 2;
             Y = X + 1;
-            buffer.store(static_cast<GLfloat>(center_x + unit_vertices[X] * r), static_cast<GLfloat>(center_y + unit_vertices[Y] * r));
+            buffer.store(static_cast<GLfloat>(center_x + unit_vertices[X] * r),
+                         static_cast<GLfloat>(center_y + unit_vertices[Y] * r));
         }
 
         // theta2
-        if (filled_shape) {
+        if (filled_shape)
             buffer.store(first_point.first, first_point.second);
-        }
 
-        int i = last_slice_idx + 1;
-        int X = (i > SLICES ? (i - SLICES) : i) * 2;
-        int Y = X + 1;
-        buffer.store(static_cast<GLfloat>(center_x + unit_vertices[X] * r), static_cast<GLfloat>(center_y + unit_vertices[Y] * r));
+        auto i = last_slice_idx + 1;
+        auto X = (i > SLICES ? (i - SLICES) : i) * 2;
+        auto Y = X + 1;
+        buffer.store(static_cast<GLfloat>(center_x + unit_vertices[X] * r),
+                     static_cast<GLfloat>(center_y + unit_vertices[Y] * r));
 
         double theta2_x = std::cos(-theta2), theta2_y = std::sin(-theta2);
-        buffer.store(static_cast<GLfloat>(center_x + theta2_x * r), static_cast<GLfloat>(center_y + theta2_y * r));
+        buffer.store(static_cast<GLfloat>(center_x + theta2_x * r),
+                     static_cast<GLfloat>(center_y + theta2_y * r));
     }
 }
 
@@ -162,9 +169,9 @@ void AdjustBrightness(GG::Clr& color, int amount, bool jointly_capped)
         int maxVal = std::max(std::max(color.r, color.g), color.b);
         amount = std::min(amount, 255-maxVal);
     }
-    color.r = static_cast<unsigned char>(std::max(0, std::min(color.r + amount, 255)));
-    color.g = static_cast<unsigned char>(std::max(0, std::min(color.g + amount, 255)));
-    color.b = static_cast<unsigned char>(std::max(0, std::min(color.b + amount, 255)));
+    color.r = static_cast<uint8_t>(std::max(0, std::min(color.r + amount, 255)));
+    color.g = static_cast<uint8_t>(std::max(0, std::min(color.g + amount, 255)));
+    color.b = static_cast<uint8_t>(std::max(0, std::min(color.b + amount, 255)));
 }
 
 void AdjustBrightness(GG::Clr& color, double amount, bool jointly_capped)
@@ -173,15 +180,15 @@ void AdjustBrightness(GG::Clr& color, double amount, bool jointly_capped)
         int maxVal = std::max(std::max(color.r, color.g), color.b);
         amount = std::min(amount, 255.0/maxVal);
     }
-    color.r = static_cast<unsigned char>(std::max(0, std::min(static_cast<int>(color.r * amount), 255)));
-    color.g = static_cast<unsigned char>(std::max(0, std::min(static_cast<int>(color.g * amount), 255)));
-    color.b = static_cast<unsigned char>(std::max(0, std::min(static_cast<int>(color.b * amount), 255)));
+    color.r = static_cast<uint8_t>(std::max(0, std::min(static_cast<int>(color.r * amount), 255)));
+    color.g = static_cast<uint8_t>(std::max(0, std::min(static_cast<int>(color.g * amount), 255)));
+    color.b = static_cast<uint8_t>(std::max(0, std::min(static_cast<int>(color.b * amount), 255)));
 }
 
 GG::Clr OpaqueColor(const GG::Clr& color)
 {
     GG::Clr retval = color;
-    retval.a = static_cast<unsigned char>(255);
+    retval.a = static_cast<uint8_t>(255);
     return retval;
 }
 
@@ -212,8 +219,8 @@ void BufferStoreRectangle(GG::GL2DVertexBuffer& buffer,
         buffer.store(inner_x2, inner_y2);
 }
 
-void AngledCornerRectangle(const GG::Pt& ul, const GG::Pt& lr, GG::Clr color, GG::Clr border, int angle_offset, int thick,
-                           bool upper_left_angled/* = true*/, bool lower_right_angled/* = true*/, bool draw_bottom/* = true*/)
+void AngledCornerRectangle(const GG::Pt ul, const GG::Pt lr, GG::Clr color, GG::Clr border, int angle_offset, int thick,
+                           bool upper_left_angled, bool lower_right_angled, bool draw_bottom)
 {
     glDisable(GL_TEXTURE_2D);
 
@@ -245,9 +252,10 @@ void AngledCornerRectangle(const GG::Pt& ul, const GG::Pt& lr, GG::Clr color, GG
     glEnable(GL_TEXTURE_2D);
 }
 
-void BufferStoreAngledCornerRectangleVertices(GG::GL2DVertexBuffer& buffer, const GG::Pt& ul, const GG::Pt& lr,
-                                              int angle_offset, bool upper_left_angled,
-                                              bool lower_right_angled, bool connect_bottom_line)
+void BufferStoreAngledCornerRectangleVertices(GG::GL2DVertexBuffer& buffer, const GG::Pt ul,
+                                              const GG::Pt lr, int angle_offset,
+                                              bool upper_left_angled, bool lower_right_angled,
+                                              bool connect_bottom_line)
 {
     // these are listed in CCW order
     if (connect_bottom_line)
@@ -272,8 +280,8 @@ void BufferStoreAngledCornerRectangleVertices(GG::GL2DVertexBuffer& buffer, cons
     buffer.store(Value(ul.x),                       Value(lr.y));
 }
 
-bool InAngledCornerRect(const GG::Pt& pt, const GG::Pt& ul, const GG::Pt& lr, int angle_offset,
-                        bool upper_left_angled/* = true*/, bool lower_right_angled)
+bool InAngledCornerRect(const GG::Pt pt, const GG::Pt ul, const GG::Pt lr, int angle_offset,
+                        bool upper_left_angled, bool lower_right_angled) noexcept
 {
     bool retval = false;
     if ((retval = ((ul <= pt) && (pt < lr)))) {
@@ -296,7 +304,7 @@ void Triangle(double x1, double y1, double x2, double y2, double x3, double y3, 
                  color, border ? border_clr : GG::CLR_ZERO);
 }
 
-bool InTriangle(const GG::Pt& pt, double x1, double y1, double x2, double y2, double x3, double y3) {
+bool InTriangle(const GG::Pt pt, double x1, double y1, double x2, double y2, double x3, double y3) noexcept {
     double vec_A_x = x2 - x1; // side A is the vector from pt1 to pt2
     double vec_A_y = y2 - y1; // side A is the vector from pt1 to pt2
     double vec_B_x = x3 - x2; // side B is the vector from pt2 to pt3
@@ -306,20 +314,24 @@ bool InTriangle(const GG::Pt& pt, double x1, double y1, double x2, double y2, do
     int pt_x = Value(pt.x);
     int pt_y = Value(pt.y);
     // take dot products of perpendicular vectors (normals of sides) with point pt, and sum the signs of these products
-    int sum = (0 < (pt_x - x1) * vec_A_y + (pt_y - y1) * -vec_A_x ? 1 : 0) + 
+    int sum = (0 < (pt_x - x1) * vec_A_y + (pt_y - y1) * -vec_A_x ? 1 : 0) +
               (0 < (pt_x - x2) * vec_B_y + (pt_y - y2) * -vec_B_x ? 1 : 0) +
               (0 < (pt_x - x3) * vec_C_y + (pt_y - y3) * -vec_C_x ? 1 : 0);
     // if the products are all the same sign, the point is in the triangle
     return (sum == 3 || sum == 0);
 }
 
-void IsoscelesTriangle(const GG::Pt& ul, const GG::Pt& lr, ShapeOrientation orientation, GG::Clr color, bool border) {
+void IsoscelesTriangle(const GG::Pt ul, const GG::Pt lr, ShapeOrientation orientation,
+                       GG::Clr color, bool border)
+{
     double x1_, y1_, x2_, y2_, x3_, y3_;
     FindIsoscelesTriangleVertices(ul, lr, orientation, x1_, y1_, x2_, y2_, x3_, y3_);
     Triangle(x1_, y1_, x2_, y2_, x3_, y3_, color, border);
 }
 
-void BufferStoreIsoscelesTriangle(GG::GL2DVertexBuffer& buffer, const GG::Pt& ul, const GG::Pt& lr, ShapeOrientation orientation) {
+void BufferStoreIsoscelesTriangle(GG::GL2DVertexBuffer& buffer, const GG::Pt ul,
+                                  const GG::Pt lr, ShapeOrientation orientation)
+{
     double x1_, y1_, x2_, y2_, x3_, y3_;
     FindIsoscelesTriangleVertices(ul, lr, orientation, x1_, y1_, x2_, y2_, x3_, y3_);
     buffer.store(x1_,   y1_);
@@ -327,20 +339,20 @@ void BufferStoreIsoscelesTriangle(GG::GL2DVertexBuffer& buffer, const GG::Pt& ul
     buffer.store(x3_,   y3_);
 }
 
-bool InIsoscelesTriangle(const GG::Pt& pt, const GG::Pt& ul, const GG::Pt& lr,
-                         ShapeOrientation orientation)
+bool InIsoscelesTriangle(const GG::Pt pt, const GG::Pt ul, const GG::Pt lr,
+                         ShapeOrientation orientation) noexcept
 {
     double x1_, y1_, x2_, y2_, x3_, y3_;
     FindIsoscelesTriangleVertices(ul, lr, orientation, x1_, y1_, x2_, y2_, x3_, y3_);
     return InTriangle(pt, x1_, y1_, x2_, y2_, x3_, y3_);
 }
 
-void CircleArc(const GG::Pt& ul, const GG::Pt& lr, double theta1, double theta2,
+void CircleArc(const GG::Pt ul, const GG::Pt lr, double theta1, double theta2,
                bool filled_shape)
 {
     //std::cout << "CircleArc ul: " << ul << "  lr: " << lr << "  theta1: " << theta1 << "  theta2: " << theta2 << "  filled: " << filled_shape << std::endl;
     GG::GL2DVertexBuffer vert_buf;
-    vert_buf.reserve(50);   // max number that BufferStoreCircleArcVertices might add
+    vert_buf.reserve(31);   // max number that BufferStoreCircleArcVertices might add
 
     BufferStoreCircleArcVertices(vert_buf, ul, lr, theta1, theta2, filled_shape, 0, true);
 
@@ -361,7 +373,39 @@ void CircleArc(const GG::Pt& ul, const GG::Pt& lr, double theta1, double theta2,
     //glEnable(GL_TEXTURE_2D);
 }
 
-void PartlyRoundedRect(const GG::Pt& ul, const GG::Pt& lr, int radius,
+void CircleArcSegments(GG::Pt ul, GG::Pt lr, int segments, bool filled_shape) {
+    if (segments < 2)
+        return;
+
+    GG::GL2DVertexBuffer vert_buf;
+    vert_buf.reserve(5 * segments); // guesstimate for how many verts might be added
+
+    constexpr double TWO_PI = 2.0*3.1415926536;
+
+    glPushClientAttrib(GL_CLIENT_ALL_ATTRIB_BITS);
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glDisableClientState(GL_COLOR_ARRAY);
+    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+
+    float segment = static_cast<float>(TWO_PI) / segments;
+    for (int n = 0; n < 24; n = n + 2) {
+        auto theta1 = n * segment;
+        auto theta2 = (n+1) * segment;
+
+        BufferStoreCircleArcVertices(vert_buf, ul, lr, theta1, theta2, filled_shape, 0, false);
+    }
+
+    vert_buf.activate();
+
+    if (filled_shape)
+        glDrawArrays(GL_TRIANGLES, 0, vert_buf.size());
+    else
+        glDrawArrays(GL_LINES, 0, vert_buf.size());
+
+    glPopClientAttrib();
+}
+
+void PartlyRoundedRect(const GG::Pt ul, const GG::Pt lr, int radius,
                        bool ur_round, bool ul_round,
                        bool ll_round, bool lr_round, bool fill)
 {
@@ -388,11 +432,11 @@ void PartlyRoundedRect(const GG::Pt& ul, const GG::Pt& lr, int radius,
     //glEnable(GL_TEXTURE_2D);
 }
 
-void BufferStorePartlyRoundedRectVertices(GG::GL2DVertexBuffer& buffer, const GG::Pt& ul,
-                                          const GG::Pt& lr, int radius, bool ur_round,
+void BufferStorePartlyRoundedRectVertices(GG::GL2DVertexBuffer& buffer, const GG::Pt ul,
+                                          const GG::Pt lr, int radius, bool ur_round,
                                           bool ul_round, bool ll_round, bool lr_round)
 {
-    constexpr double PI = 3.141594; // probably intentionally sightly more than Pi
+    static constexpr double PI = 3.141594; // probably intentionally sightly more than Pi
 
     buffer.store(lr.x, ul.y + radius);
 
@@ -469,13 +513,13 @@ public:
     void StopUsing()
     { m_scanline_shader->stopUse(); }
 
-    void RenderCircle(const GG::Pt& ul, const GG::Pt& lr) {
+    void RenderCircle(const GG::Pt ul, const GG::Pt lr) {
         StartUsing();
         CircleArc(ul, lr, 0.0, TWO_PI, true);
         StopUsing();
     }
 
-    void RenderRectangle(const GG::Pt& ul, const GG::Pt& lr) {
+    void RenderRectangle(const GG::Pt ul, const GG::Pt lr) {
         StartUsing();
         GG::FlatRectangle(ul, lr, GG::CLR_WHITE, GG::CLR_WHITE, 0u);
         StopUsing();
@@ -494,10 +538,10 @@ ScanlineRenderer::ScanlineRenderer() :
 // This destructor is required here because ~ScanlineRendererImpl is declared here.
 ScanlineRenderer::~ScanlineRenderer() = default;
 
-void ScanlineRenderer::RenderCircle(const GG::Pt& ul, const GG::Pt& lr)
+void ScanlineRenderer::RenderCircle(const GG::Pt ul, const GG::Pt lr)
 { m_impl->RenderCircle(ul, lr); }
 
-void ScanlineRenderer::RenderRectangle(const GG::Pt& ul, const GG::Pt& lr)
+void ScanlineRenderer::RenderRectangle(const GG::Pt ul, const GG::Pt lr)
 { m_impl->RenderRectangle(ul, lr); }
 
 void ScanlineRenderer::StartUsing()

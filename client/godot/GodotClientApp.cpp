@@ -29,7 +29,7 @@ namespace {
     void SetEmptyStringDefaultOption(const std::string& option_name, const std::string& option_value) {
         OptionsDB& db = GetOptionsDB();
         if (db.Get<std::string>(option_name).empty()) {
-            db.SetDefault<std::string>(option_name, option_value);
+            db.SetDefault(option_name, option_value);
             db.Set(option_name, option_value);
         }
     }
@@ -191,12 +191,12 @@ void GodotClientApp::NewSinglePlayerGame() {
     setup_data.SetSeed(GetOptionsDB().Get<std::string>("setup.seed"));
     setup_data.size =             GetOptionsDB().Get<int>("setup.star.count");
     setup_data.shape =            GetOptionsDB().Get<Shape>("setup.galaxy.shape");
-    setup_data.age =              GetOptionsDB().Get<GalaxySetupOption>("setup.galaxy.age");
-    setup_data.starlane_freq =    GetOptionsDB().Get<GalaxySetupOption>("setup.starlane.frequency");
-    setup_data.planet_density =   GetOptionsDB().Get<GalaxySetupOption>("setup.planet.density");
-    setup_data.specials_freq =    GetOptionsDB().Get<GalaxySetupOption>("setup.specials.frequency");
-    setup_data.monster_freq =     GetOptionsDB().Get<GalaxySetupOption>("setup.monster.frequency");
-    setup_data.native_freq =      GetOptionsDB().Get<GalaxySetupOption>("setup.native.frequency");
+    setup_data.age =              GetOptionsDB().Get<GalaxySetupOptionGeneric>("setup.galaxy.age");
+    setup_data.starlane_freq =    GetOptionsDB().Get<GalaxySetupOptionGeneric>("setup.starlane.frequency");
+    setup_data.planet_density =   GetOptionsDB().Get<GalaxySetupOptionGeneric>("setup.planet.density");
+    setup_data.specials_freq =    GetOptionsDB().Get<GalaxySetupOptionGeneric>("setup.specials.frequency");
+    setup_data.monster_freq =     GetOptionsDB().Get<GalaxySetupOptionMonsterFreq>("setup.monster.frequency");
+    setup_data.native_freq =      GetOptionsDB().Get<GalaxySetupOptionGeneric>("setup.native.frequency");
     setup_data.ai_aggr =          GetOptionsDB().Get<Aggression>("setup.ai.aggression");
     setup_data.game_rules =       game_rules;
 
@@ -224,7 +224,7 @@ void GodotClientApp::NewSinglePlayerGame() {
         human_player_setup_data.starting_species_name = "SP_HUMAN";   // kludge / bug workaround for bug with options storage and retreival.  Empty-string options are stored, but read in as "true" boolean, and converted to string equal to "1"
 
     if (human_player_setup_data.starting_species_name != "RANDOM" &&
-        !GetSpecies(human_player_setup_data.starting_species_name))
+        !GetSpeciesManager().GetSpecies(human_player_setup_data.starting_species_name))
     {
         const SpeciesManager& sm = GetSpeciesManager();
         if (sm.NumPlayableSpecies() < 1)
@@ -255,7 +255,7 @@ void GodotClientApp::NewSinglePlayerGame() {
 
 
     DebugLogger() << "Sending host SP setup message";
-    m_networking->SendMessage(HostSPGameMessage(setup_data));
+    m_networking->SendMessage(HostSPGameMessage(setup_data, DependencyVersions()));
     DebugLogger() << "GodotClientApp::NewSinglePlayerGame done";
 }
 #endif

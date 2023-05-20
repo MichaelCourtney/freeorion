@@ -37,7 +37,7 @@ class Timer;
 struct GUIImpl;
 
 template <typename T>
-std::shared_ptr<T> LockAndResetIfExpired(std::weak_ptr<T>& ptr) {
+std::shared_ptr<T> LockAndResetIfExpired(std::weak_ptr<T>& ptr) noexcept {
     auto locked = ptr.lock();
     if (!locked)
         ptr.reset();
@@ -95,7 +95,7 @@ std::shared_ptr<T> LockAndResetIfExpired(std::weak_ptr<T>& ptr) {
     individual Wnd.
 
     <p>A note about "button-down-repeat".  When you click on the down-button
-    on a scroll-bar, you probably expect the the button's action (scrolling
+    on a scroll-bar, you probably expect the button's action (scrolling
     down one increment) to repeat when you hold down the button, much like the
     way kestrokes are repeated when you hold down a keyboard key.  This is in
     fact what happens, and it is accomplished by having the scroll and its
@@ -122,7 +122,7 @@ public:
 
     /// These are the only events absolutely necessary for GG to function
     /// properly
-    enum class EventType : int {
+    enum class EventType : uint8_t {
         IDLE,        ///< nothing has changed since the last message, but the GUI might want to update some things anyway
         KEYPRESS,    ///< a down key press or key repeat, with or without modifiers like Alt, Ctrl, Meta, etc.
         KEYRELEASE,  ///< a key release, with or without modifiers like Alt, Ctrl, Meta, etc.
@@ -152,7 +152,7 @@ public:
     bool                        FocusWndAcceptsTypingInput() const; ///< returns true iff the current focus GG::Wnd accepts typing input
     std::shared_ptr<Wnd>        PrevFocusInteractiveWnd() const;    ///< returns the previous Wnd to the current FocusWnd. Cycles through INTERACTIVE Wnds, in order determined by parent-child relationships
     std::shared_ptr<Wnd>        NextFocusInteractiveWnd() const;    ///< returns the next Wnd to the current FocusWnd.
-    std::shared_ptr<Wnd>        GetWindowUnder(const Pt& pt) const; ///< returns the GG::Wnd under the point pt
+    std::shared_ptr<Wnd>        GetWindowUnder(Pt pt) const;        ///< returns the GG::Wnd under the point pt
     virtual unsigned int        Ticks() const = 0;                  ///< returns milliseconds since the app started running
     bool                        RenderingDragDropWnds() const;      ///< returns true iff drag-and-drop Wnds are currently being rendered
     bool                        FPSEnabled() const;                 ///< returns true iff FPS calulations are turned on
@@ -178,15 +178,11 @@ public:
     bool                        MouseLRSwapped() const;             ///< returns true if the left and right mouse button press events are set to be swapped before event handling. This is to facilitate left-handed mouse users semi-automatically.
     virtual std::string         ClipboardText() const;              ///< returns text stored in a clipboard
 
-    /** Returns the (begin, end) indices of the code points of all the
-        word-tokens in the given string.  This is perhaps an odd place for
-        this function to exist, but the notion of what a "word" is is so
-        application-specific that it was placed here so that users can
-        customize this behavior. */
-    virtual std::set<std::pair<CPSize, CPSize>>     FindWords(const std::string& str) const;
-    virtual std::set<std::pair<StrSize, StrSize>>   FindWordsStringIndices(const std::string& str) const;
-    /** Returns true if \a word is a word that appears in \a str */
-    virtual bool                                    ContainsWord(const std::string& str, const std::string& word) const;
+    /** Returns the (begin, end) indices of the code points or char indices
+      * of the word-tokens in the given string. */
+    std::vector<std::pair<CPSize, CPSize>>   FindWords(std::string_view str) const;
+    std::vector<std::pair<StrSize, StrSize>> FindWordsStringIndices(std::string_view str) const;
+    std::vector<std::string_view>            FindWordsStringViews(std::string_view str) const;
 
     /** Returns the currently-installed style factory. */
     const std::shared_ptr<StyleFactory>&    GetStyleFactory() const;
@@ -227,8 +223,9 @@ public:
     virtual void    HandleSystemEvents() = 0;
 
     /** Event handler for GG events. */
-    void            HandleGGEvent(EventType event, Key key, std::uint32_t key_code_point, Flags<ModKey> mod_keys,
-                                  const Pt& pos, const Pt& rel, std::string text = std::string());
+    void            HandleGGEvent(EventType event, Key key, std::uint32_t key_code_point,
+                                  Flags<ModKey> mod_keys, Pt pos, Pt rel,
+                                  std::string text = std::string());
 
     void            ClearEventState();
 
@@ -244,7 +241,8 @@ public:
     /** Adds \p wnd onto the modal windows "stack".  Modal windows are owned by the GUI as a
         top-level window. */
     void            RegisterModal(std::shared_ptr<Wnd> wnd);
-    void            RunModal(std::shared_ptr<Wnd> wnd, bool& done);
+    void            RunModal(const bool& done);
+    void            RunModal(std::shared_ptr<Wnd> wnd);
     void            Remove(const std::shared_ptr<Wnd>& wnd);               ///< removes \a wnd from the z-list.  Removing a null pointer or removing the same window multiple times is a no-op.
     void            MoveUp(const std::shared_ptr<Wnd>& wnd);               ///< moves \a wnd to the top of the z-list
     void            MoveDown(const std::shared_ptr<Wnd>& wnd);             ///< moves \a wnd to the bottom of the z-list
@@ -255,7 +253,8 @@ public:
         \throw std::runtime_error May throw std::runtime_error if there are
         already other Wnds registered that belong to a window other than \a
         originating_wnd. */
-    void           RegisterDragDropWnd(std::shared_ptr<Wnd> wnd, const Pt& offset, std::shared_ptr<Wnd> originating_wnd);
+    void           RegisterDragDropWnd(std::shared_ptr<Wnd> wnd, Pt offset,
+                                       std::shared_ptr<Wnd> originating_wnd);
     void           CancelDragDrop();             ///< clears the set of current drag-and-drop Wnds
 
     void           RegisterTimer(Timer& timer);  ///< adds \a timer to the list of active timers
@@ -301,7 +300,7 @@ public:
     /** Returns a shared_ptr to the desired font, supporting all printable
         ASCII characters, from the in-memory contents \a file_contents. */
     std::shared_ptr<Font> GetFont(const std::string& font_filename, unsigned int pts,
-                                  const std::vector<unsigned char>& file_contents);
+                                  const std::vector<uint8_t>& file_contents);
 
     /** Returns a shared_ptr to the desired font, supporting all the
         characters in the UnicodeCharsets in the range [first, last). */
@@ -314,7 +313,7 @@ public:
         in-memory contents \a file_contents. */
     template <typename CharSetIter>
     std::shared_ptr<Font> GetFont(const std::string& font_filename, unsigned int pts,
-                                  const std::vector<unsigned char>& file_contents,
+                                  const std::vector<uint8_t>& file_contents,
                                   CharSetIter first, CharSetIter last);
 
     /** Returns a shared_ptr to existing font \a font in a new size, \a pts. */
@@ -372,13 +371,13 @@ public:
     bool SetPrevFocusWndInCycle();                          ///< sets the focus Wnd to the next INTERACTIVE Wnd in a cycle determined by Wnd parent-child relationships
     bool SetNextFocusWndInCycle();                          ///< sets the focus Wnd to the next in the cycle.
 
-    static GUI*  GetGUI();                  ///< allows any GG code access to GUI framework by calling GUI::GetGUI()
+    static GUI*  GetGUI() noexcept;                         ///< allows any GG code access to GUI framework by calling GUI::GetGUI()
 
     /** If \p wnd is visible recursively call PreRenderWindow() on all \p wnd's children and then
         call \p wnd->PreRender().  The order guarantees that when wnd->PreRender() is called all
         of \p wnd's children have already been prerendered.*/
-    static void  PreRenderWindow(const std::shared_ptr<Wnd>& wnd);
-    static void  PreRenderWindow(Wnd* wnd);
+    static void  PreRenderWindow(const std::shared_ptr<Wnd>& wnd, bool even_if_not_visible = false);
+    static void  PreRenderWindow(Wnd* wnd, bool even_if_not_visible = false);
     static void  RenderWindow(const std::shared_ptr<Wnd>& wnd);    ///< renders a window (if it is visible) and all its visible descendents recursively
     static void  RenderWindow(Wnd* wnd);    ///< renders a window (if it is visible) and all its visible descendents recursively
     virtual void RenderDragDropWnds();      ///< renders Wnds currently being drag-dropped
@@ -437,7 +436,7 @@ private:
 
     // Returns the window under \a pt, sending Mouse{Enter|Leave} or
     // DragDrop{Enter|Leave} as appropriate
-    std::shared_ptr<Wnd> CheckedGetWindowUnder(const Pt& pt, Flags<ModKey> mod_keys);
+    std::shared_ptr<Wnd> CheckedGetWindowUnder(Pt pt, Flags<ModKey> mod_keys);
 
     static GUI*              s_gui;
     std::unique_ptr<GUIImpl> m_impl;
@@ -474,7 +473,7 @@ std::shared_ptr<Font> GUI::GetFont(const std::string& font_filename, unsigned in
 
 template <typename CharSetIter>
 std::shared_ptr<Font> GUI::GetFont(const std::string& font_filename, unsigned int pts,
-                                   const std::vector<unsigned char>& file_contents,
+                                   const std::vector<uint8_t>& file_contents,
                                    CharSetIter first, CharSetIter last)
 { return GetFontManager().GetFont(font_filename, pts, file_contents, first, last); }
 

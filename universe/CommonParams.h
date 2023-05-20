@@ -26,6 +26,11 @@ template <typename T>
 using ConsumptionMap = std::map<T, std::pair<std::unique_ptr<ValueRef::ValueRef<double>>,
                                              std::unique_ptr<Condition::Condition>>>;
 
+/** @content_tag{PEDIA_} Defines an encyclopedia category for
+  * the generated article of the containing content definition.
+  * The category name should be postfixed to this tag. **/
+constexpr std::string_view TAG_PEDIA_PREFIX = "PEDIA_";
+
 //! Common parameters for ShipPart, ShipHull, and BuildingType constructors.
 //!
 //! Used as temporary storage for parsing to reduce number of sub-items parsed
@@ -35,7 +40,7 @@ struct FO_COMMON_API CommonParams {
     CommonParams(std::unique_ptr<ValueRef::ValueRef<double>>&& production_cost_,
                  std::unique_ptr<ValueRef::ValueRef<int>>&& production_time_,
                  bool producible_,
-                 const std::set<std::string>& tags_,
+                 std::set<std::string>& tags_,
                  std::unique_ptr<Condition::Condition>&& location_,
                  std::vector<std::unique_ptr<Effect::EffectsGroup>>&& effects_,
                  ConsumptionMap<MeterType>&& production_meter_consumption_,
@@ -46,7 +51,7 @@ struct FO_COMMON_API CommonParams {
     std::unique_ptr<ValueRef::ValueRef<double>>         production_cost;
     std::unique_ptr<ValueRef::ValueRef<int>>            production_time;
     bool                                                producible = true;
-    std::set<std::string>                               tags;
+    std::vector<std::string>                            tags;
     ConsumptionMap<MeterType>                           production_meter_consumption;
     ConsumptionMap<std::string>                         production_special_consumption;
     std::unique_ptr<Condition::Condition>               location;

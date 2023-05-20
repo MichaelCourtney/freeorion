@@ -26,6 +26,7 @@ from EnumsAI import (
     ShipRoleType,
     get_priority_production_types,
 )
+from expansion_plans import get_colonisable_outpost_ids, get_colonisable_planet_ids
 from freeorion_tools import tech_is_complete
 from freeorion_tools.timers import AITimer
 from turn_state import (
@@ -48,7 +49,9 @@ def calculate_priorities():
     debug("\n=== Preparing to Calculate Priorities ===")
     prioritiees_timer.start("setting Production Priority")
     aistate = get_aistate()
-    aistate.set_priority(PriorityType.RESOURCE_PRODUCTION, 50)  # let this one stay fixed & just adjust Research
+    # let this one stay fixed & just adjust Research and Influence
+    aistate.set_priority(PriorityType.RESOURCE_PRODUCTION, 50)
+    # RESOURCE_INFLUENCE priority is calculated in PolicyAI
 
     debug("\n*** Calculating Research Priority ***\n")
     prioritiees_timer.start("setting Research Priority")
@@ -58,7 +61,7 @@ def calculate_priorities():
 
     debug("\n*** Updating Colonization Status ***\n")
     prioritiees_timer.start("Evaluating Colonization Status")
-    ColonisationAI.get_colony_fleets()  # sets aistate.colonisablePlanetIDs and many other values used by other modules
+    ColonisationAI.get_colony_fleets()  # TODO sets aistate.colonisablePlanetIDs and many other values used by other modules
 
     debug("\n*** Updating Invasion Status ***\n")
     prioritiees_timer.start("Evaluating Invasion Status")
@@ -72,9 +75,6 @@ def calculate_priorities():
     prioritiees_timer.start("reporting Production Priority")
     _calculate_industry_priority()  # purely for reporting purposes
     prioritiees_timer.start("setting Exploration Priority")
-
-    aistate.set_priority(PriorityType.RESOURCE_TRADE, 0)
-    aistate.set_priority(PriorityType.RESOURCE_CONSTRUCTION, 0)
 
     aistate.set_priority(PriorityType.PRODUCTION_EXPLORATION, _calculate_exploration_priority())
     prioritiees_timer.start("setting Colony Priority")
@@ -97,7 +97,7 @@ def _calculate_industry_priority():  # currently only used to print status
     empire = fo.getEmpire()
     # get current industry production & Target
     industry_production = empire.resourceProduction(fo.resourceType.industry)
-    owned_planet_ids = PlanetUtilsAI.get_owned_planets_by_empire(universe.planetIDs)
+    owned_planet_ids = PlanetUtilsAI.get_owned_planets_by_empire()
     planets = (universe.getPlanet(x) for x in owned_planet_ids)
     target_pp = sum(x.currentMeterValue(fo.meterType.targetIndustry) for x in planets)
 
@@ -113,7 +113,7 @@ def _calculate_industry_priority():  # currently only used to print status
     return industry_priority
 
 
-def _calculate_research_priority():
+def _calculate_research_priority():  # noqa: max-complexity
     """Calculates the AI empire's demand for research."""
     universe = fo.getUniverse()
     empire = fo.getEmpire()
@@ -149,13 +149,14 @@ def _calculate_research_priority():
     industry_surge = (
         aistate.character.may_surge_industry(total_pp, total_rp)
         and (
+            # TODO: having a gas giant does not necessarily mean we want to build a GGG, especially for Sly
             ((orb_gen_tech in research_queue_list[:2] or got_orb_gen) and have_gas_giant())
             or ((mgrav_prod_tech in research_queue_list[:2] or got_mgrav_prod) and have_asteroids())
         )
         and (get_number_of_colonies() < 12)
     )
     # get current industry production & Target
-    owned_planet_ids = PlanetUtilsAI.get_owned_planets_by_empire(universe.planetIDs)
+    owned_planet_ids = PlanetUtilsAI.get_owned_planets_by_empire()
     planets = (universe.getPlanet(x) for x in owned_planet_ids)
     target_rp = sum(map(lambda _x: _x.currentMeterValue(fo.meterType.targetResearch), planets))
     galaxy_is_sparse = ColonisationAI.galaxy_is_sparse()
@@ -209,7 +210,7 @@ def _calculate_research_priority():
     if got_quant:
         research_priority = min(research_priority + 0.1 * industry_priority, research_priority * 1.3)
     research_priority = int(research_priority)
-    debug("Research Production (current/target) : ( %.1f / %.1f )" % (total_rp, target_rp))
+    debug(f"Research Production (current/target) : ( {total_rp:.1f} / {target_rp:.1f} )")
     debug(
         "Priority for Research: %d (new target ~ %d RP)"
         % (research_priority, total_pp * research_priority / industry_priority)
@@ -249,7 +250,7 @@ def _calculate_exploration_priority():
     # These caps could perhaps instead be tied more directly to military priority and
     # total empire production.
     desired_number_of_scouts = int(
-        min(4 + mil_ships / 5, 4 + fo.currentTurn() / 50.0, 2 + num_unexplored_systems ** 0.5)
+        min(4 + mil_ships / 5, 4 + fo.currentTurn() / 50.0, 2 + num_unexplored_systems**0.5)
     )
     scouts_needed = max(0, desired_number_of_scouts - (num_scouts + queued_scout_ships))
     exploration_priority = int(40 * scouts_needed)
@@ -299,11 +300,11 @@ def _calculate_colonisation_priority():
     minimal_top = min_score + 2  # one more than the conditional floor set by ColonisationAI.revise_threat_factor()
     minimal_opportunities = [
         species_name
-        for (_, (score, species_name)) in aistate.colonisablePlanetIDs.items()
+        for (_, (score, species_name)) in get_colonisable_planet_ids().items()
         if min_score < score <= minimal_top
     ]
     decent_opportunities = [
-        species_name for (_, (score, species_name)) in aistate.colonisablePlanetIDs.items() if score > minimal_top
+        species_name for (_, (score, species_name)) in get_colonisable_planet_ids().items() if score > minimal_top
     ]
     minimal_planet_factor = 0.2  # count them for something, but not much
     num_colonisable_planet_ids = len(decent_opportunities) + minimal_planet_factor * len(minimal_opportunities)
@@ -359,7 +360,7 @@ def _calculate_outpost_priority():
     num_outpost_targets = len(
         [
             pid
-            for (pid, (score, specName)) in aistate.colonisableOutpostIDs.items()
+            for (pid, (score, specName)) in get_colonisable_outpost_ids().items()
             if score > max(1.0 * base_outpost_cost / 3.0, ColonisationAI.MINIMUM_COLONY_SCORE)
         ][:allotted_outpost_targets]
     )
@@ -386,7 +387,7 @@ def _calculate_outpost_priority():
     return outpost_priority
 
 
-def _calculate_invasion_priority():
+def _calculate_invasion_priority():  # noqa: max-complexity
     """Calculates the demand for troop ships by opponent planets."""
 
     aistate = get_aistate()
@@ -458,10 +459,10 @@ def _calculate_invasion_priority():
 
 
 def allotted_invasion_targets():
-    return 1 + int(fo.currentTurn() // 25)
+    return min(1 + int(fo.currentTurn() // 50), 3)
 
 
-def _calculate_military_priority():
+def _calculate_military_priority():  # noqa: max-complexity
     """Calculates the demand for military ships by military targeted systems."""
     global unmetThreat
 
@@ -482,8 +483,8 @@ def _calculate_military_priority():
 
     target_planet_ids = (
         [pid for pid, pscore, trp in AIstate.invasionTargets[: allotted_invasion_targets()]]
-        + [pid for pid, pscore in list(aistate.colonisablePlanetIDs.items())[:allottedColonyTargets]]
-        + [pid for pid, pscore in list(aistate.colonisableOutpostIDs.items())[:allottedColonyTargets]]
+        + [pid for pid, pscore in list(get_colonisable_planet_ids(True).items())[:allottedColonyTargets]]
+        + [pid for pid, pscore in list(get_colonisable_outpost_ids(True).items())[:allottedColonyTargets]]
     )
 
     my_systems = set(get_owned_planets())
@@ -517,15 +518,15 @@ def _calculate_military_priority():
                 status.get("fleetThreat", 0) ** 0.5
                 + 0.8 * status.get("max_neighbor_threat", 0) ** 0.5
                 + 0.2 * status.get("neighborThreat", 0) ** 0.5
-                + monster_threat ** 0.5
+                + monster_threat**0.5
                 + status.get("planetThreat", 0) ** 0.5
             )
         else:
             threat_root = (
-                status.get("fleetThreat", 0) ** 0.5 + monster_threat ** 0.5 + status.get("planetThreat", 0) ** 0.5
+                status.get("fleetThreat", 0) ** 0.5 + monster_threat**0.5 + status.get("planetThreat", 0) ** 0.5
             )
         ships_needed_here = math.ceil(
-            (max(0, (threat_root - (my_rating ** 0.5 + my_defenses ** 0.5))) ** 2) / cur_ship_rating
+            (max(0, (threat_root - (my_rating**0.5 + my_defenses**0.5))) ** 2) / cur_ship_rating
         )
         ships_needed += ships_needed_here
         ships_needed_allocation.append((universe.getSystem(sys_id), ships_needed_here))

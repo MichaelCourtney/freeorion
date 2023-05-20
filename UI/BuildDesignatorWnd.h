@@ -9,6 +9,7 @@
 
 class SidePanel;
 class EncyclopediaDetailPanel;
+struct ScriptingContext;
 
 class BuildDesignatorWnd : public GG::Wnd {
 public:
@@ -17,18 +18,18 @@ public:
     BuildDesignatorWnd(GG::X w, GG::Y h);
     void CompleteConstruction() override;
 
-    bool InWindow(const GG::Pt& pt) const override;
-    bool InClient(const GG::Pt& pt) const override;
+    bool InWindow(GG::Pt pt) const override;
+    bool InClient(GG::Pt pt) const override;
 
     /** returns set of BulldType shown in this selector */
-    const std::set<BuildType>&      GetBuildTypesShown() const;
+    const std::set<BuildType>& GetBuildTypesShown() const;
 
     /** .first -> available items; .second -> unavailable items */
-    const std::pair<bool, bool>&    GetAvailabilitiesShown() const;
+    std::pair<bool, bool> GetAvailabilitiesShown() const;
 
     int SelectedPlanetID() const;
 
-    void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
+    void SizeMove(GG::Pt ul, GG::Pt lr) override;
 
     /** Centres map wnd on location of item on queue with index \a queue_idx
       * and displays info about that item in encyclopedia window
@@ -38,15 +39,15 @@ public:
 
     /** Programatically sets this Wnd's selected system.
       * Does not emit a SystemSelectedSignal. */
-    void SelectSystem(int system_id);
+    void SelectSystem(int system_id, const ObjectMap& objects);
 
     /** Programatically sets this Wnd's selected planet.
       * Does not emit a PlanetSelectedSignal. */
-    void SelectPlanet(int planet_id);
+    void SelectPlanet(int planet_id, const ObjectMap& objects);
 
     /** Attempts to find a planet to select, and if successful, selects that
       * planet */
-    void SelectDefaultPlanet();
+    void SelectDefaultPlanet(const ObjectMap& objects);
 
     /** Sets BuildSelector's empire ID to empire of this client, and then calls
       * Update. */
@@ -58,10 +59,10 @@ public:
     /** Sets sidepanel to no system, build location to no planet, refreshes
       * build selector and sets encyclopedia to show nothing, and resets shown
       * types and availabilities to default. */
-    void Reset();
+    void Reset(const ObjectMap& objects);
 
     /** Resets, and also clears default planet selections for each system. */
-    void Clear();
+    void Clear(const ObjectMap& objects);
 
     /** Show or hide indicated types of buildable items */
     void ShowType(BuildType type, bool refresh_list = true);
@@ -98,23 +99,22 @@ public:
     bool PediaVisible();
 
     /** emitted when the indicated build is indicated by the user */
-    mutable boost::signals2::signal<void (const ProductionQueue::ProductionItem&, int, int, int)>
-                                                        AddBuildToQueueSignal;
+    mutable boost::signals2::signal<void (ProductionQueue::ProductionItem, int, int, int)> AddBuildToQueueSignal;
     /** emitted when the quantity of items in a single build queue item is
       * changed by the user */
-    mutable boost::signals2::signal<void (int, int)>    BuildQuantityChangedSignal;
+    mutable boost::signals2::signal<void (int, int)> BuildQuantityChangedSignal;
     /** emitted when the user selects a system from within this Wnd (but not
       * when this Wnd's system is set programatically) */
-    mutable boost::signals2::signal<void (int)>         SystemSelectedSignal;
+    mutable boost::signals2::signal<void (int)> SystemSelectedSignal;
     /** emitted when the user changes the planet selection from within this
       * Wnd (but not when this Wnd's selected planet is set programatically) */
-    mutable boost::signals2::signal<void (int)>         PlanetSelectedSignal;
+    mutable boost::signals2::signal<void (int)> PlanetSelectedSignal;
 
 private:
     class BuildSelector;
 
     int BuildLocation() const;
-    void BuildItemRequested(const ProductionQueue::ProductionItem& item, int num_to_build, int pos);
+    void BuildItemRequested(ProductionQueue::ProductionItem item, int num_to_build, int pos);
     void BuildQuantityChanged(int queue_idx, int quantity);
     void SetBuild(int queue_idx);
     void InitializeWindows();

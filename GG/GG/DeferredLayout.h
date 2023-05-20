@@ -26,14 +26,14 @@ namespace GG {
     A DeferredLayout is a layout that does all of the expensive layout operations once per frame
     during PreRender().
 */
-class GG_API DeferredLayout : public Layout
+class GG_API DeferredLayout final : public Layout
 {
 public:
     /** Ctor. */
     DeferredLayout(X x, Y y, X w, Y h, std::size_t rows, std::size_t columns,
                    unsigned int border_margin = 0, unsigned int cell_margin = INVALID_CELL_MARGIN);
 
-    void SizeMove(const Pt& ul, const Pt& lr) override;
+    void SizeMove(Pt ul, Pt lr) override;
     void PreRender() override;
 
 protected:
@@ -42,7 +42,7 @@ protected:
 private:
     Pt   m_ul_prerender;
     Pt   m_lr_prerender;
-    bool m_make_resize_immediate_during_prerender;
+    bool m_make_resize_immediate_during_prerender = false;
 };
 
 }

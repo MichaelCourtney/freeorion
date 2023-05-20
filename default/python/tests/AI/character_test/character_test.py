@@ -1,4 +1,5 @@
 import pytest
+
 from character.character_module import Character, Trait
 
 
@@ -42,7 +43,7 @@ rejection_character = Character([left_trait, right_trait])
 permissive_character = Character([left_trait, other_trait])
 
 
-class TestCharacter(object):
+class TestCharacter:
     """Test the Character class which combines traits
     Each combiner test checks that the combiner generates the expected output.
     """

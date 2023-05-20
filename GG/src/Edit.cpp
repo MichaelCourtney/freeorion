@@ -33,18 +33,18 @@ namespace {
         const CPSize m_value;
     };
 
-    Y HeightFromFont(const std::shared_ptr<Font>& font, unsigned int pixel_margin)
-    {  return font->Height() + 2 * static_cast<int>(pixel_margin); }
+    Y HeightFromFont(const std::shared_ptr<Font>& font, unsigned int pixel_margin) noexcept
+    { return font->Height() + 2 * static_cast<int>(pixel_margin); }
 }
 
 ////////////////////////////////////////////////
 // GG::Edit
 ////////////////////////////////////////////////
 
-Edit::Edit(std::string str, const std::shared_ptr<Font>& font,
+Edit::Edit(std::string str, std::shared_ptr<Font> font,
            Clr color, Clr text_color, Clr interior) :
-    TextControl(X0, Y0, X1, HeightFromFont(font, PIXEL_MARGIN), std::move(str), font, text_color,
-                FORMAT_LEFT | FORMAT_IGNORETAGS, INTERACTIVE | REPEAT_KEY_PRESS),
+    TextControl(X0, Y0, X1, HeightFromFont(font, PIXEL_MARGIN), std::move(str), font,
+                text_color, FORMAT_LEFT | FORMAT_IGNORETAGS, INTERACTIVE | REPEAT_KEY_PRESS),
     m_int_color(interior)
 {
     SetColor(color);
@@ -55,32 +55,8 @@ Edit::Edit(std::string str, const std::shared_ptr<Font>& font,
     }
 }
 
-Pt Edit::MinUsableSize() const
+Pt Edit::MinUsableSize() const noexcept
 { return Pt(X(4 * PIXEL_MARGIN), HeightFromFont(GetFont(), PIXEL_MARGIN)); }
-
-Pt Edit::MinUsableSize(X width) const
-{ return MinUsableSize(); }
-
-Pt Edit::ClientUpperLeft() const
-{ return UpperLeft() + Pt(X(PIXEL_MARGIN), Y(PIXEL_MARGIN)); }
-
-Pt Edit::ClientLowerRight() const
-{ return LowerRight() - Pt(X(PIXEL_MARGIN), Y(PIXEL_MARGIN)); }
-
-const std::pair<CPSize, CPSize>& Edit::CursorPosn() const
-{ return m_cursor_pos; }
-
-std::string_view Edit::SelectedText() const
-{ return Text(m_cursor_pos.first, m_cursor_pos.second); }
-
-Clr Edit::InteriorColor() const
-{ return m_int_color; }
-
-Clr Edit::HiliteColor() const
-{ return m_hilite_color; }
-
-Clr Edit::SelectedTextColor() const
-{ return m_sel_text_color; }
 
 void Edit::Render()
 {
@@ -241,15 +217,6 @@ void Edit::AcceptPastedText(const std::string& text)
     }
 }
 
-bool Edit::MultiSelected() const
-{ return m_cursor_pos.first != m_cursor_pos.second; }
-
-CPSize Edit::FirstCharShown() const
-{ return m_first_char_shown; }
-
-bool Edit::RecentlyEdited() const
-{ return m_recently_edited; }
-
 CPSize Edit::CharIndexOf(X x) const
 {
     CPSize retval;
@@ -319,7 +286,7 @@ CPSize Edit::LastVisibleChar() const
             if (client_size_x <= X0 - first_char_offset)
                 break;
         } else {
-            size_t retval_minus_1 = Value(retval - 1);
+            std::size_t retval_minus_1 = Value(retval - 1);
             auto retval_minus_1_char_data = char_data.at(retval_minus_1);
             if (client_size_x <= retval_minus_1_char_data.extent - first_char_offset)
                 break;
@@ -328,21 +295,12 @@ CPSize Edit::LastVisibleChar() const
     return retval;
 }
 
-unsigned int Edit::LastButtonDownTime() const
-{ return m_last_button_down_time; }
-
-bool Edit::InDoubleButtonDownMode() const
-{ return m_in_double_click_mode; }
-
-std::pair<CPSize, CPSize> Edit::DoubleButtonDownCursorPos() const
-{ return m_double_click_cursor_pos; }
-
 std::vector<GG::Font::LineData>::size_type Edit::NumLines() const {
     return std::max(std::vector<GG::Font::LineData>::size_type(0),
                     GetLineData().size() - 1);
 }
 
-void Edit::LButtonDown(const Pt& pt, Flags<ModKey> mod_keys)
+void Edit::LButtonDown(Pt pt, Flags<ModKey> mod_keys)
 {
     if (Disabled())
         return;
@@ -358,7 +316,7 @@ void Edit::LButtonDown(const Pt& pt, Flags<ModKey> mod_keys)
         m_cursor_pos = word_indices;
 }
 
-void Edit::LDrag(const Pt& pt, const Pt& move, Flags<ModKey> mod_keys)
+void Edit::LDrag(Pt pt, Pt move, Flags<ModKey> mod_keys)
 {
     if (Disabled())
         return;
@@ -399,10 +357,10 @@ void Edit::LDrag(const Pt& pt, const Pt& move, Flags<ModKey> mod_keys)
     //std::cout << "LDrag selected from: " << m_cursor_pos.first << "  to: " << m_cursor_pos.second << std::endl;
 }
 
-void Edit::LButtonUp(const Pt& pt, Flags<ModKey> mod_keys)
+void Edit::LButtonUp(Pt pt, Flags<ModKey> mod_keys)
 { ClearDoubleButtonDownMode(); }
 
-void Edit::LClick(const Pt& pt, Flags<ModKey> mod_keys)
+void Edit::LClick(Pt pt, Flags<ModKey> mod_keys)
 { ClearDoubleButtonDownMode(); }
 
 void Edit::KeyPress(Key key, std::uint32_t key_code_point, Flags<ModKey> mod_keys)
@@ -647,8 +605,8 @@ void GG::GetTranslatedCodePoint(Key key, std::uint32_t key_code_point, Flags<Mod
     }
 }
 
-CPSize GG::NextWordEdgeFrom(const std::string& text, CPSize from_position, bool search_right) {
-    std::set<std::pair<CPSize, CPSize>> words = GUI::GetGUI()->FindWords(text);
+CPSize GG::NextWordEdgeFrom(std::string_view text, CPSize from_position, bool search_right) {
+    auto words = GUI::GetGUI()->FindWords(text);
     CPSize retval = CP0;
 
     if (!search_right) {

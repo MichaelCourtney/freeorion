@@ -2,13 +2,12 @@ import logging
 import sys
 from code import InteractiveInterpreter
 from io import StringIO
-from typing import List
 
 from freeorion_tools.chat_handler.shell_variable import ShellVariable
 
 
 class DebugInterpreter:
-    def __init__(self, shell_locals: List[ShellVariable]):
+    def __init__(self, shell_locals: list[ShellVariable]):
         self._shell_locals = shell_locals
         self._interpreter = InteractiveInterpreter()
 
@@ -18,6 +17,8 @@ class DebugInterpreter:
 
         sys.stdout = StringIO()
         sys.stderr = StringIO()
+        if msg.endswith(";"):
+            msg = msg.replace(";", "\n")
         handler = logging.StreamHandler(sys.stdout)
         logging.getLogger().addHandler(handler)
         self._interpreter.runsource(msg)

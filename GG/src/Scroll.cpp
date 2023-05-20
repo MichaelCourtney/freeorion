@@ -88,7 +88,7 @@ void Scroll::CompleteConstruction()
 Pt Scroll::MinUsableSize() const
 {
     Pt retval;
-    constexpr int MIN_DRAGABLE_SIZE = 2;
+    static constexpr int MIN_DRAGABLE_SIZE = 2;
     if (m_orientation == Orientation::VERTICAL) {
         retval.x = X(MIN_DRAGABLE_SIZE);
         Y decr_y = m_decr ? m_decr->MinUsableSize().y : Y0;
@@ -153,7 +153,7 @@ void Scroll::Render()
     glDisableClientState(GL_VERTEX_ARRAY);
 }
 
-void Scroll::SizeMove(const Pt& ul, const Pt& lr)
+void Scroll::SizeMove(Pt ul, Pt lr)
 {
     Pt old_size = Size();
 
@@ -179,7 +179,7 @@ void Scroll::DoLayout()
     SizeScroll(m_range_min, m_range_max, m_line_sz, m_page_sz); // update tab size and position
 }
 
-void Scroll::Disable(bool b/* = true*/)
+void Scroll::Disable(bool b)
 {
     Control::Disable(b);
     m_tab->Disable(b);
@@ -281,7 +281,7 @@ unsigned int Scroll::TabSpace() const
 unsigned int Scroll::TabWidth() const
 { return std::max(static_cast<unsigned int>(TabSpace() / (m_range_max - m_range_min + 1.0) * m_page_sz + 0.5), MIN_TAB_SIZE); }
 
-Scroll::ScrollRegion Scroll::RegionUnder(const Pt& pt)
+Scroll::ScrollRegion Scroll::RegionUnder(Pt pt)
 {
     ScrollRegion retval;
     Pt ul = ClientUpperLeft();
@@ -301,7 +301,7 @@ Button* Scroll::IncrButton() const
 Button* Scroll::DecrButton() const
 { return m_decr.get(); }
 
-void Scroll::LButtonDown(const Pt& pt, Flags<ModKey> mod_keys)
+void Scroll::LButtonDown(Pt pt, Flags<ModKey> mod_keys)
 {
     if (!Disabled()) {
         // when a button is pressed, record the region of the control the cursor is over
@@ -335,7 +335,7 @@ void Scroll::LButtonDown(const Pt& pt, Flags<ModKey> mod_keys)
     }
 }
 
-void Scroll::LButtonUp(const Pt& pt, Flags<ModKey> mod_keys)
+void Scroll::LButtonUp(Pt pt, Flags<ModKey> mod_keys)
 {
     if (!Disabled()) {
         if(m_decr)
@@ -347,10 +347,10 @@ void Scroll::LButtonUp(const Pt& pt, Flags<ModKey> mod_keys)
     }
 }
 
-void Scroll::LClick(const Pt& pt, Flags<ModKey> mod_keys)
+void Scroll::LClick(Pt pt, Flags<ModKey> mod_keys)
 { LButtonUp(pt, mod_keys); }
 
-void Scroll::MouseHere(const Pt& pt, Flags<ModKey> mod_keys)
+void Scroll::MouseHere(Pt pt, Flags<ModKey> mod_keys)
 { LButtonUp(pt, mod_keys); }
 
 bool Scroll::EventFilter(Wnd* w, const WndEvent& event)

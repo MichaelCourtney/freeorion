@@ -89,6 +89,7 @@ struct MessageEventBase {
     (AuthResponse)                          \
     (EliminateSelf)                         \
     (AutoTurn)                              \
+    (RevertOrders)                          \
     (Error)
 
 
@@ -126,14 +127,12 @@ struct ServerFSM : sc::state_machine<ServerFSM, Idle> {
     ServerFSM(ServerApp &server);
 
     void unconsumed_event(const sc::event_base &event);
-    ServerApp& Server();
+    ServerApp& Server() noexcept { return m_server; }
     void HandleNonLobbyDisconnection(const Disconnection& d);
     void UpdateIngameLobby();
-    bool EstablishPlayer(const PlayerConnectionPtr& player_connection,
-                         const std::string& player_name,
-                         Networking::ClientType client_type,
-                         const std::string& client_version_string,
-                         const Networking::AuthRoles& roles);
+    bool EstablishPlayer(PlayerConnectionPtr player_connection,
+                         std::string player_name, Networking::ClientType client_type,
+                         std::string client_version_string, Networking::AuthRoles roles);
 
     std::shared_ptr<MultiplayerLobbyData>   m_lobby_data;
     std::shared_ptr<SinglePlayerSetupData>  m_single_player_setup_data;
@@ -204,11 +203,9 @@ struct MPLobby : sc::state<MPLobby, ServerFSM> {
     int                                     m_ai_next_index;
 
 private:
-    void EstablishPlayer(const PlayerConnectionPtr& player_connection,
-                         const std::string& player_name,
-                         Networking::ClientType client_type,
-                         const std::string& client_version_string,
-                         const Networking::AuthRoles& roles);
+    void EstablishPlayer(PlayerConnectionPtr player_connection,
+                         std::string player_name, Networking::ClientType client_type,
+                         std::string client_version_string, Networking::AuthRoles roles);
     void ValidateClientLimits();
 
     SERVER_ACCESSOR
@@ -318,12 +315,10 @@ struct PlayingGame : sc::state<PlayingGame, ServerFSM, WaitingForTurnEnd> {
     sc::result react(const Error& msg);
     sc::result react(const LobbyUpdate& msg);
 
-    void EstablishPlayer(const PlayerConnectionPtr& player_connection,
-                         const std::string& player_name,
-                         Networking::ClientType client_type,
-                         const std::string& client_version_string,
-                         const Networking::AuthRoles& roles);
-    void TurnTimedoutHandler(const boost::system::error_code& error);
+    void EstablishPlayer(PlayerConnectionPtr player_connection,
+                         std::string player_name, Networking::ClientType client_type,
+                         std::string client_version_string, Networking::AuthRoles roles);
+    void TurnTimedoutHandler(boost::system::error_code error);
 
     boost::asio::deadline_timer                     m_turn_timeout;
     std::chrono::high_resolution_clock::time_point  m_start;
@@ -339,6 +334,7 @@ struct WaitingForTurnEnd : sc::state<WaitingForTurnEnd, PlayingGame> {
     typedef boost::mpl::list<
         sc::custom_reaction<TurnOrders>,
         sc::custom_reaction<TurnPartialOrders>,
+        sc::custom_reaction<RevertOrders>,
         sc::custom_reaction<RevokeReadiness>,
         sc::custom_reaction<CheckTurnEndConditions>,
         sc::custom_reaction<SaveGameRequest>
@@ -349,6 +345,7 @@ struct WaitingForTurnEnd : sc::state<WaitingForTurnEnd, PlayingGame> {
 
     sc::result react(const TurnOrders& msg);
     sc::result react(const TurnPartialOrders& msg);
+    sc::result react(const RevertOrders& msg);
     sc::result react(const RevokeReadiness& msg);
     sc::result react(const CheckTurnEndConditions& c);
     sc::result react(const SaveGameRequest& msg);
@@ -405,7 +402,7 @@ struct ShuttingDownServer : sc::state<ShuttingDownServer, ServerFSM> {
 
     sc::result react(const LeaveGame& msg);
     sc::result react(const CheckEndConditions& u);
-    sc::result react(const DisconnectClients& u);
+    [[noreturn]] sc::result react(const DisconnectClients&);
     sc::result react(const Disconnection& d);
     sc::result react(const Error& msg);
 

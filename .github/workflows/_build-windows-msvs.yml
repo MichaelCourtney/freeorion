@@ -1,0 +1,66 @@
+name: "Windows MS VS"
+
+on:
+  workflow_call:
+jobs:
+  windows-2022:
+    name: MSVS 2022 on Windows
+    runs-on: windows-2022
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v3
+      - name: Download SDK
+        id: download-sdk
+        uses: suisei-cn/actions-download-file@v1.3.0
+        with:
+          url: https://github.com/freeorion/freeorion-sdk/releases/download/v14/FreeOrionSDK_14_MSVC-v143-Win32.zip
+          target: ../
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v1.1.3
+        with:
+            vs-prerelease: true
+      - name: Prepare
+        run: |
+          Remove-Item -LiteralPath "C:/hostedtoolcache/windows/Python/" -Force -Recurse # Ensure that system Python is not used
+          unzip -q ../${{ steps.download-sdk.outputs.filename }} -d ..
+          cp ../bin/* ./
+      - name: Build
+        run: |
+          cd msvc2022
+          msbuild FreeOrion.sln /maxcpucount /property:BuildInParallel=true /property:CL_MPCount=2 /property:PlatformToolset=v142 /property:Configuration=Release /verbosity:minimal
+      - name: Cache NSIS
+        uses: actions/cache@v3
+        with:
+          key: scoop-cache
+          path: scoop_cache
+      - name: Install NSIS
+        if: true # only for weekly-test-build push
+        env:
+          SCOOP_CACHE: scoop_cache
+        run: |
+          irm get.scoop.sh -outfile 'install.ps1'
+          .\install.ps1 -RunAsAdmin
+          scoop bucket add extras
+          scoop install nsis
+      - name: Download vcredist
+        id: download-vcredist
+        uses: suisei-cn/actions-download-file@v1.3.0
+        with:
+          url: https://github.com/freeorion/freeorion/files/9733497/vcredist_x86.exe.zip
+          target: ../
+      - name: Prepare vcredist
+        run: |
+          unzip -q ../${{ steps.download-vcredist.outputs.filename }} -d ..
+      - name: Generate installer
+        if: true # only for weekly-test-build push
+        run: |
+          makensis packaging/windows_installer.nsi
+          mv ../FreeOrion_*_Test_Win32_Setup.exe .
+      - name: Decrypt deploy SSH key
+        if: github.ref == 'refs/heads/weekly-test-builds' && github.event_name == 'push'
+        run: bash .github/pre-deploy.sh
+        env:
+          DEPLOY_SSH_PASSWORD: ${{ secrets.DEPLOY_SSH_PASSWORD }}
+      - name: Upload weekly-test installer
+        if: github.ref == 'refs/heads/weekly-test-builds' && github.event_name == 'push'
+        run: bash -c 'scp FreeOrion_*_Test_Win32_Setup.exe o01eg@frs.sourceforge.net:/home/frs/project/freeorion/FreeOrion/Test/'

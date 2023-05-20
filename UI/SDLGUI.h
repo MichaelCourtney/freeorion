@@ -54,15 +54,15 @@ public:
 
     virtual ~SDLGUI();
 
-    GG::X AppWidth() const override;
-    GG::Y AppHeight() const override;
+    GG::X AppWidth() const noexcept override { return m_app_width; }
+    GG::Y AppHeight() const noexcept override { return m_app_height; }
     unsigned int Ticks() const override;
     std::string ClipboardText() const override;
-    virtual std::vector<std::string> GetSupportedResolutions() const override;
-    virtual GG::Pt GetDefaultResolution (int display_id) const override;
+    std::vector<std::string> GetSupportedResolutions() const override;
+    GG::Pt GetDefaultResolution (int display_id) const override;
 
-    virtual bool Fullscreen() const final;
-    virtual bool FakeModeChange() const final;
+    bool Fullscreen() const noexcept { return m_fullscreen; }
+    bool FakeModeChange() const noexcept { return m_fake_mode_change; }
 
     void ExitApp(int code = 0) override;
     bool SetClipboardText(std::string text) override;
@@ -79,8 +79,8 @@ public:
 
     bool AppHasMouseFocus() const override;
 
-    void            SetWindowTitle(const std::string& title);
-    void            SetVideoMode(GG::X width, GG::Y height, bool fullscreen, bool fake_mode_change);
+    void SetWindowTitle(const std::string& title);
+    void SetVideoMode(GG::X width, GG::Y height, bool fullscreen, bool fake_mode_change);
 
     static SDLGUI*  GetGUI();                             ///< allows any code to access the gui framework by calling SDLGUI::GetGUI()
 
@@ -95,7 +95,7 @@ public:
         Ideally it reports the actual desktop height using all displays.*/
     static int MaximumPossibleHeight();
 protected:
-    void SetAppSize(const GG::Pt& size);
+    void SetAppSize(GG::Pt size);
 
     // these are called at the beginning of the gui's execution
     /** Initializes SDL, FE, and SDL OpenGL functionality. */

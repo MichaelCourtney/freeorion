@@ -15,7 +15,7 @@ class Message;
 namespace Networking {
     class AuthRoles;
 
-    enum class RoleType : size_t;
+    enum class RoleType : uint8_t;
 }
 
 /** Encapsulates the networking facilities of the client.  The client must
@@ -39,7 +39,7 @@ namespace Networking {
 class ClientNetworking : public std::enable_shared_from_this<ClientNetworking> {
 public:
     /** The type of list returned by a call to DiscoverLANServers(). */
-    using ServerNames =  std::vector<std::string>;
+    using ServerNames = std::vector<std::string>;
 
     ClientNetworking();
 public:
@@ -55,19 +55,19 @@ public:
     [[nodiscard]] bool IsTxConnected() const;
 
     /** Returns the ID of the player on this client. */
-    [[nodiscard]] int PlayerID() const;
+    [[nodiscard]] int PlayerID() const noexcept;
 
     /** Returns the ID of the host player, or INVALID_PLAYER_ID if there is no host player. */
-    [[nodiscard]] int HostPlayerID() const;
+    [[nodiscard]] int HostPlayerID() const noexcept;
 
     /** Returns whether the indicated player ID is the host. */
-    [[nodiscard]] bool PlayerIsHost(int player_id) const;
+    [[nodiscard]] bool PlayerIsHost(int player_id) const noexcept;
 
     /** Checks if the client has some authorization \a role. */
     [[nodiscard]] bool HasAuthRole(Networking::RoleType role) const;
 
     /** Returns address of multiplayer server entered by player. */
-    [[nodiscard]] const std::string& Destination() const;
+    [[nodiscard]] const std::string& Destination() const noexcept;
 
     /** Returns a list of the addresses and names of all servers on the Local
         Area Network. */
@@ -75,22 +75,18 @@ public:
 
     /** Connects to the server at \a ip_address.  On failure, repeated
         attempts will be made until \a timeout seconds has elapsed. */
-    bool ConnectToServer(const std::string& ip_address,
-                         const std::chrono::milliseconds& timeout = std::chrono::seconds(10));
+    bool ConnectToServer(std::string ip_address,
+                         std::chrono::milliseconds timeout = std::chrono::seconds(10));
 
     /** Connects to the server on the client's host.  On failure, repeated
         attempts will be made until \a timeout seconds has elapsed. */
-    bool ConnectToLocalHostServer(
-        const std::chrono::milliseconds& timeout = std::chrono::seconds(10));
+    bool ConnectToLocalHostServer(std::chrono::milliseconds timeout = std::chrono::seconds(10));
 
     /** Return true if the server can be connected to within \p timeout seconds. */
-    bool PingServer(
-        const std::string& ip_address,
-        const std::chrono::milliseconds& timeout = std::chrono::seconds(10));
+    bool PingServer(std::string ip_address, std::chrono::milliseconds timeout = std::chrono::seconds(10));
 
     /** Return true if the local server can be connected to within \p timeout seconds. */
-    bool PingLocalHostServer(
-        const std::chrono::milliseconds& timeout = std::chrono::seconds(10));
+    bool PingLocalHostServer(std::chrono::milliseconds timeout = std::chrono::seconds(10));
 
     /** Sends \a message to the server.  This function actually just enqueues
         the message for sending and returns immediately. */
@@ -110,7 +106,7 @@ public:
     void SetPlayerID(int player_id);
 
     /** Sets Host player ID. */
-    void SetHostPlayerID(int host_player_id);
+    void SetHostPlayerID(int host_player_id) noexcept;
 
     /** Access to client's authorization roles */
     [[nodiscard]] Networking::AuthRoles& AuthorizationRoles();

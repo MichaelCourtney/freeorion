@@ -18,7 +18,7 @@ Policy
                                             ]
                                         ])
     prerequisites = [ "PLC_SYSTEM_INFRA" ]
-    exclusions = [ "PLC_CENTRALIZATION" "PLC_LIBERTY" "PLC_ISOLATION" ]
+    exclusions = [ "PLC_CENTRALIZATION" "PLC_ISOLATION" "PLC_LIBERTY" ]
     effectsgroups = [
         [[SPECIES_LIKES_OR_DISLIKES_POLICY_STABILITY_EFFECTS]]
 
@@ -56,7 +56,7 @@ Policy
                     InSystem id = Target.SystemID
                 ]))
     ]
-    graphic = "icons/policies/feudalism.png"
+    graphic = "icons/policies/economic_feudalism.png"
 
 #include "/scripting/policies/policies.macros"
 #include "/scripting/common/priorities.macros"

@@ -4,7 +4,7 @@ Policy
     short_description = "PLC_THE_HUNT_SHORT_DESC"
     category = "SOCIAL_CATEGORY"
     adoptioncost = floor(2.0 * [[POPULATION_OWNED_BY_EMPIRE]]^0.5)
-    exclusions = [ "PLC_DIVERSITY" "PLC_NATIVE_APPROPRIATION" "PLC_LIBERTY" ]
+    exclusions = [ "PLC_DIVERSITY" "PLC_NATIVE_APPROPRIATION" "PLC_LIBERTY" "PLC_VASSALIZATION" ]
     effectsgroups = [
         [[SPECIES_LIKES_OR_DISLIKES_POLICY_STABILITY_EFFECTS]]
         
@@ -33,7 +33,7 @@ Policy
                     + (NamedReal name = "PLC_THE_HUNT_TROOPS_MAX_FLAT" value = 12.0)
             ]
     ]
-    graphic = "icons/policies/bow_and_arrow.png"
+    graphic = "icons/policies/social_hunt.png"
 
 #include "/scripting/common/base_prod.macros"
 #include "/scripting/policies/policies.macros"

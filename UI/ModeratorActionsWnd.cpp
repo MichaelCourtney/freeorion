@@ -112,14 +112,14 @@ void ModeratorActionsWnd::CompleteConstruction() {
     for (PlanetSize planet_size = PlanetSize::SZ_TINY; planet_size != PlanetSize::NUM_PLANET_SIZES;
          planet_size = PlanetSize(int(planet_size) + 1))
     {
-        std::shared_ptr<GG::Texture> texture = ClientUI::PlanetSizeIcon(planet_size);
+        auto texture = ClientUI::PlanetSizeIcon(planet_size);
         auto row = GG::Wnd::Create<GG::DropDownList::Row>();
         auto icon = GG::Wnd::Create<GG::StaticGraphic>(std::move(texture), style);
         icon->Resize(GG::Pt(CONTROL_WIDTH, CONTROL_HEIGHT));
         row->push_back(std::move(icon));
         m_planet_size_drop->Insert(std::move(row));
     }
-    GG::DropDownList::iterator it = m_planet_size_drop->begin();
+    auto it = m_planet_size_drop->begin();
     std::advance(it, 2);
     m_planet_size_drop->Select(it); // default select 3rd size (should be medium?)
     m_planet_size_drop->SelChangedSignal.connect(boost::bind(&ModeratorActionsWnd::CreatePlanet, this));
@@ -298,7 +298,7 @@ void ModeratorActionsWnd::DoLayout() {
     m_planet_size_drop->SizeMove(GG::Pt(left, top), GG::Pt(left + DROP_WIDTH, top + CONTROL_HEIGHT));
 }
 
-void ModeratorActionsWnd::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
+void ModeratorActionsWnd::SizeMove(GG::Pt ul, GG::Pt lr) {
     GG::Pt old_size = GG::Wnd::Size();
 
     CUIWnd::SizeMove(ul, lr);
@@ -331,7 +331,7 @@ void ModeratorActionsWnd::Refresh() {
         m_empire_drop->Select(m_empire_drop->begin());
 }
 
-void ModeratorActionsWnd::EnableActions(bool enable/* = true*/)
+void ModeratorActionsWnd::EnableActions(bool enable)
 { m_actions_enabled = enable; }
 
 void ModeratorActionsWnd::CloseClicked()
@@ -344,13 +344,13 @@ StarType ModeratorActionsWnd::StarTypeFromIndex(std::size_t i) const {
 }
 
 PlanetType ModeratorActionsWnd::PlanetTypeFromIndex(std::size_t i) const {
-    if (i == size_t(-1) || i >= size_t(PlanetType::NUM_PLANET_TYPES))
+    if (i == std::size_t(-1) || i >= std::size_t(PlanetType::NUM_PLANET_TYPES))
         return PlanetType::PT_SWAMP;
     return PlanetType(i);   // assumes first enum and first index are value 0, and that items in list are in same order as enum values
 }
 
 PlanetSize ModeratorActionsWnd::PlanetSizeFromIndex(std::size_t i) const {
-    if (i == size_t(-1) || i + 1 >= size_t(PlanetSize::NUM_PLANET_SIZES))
+    if (i == std::size_t(-1) || i + 1 >= std::size_t(PlanetSize::NUM_PLANET_SIZES))
         return PlanetSize::SZ_MEDIUM;
     return PlanetSize(i + 1);// enum index 0 is NO_WORLD, but don't put that into the list, so have to add 1 to all the list indices
 }

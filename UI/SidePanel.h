@@ -7,7 +7,6 @@
 #include "CUIControls.h"
 #include "CUIWnd.h"
 #include "../universe/Planet.h"
-#include "../universe/ResourceCenter.h"
 #include "../universe/System.h"
 
 
@@ -24,52 +23,53 @@ public:
     void CompleteConstruction() override;
     ~SidePanel();
 
-    bool InWindow(const GG::Pt& pt) const override;
+    bool InWindow(GG::Pt pt) const override;
 
-    GG::Pt ClientUpperLeft() const override;
+    GG::Pt ClientUpperLeft() const noexcept override;
 
     /** Returns the id of the system shown in the SidePanels, or
       * INVALID_OBJECT_ID if no system is shown */
-    static int          SystemID();
+    static int SystemID() noexcept { return s_system_id; }
 
     /** Returns the id of the currently-selected planet, or
       * INVALID_OBJECT_ID if no planet is selected */
-    int                 SelectedPlanetID() const;
+    int SelectedPlanetID() const noexcept { return (m_selection_enabled ? s_planet_id : INVALID_OBJECT_ID); }
+
 
     /** Returns whether this SidePanel contains an object with the indicated
       * \a object_id that can be selected within the SidePanel. */
-    bool                PlanetSelectable(int planet_id) const;
+    bool PlanetSelectable(int planet_id, const ObjectMap& objects) const;
 
     void PreRender() override;
 
-    void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
+    void SizeMove(GG::Pt ul, GG::Pt lr) override;
 
     /** Updates contents of sidepanel, but doesn't recreate contents or check
       * that object pointers are still valid.  All SidePanels' are updated */
-    static void         Update();
+    static void Update();
 
     /** Make refresh of sidepanel and contents happen during
         pre-render. PreRender() Will recreate all contents from the stored
         system id. All SidePanels are refreshed. */
-    static void         Refresh();
+    static void Refresh();
 
     /** Selects the planet with id \a planet_id within the current system, if
       * such a planet exists.  All SidePanels' selected planets are set, if
       * those panels have planet selection enabled. */
-    static void         SelectPlanet(int planet_id);
+    static void SelectPlanet(int planet_id, const ObjectMap& objects);
 
     /** Sets the system currently being viewed in all side panels */
-    static void         SetSystem(int system_id);
+    static void SetSystem(int system_id);
 
     /** Enables, or disables if \a enable is false, selection of planet panels
       * within this SidePanel.  Panels that can be selected are those which
       * meet selection conditions that need to be figured out and perhaps
       * made more configurable, but for now are just those planets owned by
       * this client's empire. */
-    void                EnableSelection(bool enable = true);
+    void EnableSelection(bool enable = true) noexcept { m_selection_enabled = enable; }
 
     /** Enables, or disables if \a enable is false, issuing orders via the SidePanel. */
-    void                EnableOrderIssuing(bool enable = true);
+    void EnableOrderIssuing(bool enable = true);
 
     /** emitted when a rotating planet in the side panel is clicked by the
       * user */
@@ -98,37 +98,34 @@ protected:
 private:
     class PlanetPanelContainer;
 
-    void                DoLayout();
+    void DoLayout();
 
-    void                UpdateImpl();                   ///< updates contents quickly.  to be used when meters or other objects' data changes
+    void UpdateImpl(ScriptingContext& context); ///< updates contents quickly.  to be used when meters or other objects' data changes
 
     /** Fully refreshes sidepanel and contents, recreating all contents from
       * stored system id.  All SidePanels are refreshed. */
-    void                RefreshInPreRender();
+    void RefreshInPreRender(ScriptingContext& context);
 
-    void                RefreshImpl();                  ///< fully refreshes contents.  to be used when objects are created, destroyed or added to system
+    void RefreshImpl(ScriptingContext& context); ///< fully refreshes contents.  to be used when objects are created, destroyed or added to system
 
     /**  Insert all known systems into the SystemName drop down list.*/
-    void                RefreshSystemNames();
-    /**  Refresh the system name list when it closes, in case the known systems changed while it
-         was open. */
-    void                SystemNameDropListOpenedSlot(bool is_open);
+    void RefreshSystemNames();
+    /**  Refresh the system name list when it closes, in case the known systems changed while it was open. */
+    void SystemNameDropListOpenedSlot(bool is_open);
     /**  Handle the user selecting a system in the droplist while the list is closed, using keys.
          It may emit SystemSelectedSignal. */
-    void                SystemSelectionChangedSlot(GG::DropDownList::iterator it);
+    void SystemSelectionChangedSlot(GG::DropDownList::iterator it);
 
-    void                PrevButtonClicked();            ///< responds to user clicking next system button
-    void                NextButtonClicked();            ///< responts to user clicking previous system button
+    void PrevButtonClicked();            ///< responds to user clicking next system button
+    void NextButtonClicked();            ///< responts to user clicking previous system button
     /** Respond to the user clicking a planet by selecting it if selection is enabled.*/
-    void                PlanetClickedSlot(int planet_id);
+    void PlanetClickedSlot(int planet_id, const ObjectMap& objects);
 
-    /** Responds to insertion fleets into system during a turn.  may update
-        colonize buttons. */
-    static void FleetsInserted(const std::vector<std::shared_ptr<Fleet>>& fleets);
+    /** Responds to insertion fleets into system during a turn.  may update colonize buttons. */
+    static void FleetsInserted(std::vector<int> fleets, const ObjectMap& objects);
 
-    /** Responds to removal fleets from system during a turn.  may update
-        colonize buttons. */
-    static void FleetsRemoved(const std::vector<std::shared_ptr<Fleet>>& fleets);
+    /** Responds to removal fleets from system during a turn.  may update colonize buttons. */
+    static void FleetsRemoved(std::vector<int> fleets);
 
     class SystemNameDropDownList;
     std::shared_ptr<SystemNameDropDownList>     m_system_name;
@@ -142,20 +139,22 @@ private:
     std::shared_ptr<PlanetPanelContainer>       m_planet_panel_container;
     std::shared_ptr<MultiIconValueIndicator>    m_system_resource_summary;
 
-    bool                        m_selection_enabled = false;
+    std::vector<boost::signals2::scoped_connection> m_connections;
 
-    static bool                 s_needs_update;
-    static bool                 s_needs_refresh;
+    bool        m_selection_enabled = false;
 
-    static int                  s_system_id;
+    static bool s_needs_update;
+    static bool s_needs_refresh;
+
+    static int  s_system_id;
 
     /** The id of the currently-selected planet, or INVALID_OBJECT_ID if no planet is selected. */
-    static int                  s_planet_id;
+    static int  s_planet_id;
 
     static std::set<std::weak_ptr<SidePanel>, std::owner_less<std::weak_ptr<SidePanel>>> s_side_panels;
 
-    static std::set<boost::signals2::connection>      s_system_connections;
-    static std::map<int, boost::signals2::connection> s_fleet_state_change_signals;
+    static std::set<boost::signals2::scoped_connection>      s_system_connections;
+    static std::map<int, boost::signals2::scoped_connection> s_fleet_state_change_signals;
 };
 
 #endif

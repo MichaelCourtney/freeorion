@@ -4,7 +4,7 @@
 #include "EffectParserImpl.h"
 #include "EnumValueRefRules.h"
 
-namespace parse { namespace detail {
+namespace parse::detail {
     struct effect_parser_rules_2 : public effect_parser_grammar {
         effect_parser_rules_2(const parse::lexer& tok,
                               Labeller& label,
@@ -48,6 +48,7 @@ namespace parse { namespace detail {
         set_stockpile_or_vis_rule                   set_empire_stockpile;
         effect_parser_rule                          set_empire_capital;
         effect_parser_rule                          set_planet_type;
+        effect_parser_rule                          set_original_type;
         effect_parser_rule                          set_planet_size;
         effect_parser_rule                          set_species;
         string_string_int_rule                      set_species_opinion;
@@ -61,9 +62,6 @@ namespace parse { namespace detail {
         parse::set_ship_part_meter_enum_grammar     set_ship_part_meter_type_enum;
         parse::resource_type_grammar                resource_type_enum;
     };
-
-    }
 }
-
 
 #endif

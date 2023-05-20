@@ -112,23 +112,20 @@ namespace {
     std::set<std::string> EmpireSitRepTemplateStrings(int empire_id) {
         std::set<std::string> template_set;
 
-        Empire *empire = GGHumanClientApp::GetApp()->GetEmpire(empire_id);
+        const Empire* empire = GGHumanClientApp::GetApp()->GetEmpire(empire_id);
         if (!empire)
             return template_set;
 
-        for (Empire::SitRepItr sitrep_it = empire->SitRepBegin();
-             sitrep_it != empire->SitRepEnd(); ++sitrep_it)
-        {
+        for (const auto& sitrep : empire->SitReps()) {
             std::string label;
-            if(sitrep_it->GetLabelString().empty()) {
-                label = sitrep_it->GetTemplateString();
+            if (sitrep.GetLabelString().empty()) {
+                label = sitrep.GetTemplateString();
                 label_display_map[label] = UserString(label + "_LABEL");
             } else {
-                label = sitrep_it->GetLabelString();
-                label_display_map[label] = sitrep_it->GetStringtableLookupFlag()? UserString(label) : label;
+                label = sitrep.GetLabelString();
+                label_display_map[label] = sitrep.GetStringtableLookupFlag()? UserString(label) : label;
             }
-            template_set.insert(label);
-            
+            template_set.insert(std::move(label));
         }
 
         return template_set;
@@ -147,7 +144,7 @@ namespace {
 
         // first add only use those ordered templates actually in the current set of sitrep templates
         for (std::string& templ : OrderedSitrepTemplateStrings()) {
-            if (template_set.count(templ) &&
+            if (template_set.contains(templ) &&
                 !std::count(retval.begin(), retval.end(), templ))
             { retval.push_back(std::move(templ)); }
         }
@@ -187,31 +184,20 @@ namespace {
         GetOptionsDB().Commit();
     }
 
-    class ColorEmpire : public LinkDecorator {
-    public:
-        std::string Decorate(const std::string& target, const std::string& content) const override {
-            GG::Clr color = ClientUI::DefaultLinkColor();
-            int id = CastStringToInt(target);
-            Empire* empire = GetEmpire(id);
-            if (empire)
-                color = empire->Color();
-            return GG::RgbaTag(color) + content + "</rgba>";
-        }
-    };
-
     //////////////////////////////////
     // SitRepLinkText
     //////////////////////////////////
-    class SitRepLinkText : public LinkText {
+    class SitRepLinkText final : public LinkText {
     public:
-        SitRepLinkText(GG::X x, GG::Y y, GG::X w, const std::string& str, const std::shared_ptr<GG::Font>& font,
+        SitRepLinkText(GG::X x, GG::Y y, GG::X w, std::string str, std::shared_ptr<GG::Font> font,
                        GG::Flags<GG::TextFormat> format = GG::FORMAT_NONE, GG::Clr color = GG::CLR_BLACK) :
-            LinkText(x, y, w, str, font, format, color) {}
+            LinkText(x, y, w, std::move(str), std::move(font), format, color)
+        {}
 
-        mutable boost::signals2::signal<void(const GG::Pt&, GG::Flags<GG::ModKey>)> RightClickedSignal;
+        mutable boost::signals2::signal<void(GG::Pt, GG::Flags<GG::ModKey>)> RightClickedSignal;
 
     protected:
-        void RClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override {
+        void RClick(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) override {
             if (GetLinkUnderPt(pt) != -1) {
                 LinkText::RClick(pt, mod_keys);
             } else {
@@ -235,12 +221,11 @@ namespace {
 
             SetChildClippingMode(ChildClippingMode::ClipToClient);
 
-            int icon_dim = GetIconSize();
+            const int icon_dim = GetIconSize();
             std::string icon_texture = (m_sitrep_entry.GetIcon().empty() ?
                 "/icons/sitrep/generic.png" : m_sitrep_entry.GetIcon());
-            std::shared_ptr<GG::Texture> icon = ClientUI::GetTexture(
-                ClientUI::ArtDir() / icon_texture, true);
-            m_icon = GG::Wnd::Create<GG::StaticGraphic>(icon, GG::GRAPHIC_FITGRAPHIC | GG::GRAPHIC_PROPSCALE);
+            std::shared_ptr<GG::Texture> icon = ClientUI::GetTexture(ClientUI::ArtDir() / icon_texture, true);
+            m_icon = GG::Wnd::Create<GG::StaticGraphic>(std::move(icon), GG::GRAPHIC_FITGRAPHIC | GG::GRAPHIC_PROPSCALE);
             AttachChild(m_icon);
             m_icon->Resize(GG::Pt(GG::X(icon_dim), GG::Y(icon_dim)));
 
@@ -248,12 +233,14 @@ namespace {
             GG::X icon_left(spacer.x);
             GG::X text_left(icon_left + GG::X(icon_dim) + sitrep_spacing);
             GG::X text_width(ClientWidth() - text_left - spacer.x);
+            const ScriptingContext context;
+
             m_link_text = GG::Wnd::Create<SitRepLinkText>(
-                GG::X0, GG::Y0, text_width, m_sitrep_entry.GetText() + " ", ClientUI::GetFont(),
+                GG::X0, GG::Y0, text_width, m_sitrep_entry.GetText(context) + " ", ClientUI::GetFont(),
                 GG::FORMAT_LEFT | GG::FORMAT_VCENTER | GG::FORMAT_WORDBREAK, ClientUI::TextColor());
-            m_link_text->SetDecorator(VarText::EMPIRE_ID_TAG, new ColorEmpire());
-            m_link_text->SetDecorator(TextLinker::BROWSE_PATH_TAG, new PathTypeDecorator());
-            m_link_text->SetDecorator(VarText::FOCS_VALUE_TAG, new ValueRefDecorator());
+            m_link_text->SetDecorator(VarText::EMPIRE_ID_TAG, TextLinker::DecoratorType::ColorByEmpire);
+            m_link_text->SetDecorator(TextLinker::BROWSE_PATH_TAG, TextLinker::DecoratorType::PathType);
+            m_link_text->SetDecorator(VarText::FOCS_VALUE_TAG, TextLinker::DecoratorType::ValueRef);
             AttachChild(m_link_text);
 
             namespace ph = boost::placeholders;
@@ -274,21 +261,21 @@ namespace {
                               background_clr, ClientUI::WndOuterBorderColor(), 1u);
         }
 
-        void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override {
+        void SizeMove(GG::Pt ul, GG::Pt lr) override {
             if (ul != ClientUpperLeft() || (lr.x - ul.x) != Width())
                 DoLayout(ul, lr.x - ul.x);
         }
 
-        const SitRepEntry& GetSitRepEntry() const { return m_sitrep_entry; }
+        const SitRepEntry& GetSitRepEntry() const noexcept { return m_sitrep_entry; }
 
-        mutable boost::signals2::signal<void(const GG::Pt&, GG::Flags<GG::ModKey>)> RightClickedSignal;
+        mutable boost::signals2::signal<void(GG::Pt, GG::Flags<GG::ModKey>)> RightClickedSignal;
 
     protected:
-        void RClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod) override
+        void RClick(GG::Pt pt, GG::Flags<GG::ModKey> mod) override
         { RightClickedSignal(pt, mod); }
 
     private:
-        void DoLayout(const GG::Pt& ul, const GG::X& width) {
+        void DoLayout(GG::Pt ul, GG::X width) {
             // Resize the text
             GG::Pt spacer = GG::Pt(GG::X(sitrep_edge_to_content_spacing), GG::Y(sitrep_edge_to_content_spacing));
             GG::X icon_left(ul.x + spacer.x);
@@ -349,28 +336,30 @@ namespace {
                 Init();
 
             // Resize to fit panel after text reflows
-            GG::Pt border(GG::X(2 * GetLayout()->BorderMargin()), GG::Y(2 * GetLayout()->BorderMargin()));
+            const int margin = 2 * GetLayout()->BorderMargin();
+            const GG::Pt border{GG::X{margin}, GG::Y{margin}};
             m_panel->Resize(Size() - border);
             GG::ListBox::Row::Resize(m_panel->Size() + border);
         }
 
-        void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override {
+        void SizeMove(GG::Pt ul, GG::Pt lr) override {
             if (!m_panel || (Size() != (lr - ul)))
                 RequirePreRender();
             GG::ListBox::Row::SizeMove(ul, lr);
         }
 
         void Init() {
-            m_panel = GG::Wnd::Create<SitRepDataPanel>(GG::X(GetLayout()->BorderMargin()), GG::Y(GetLayout()->BorderMargin()),
-                                                       ClientWidth() - GG::X(2 * GetLayout()->BorderMargin()),
-                                                       ClientHeight() - GG::Y(2 * GetLayout()->BorderMargin()), m_sitrep);
+            const int margin = GetLayout()->BorderMargin();
+            const auto margin2 = 2 * margin;
+            m_panel = GG::Wnd::Create<SitRepDataPanel>(GG::X(margin), GG::Y(margin),
+                                                       ClientWidth() - GG::X(margin2),
+                                                       ClientHeight() - GG::Y(margin2),
+                                                       m_sitrep);
             push_back(m_panel);
-            namespace ph = boost::placeholders;
-            m_panel->RightClickedSignal.connect(
-                boost::bind(&SitRepRow::RClick, this, ph::_1, ph::_2));
+            m_panel->RightClickedSignal.connect([this](auto pt, auto flags) { return RClick(pt, flags); });
         }
 
-        const SitRepEntry& GetSitRepEntry() const { return m_panel->GetSitRepEntry(); }
+        auto& GetSitRepEntry() const noexcept { return m_sitrep; }
 
     private:
         std::shared_ptr<SitRepDataPanel>    m_panel;
@@ -459,7 +448,7 @@ void SitRepPanel::KeyPress(GG::Key key, std::uint32_t key_code_point,
     }
 }
 
-void SitRepPanel::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
+void SitRepPanel::SizeMove(GG::Pt ul, GG::Pt lr) {
     GG::Pt old_size = GG::Wnd::Size();
     std::size_t first_visible_queue_row = std::distance(m_sitreps_lb->begin(),
                                                         m_sitreps_lb->FirstRowShown());
@@ -476,111 +465,92 @@ void SitRepPanel::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
 
 namespace {
     /* Sort sitreps for each turn.
-     Note: Validating requires substituting all of the variables which is time
-     consuming for sitreps that the player will never view. */
-    std::map<int, std::list<SitRepEntry>> GetUnvalidatedSitRepsSortedByTurn(int empire_id) {
-        std::set<const Empire*> sr_empires;
+     * Note: Validating requires substituting all of the variables which is time
+     * consuming for sitreps that the player will never view. */
+    auto GetUnvalidatedSitRepsSortedByTurn(int empire_id) {
+        std::map<int, std::vector<const SitRepEntry*>> turns;
+
+        auto empire_sitrep_inserter = [&turns](const Empire* e) {
+            const auto& sitreps = e->SitReps();
+            std::for_each(sitreps.begin(), sitreps.end(),
+                          [&turns](const auto& s) { turns[s.GetTurn()].push_back(&s); });
+        };
+        auto empire_pair_sitrep_inserter = [empire_sitrep_inserter](const auto& ep)
+        { empire_sitrep_inserter(ep.second.get()); };
+
 
         if (const Empire* empire = GetEmpire(empire_id)) {
-            sr_empires.insert(empire);
+            empire_sitrep_inserter(empire);
 
         } else {
             // Observer / Moderator mode, sort sitreps from all empires
-            for (const auto& entry : Empires())
-                sr_empires.insert(entry.second.get());
+            const auto& empires = Empires();
+            std::for_each(empires.begin(), empires.end(), empire_pair_sitrep_inserter);
         }
 
-        std::map<int, std::list<SitRepEntry>> turns;
-        for (auto sitrep_empire : sr_empires) {
-            for (auto sitrep_it = sitrep_empire->SitRepBegin();
-                 sitrep_it != sitrep_empire->SitRepEnd(); ++sitrep_it)
-            {
-                turns[sitrep_it->GetTurn()].emplace_back(*sitrep_it);
-            }
-        }
         return turns;
     }
-}
 
-/** Return true if the sitrep is not hidden, validates and is not snoozed. */
-bool SitRepPanel::IsSitRepInvalid(SitRepEntry& sitrep) const {
-    if (m_hidden_sitrep_templates.count(sitrep.GetLabelString().empty() ?
-        sitrep.GetTemplateString() : sitrep.GetLabelString()))
-    { return true; }
+    /** Return true iff the \a sitrep is not hidden, validates and is not snoozed. */
+    bool IsSitRepInvalid(const SitRepEntry& sitrep, const std::set<std::string>& hidden_templates) {
+        auto& label = sitrep.GetLabelString().empty() ? sitrep.GetTemplateString() : sitrep.GetLabelString();
+        if (hidden_templates.contains(label))
+            return true;
 
-    // Validation is time consuming because all variables are substituted
-    bool validated = sitrep.Validate();
+        const ScriptingContext context;
 
-    // having ui.map.sitrep.invalid.shown off / disabled will hide sitreps that do not
-    // validate
-    bool verbose_sitrep = GetOptionsDB().Get<bool>("ui.map.sitrep.invalid.shown");
-    if (!verbose_sitrep && !validated)
-        return true;
+        // Validation is time consuming because all variables are substituted.
+        // Having ui.map.sitrep.invalid.shown off / disabled will hide sitreps that do not
+        // validate. Having it on will skip the validation check.
+        if (!GetOptionsDB().Get<bool>("ui.map.sitrep.invalid.shown") && !sitrep.Validate(context))
+            return true;
 
-    // Check for snoozing.
-    if (permanently_snoozed_sitreps.count(sitrep.GetText()))
-        return true;
+        // Check for snoozing.
+        if (permanently_snoozed_sitreps.contains(sitrep.GetText(context)))
+            return true;
 
-    auto sitrep_set_it = snoozed_sitreps.find(sitrep.GetTurn());
-    if (sitrep_set_it != snoozed_sitreps.end()
-        && sitrep_set_it->second.count(sitrep.GetText()))
-    { return true; }
+        auto sitrep_set_it = snoozed_sitreps.find(sitrep.GetTurn());
+        if (sitrep_set_it != snoozed_sitreps.end()
+            && sitrep_set_it->second.contains(sitrep.GetText(context)))
+        { return true; }
 
-    return false;
-}
+        return false;
+    }
 
-int SitRepPanel::GetNextNonEmptySitrepsTurn(std::map<int, std::list<SitRepEntry>>& turns,
-                                            int turn, bool forward) const
-{
-    // All sitreps filtered out ?
-    if (turns.empty())
-        return INVALID_GAME_TURN;
-
-    using boost::placeholders::_1;
-
-    // Only one turn with visible sitreps
-    if (turns.size() == 1) {
-        turns.begin()->second.remove_if(boost::bind(&SitRepPanel::IsSitRepInvalid, this, _1));
-        // With no valid sitreps
-        if (turns.begin()->second.empty()) {
-            turns.clear();
+    /** Search forward (if \a forward is true) or backward from \a turn for the next
+    * turn with one or more valid sitreps (not including \a turn itself). */
+    int GetNextNonEmptySitrepsTurn(const std::map<int, std::vector<const SitRepEntry*>>& turns,
+                                   int turn, bool forward, const std::set<std::string>& hidden_templates)
+    {
+        if (turns.empty())
             return INVALID_GAME_TURN;
-        }
-        return turns.begin()->first;
-    }
 
-    // Before first turn with visible sitreps
-    if (turn < turns.begin()->first && !forward)
-        return INVALID_GAME_TURN;
+        auto contains_valid_sitrep = [&hidden_templates](const auto& p) {
+            return std::any_of(p.cbegin(), p.cend(),
+                               [&hidden_templates](const auto* s) {
+                                   return s && !IsSitRepInvalid(*s, hidden_templates);
+                               });
+        };
 
-    // After last turn with visible sitreps
-    if (turn > (--turns.end())->first && forward)
-        return INVALID_GAME_TURN;
+        auto turn_ok = [=](int t)
+        { return forward ? (t > turn) : (t < turn); };
 
-    // Find a starting point
-    auto it = (forward ? turns.upper_bound(turn) : turns.lower_bound(turn));
-    if (!forward && it != turns.begin())
-        --it;
-    int step = forward ? 1 : -1;
+        auto ok_and_contains_valid = [=](const auto& p)
+        { return turn_ok(p.first) && contains_valid_sitrep(p.second); };
 
-    while (it != turns.end()) {
-        it->second.remove_if(boost::bind(&SitRepPanel::IsSitRepInvalid, this, _1));
+        if (forward) {
+            auto found_it = std::find_if(turns.lower_bound(turn), turns.end(), ok_and_contains_valid);
+            if (found_it != turns.end())
+                return found_it->first;
 
-        // If any valid sitreps, then exit
-        if (!it->second.empty())
-            return it->first;
-
-        // Get the next candidate and remove the empty cell.
-        if (!forward && it == turns.begin()) {
-            turns.erase(it);
-            break;
+        } else {
+            auto found_it = std::find_if(turns.crbegin(), turns.crend(), ok_and_contains_valid);
+            if (found_it != turns.rend())
+                return found_it->first;
         }
 
-        auto erase_it = it;
-        std::advance(it, step);
-        turns.erase(erase_it);
+        return INVALID_GAME_TURN;
     }
-    return INVALID_GAME_TURN;
 }
 
 void SitRepPanel::CloseClicked()
@@ -588,17 +558,19 @@ void SitRepPanel::CloseClicked()
 
 void SitRepPanel::PrevClicked() {
     auto turns = GetUnvalidatedSitRepsSortedByTurn(GGHumanClientApp::GetApp()->EmpireID());
-    ShowSitRepsForTurn(GetNextNonEmptySitrepsTurn(turns, m_showing_turn, false));
+    ShowSitRepsForTurn(GetNextNonEmptySitrepsTurn(turns, m_showing_turn, false, m_hidden_sitrep_templates));
 }
 
 void SitRepPanel::NextClicked() {
     auto turns = GetUnvalidatedSitRepsSortedByTurn(GGHumanClientApp::GetApp()->EmpireID());
-    ShowSitRepsForTurn(GetNextNonEmptySitrepsTurn(turns, m_showing_turn, true));
+    ShowSitRepsForTurn(GetNextNonEmptySitrepsTurn(turns, m_showing_turn, true, m_hidden_sitrep_templates));
 }
 
 void SitRepPanel::LastClicked() {
     auto turns = GetUnvalidatedSitRepsSortedByTurn(GGHumanClientApp::GetApp()->EmpireID());
-    ShowSitRepsForTurn(GetNextNonEmptySitrepsTurn(turns, CurrentTurn(), false));    // search backwards from current turn for a non-empty sitrep turn
+    // search backwards from current turn for a non-empty sitrep turn
+    ShowSitRepsForTurn(GetNextNonEmptySitrepsTurn(turns, GGHumanClientApp::GetApp()->CurrentTurn() + 1,
+                                                  false, m_hidden_sitrep_templates));
 }
 
 void SitRepPanel::FilterClicked() {
@@ -618,7 +590,7 @@ void SitRepPanel::FilterClicked() {
     for (const std::string& templ : all_templates) {
         menu_index_templates[index] = templ;
         bool check = true;
-        if (m_hidden_sitrep_templates.count(templ)) {
+        if (m_hidden_sitrep_templates.contains(templ)) {
             check = false;
             all_checked = false;
         }
@@ -665,7 +637,7 @@ void SitRepPanel::FilterClicked() {
     Update();
 }
 
-void SitRepPanel::IgnoreSitRep(GG::ListBox::iterator it, const GG::Pt& pt, const GG::Flags<GG::ModKey>& mod) {
+void SitRepPanel::IgnoreSitRep(GG::ListBox::iterator it, GG::Pt pt, GG::Flags<GG::ModKey> mod) {
     SitRepRow* sitrep_row = dynamic_cast<SitRepRow*>(it->get());
     if (!sitrep_row)
         return;
@@ -673,12 +645,14 @@ void SitRepPanel::IgnoreSitRep(GG::ListBox::iterator it, const GG::Pt& pt, const
     const SitRepEntry& sitrep = sitrep_row->GetSitRepEntry();
     if (sitrep.GetTurn() <= 0)
         return;
-    snoozed_sitreps[sitrep.GetTurn()].insert(sitrep.GetText());
+
+    const ScriptingContext context;
+    snoozed_sitreps[sitrep.GetTurn()].insert(sitrep.GetText(context));
 
     Update();
 }
 
-void SitRepPanel::DismissalMenu(GG::ListBox::iterator it, const GG::Pt& pt, const GG::Flags<GG::ModKey>& mod) {
+void SitRepPanel::DismissalMenu(GG::ListBox::iterator it, GG::Pt pt, GG::Flags<GG::ModKey> mod) {
     GG::MenuItem menu_contents, submenu_ignore, submenu_block, separator_item;
     std::string sitrep_text, sitrep_template;
     std::string entry_margin("  ");
@@ -688,9 +662,11 @@ void SitRepPanel::DismissalMenu(GG::ListBox::iterator it, const GG::Pt& pt, cons
     if (it != m_sitreps_lb->end()) 
         sitrep_row = dynamic_cast<SitRepRow*>(it->get());
     submenu_ignore.label = entry_margin + UserString("SITREP_IGNORE_MENU");
+
     if (sitrep_row) {
+        const ScriptingContext context;
         const SitRepEntry& sitrep_entry = sitrep_row->GetSitRepEntry();
-        sitrep_text = sitrep_entry.GetText();
+        sitrep_text = sitrep_entry.GetText(context);
         start_turn = sitrep_entry.GetTurn();
         if (start_turn > 0) {
             auto snooze5_action = [&sitrep_text, start_turn]() { SnoozeSitRepForNTurns(sitrep_text, start_turn, 5); };
@@ -786,46 +762,65 @@ void SitRepPanel::Update() {
     // if this client is an observer or moderator.
     // todo: double check that no-empire players are actually moderator or
     //       observers, instead of just passing the client empire id.
-    auto turns = GetUnvalidatedSitRepsSortedByTurn(GGHumanClientApp::GetApp()->EmpireID());
+    auto sitreps_by_turn = GetUnvalidatedSitRepsSortedByTurn(GGHumanClientApp::GetApp()->EmpireID());
 
-    m_showing_turn = GetNextNonEmptySitrepsTurn(turns, m_showing_turn - 1, true);
-    auto& current_turn_sitreps = turns[m_showing_turn];
-
+    m_showing_turn = GetNextNonEmptySitrepsTurn(sitreps_by_turn, m_showing_turn - 1, true, m_hidden_sitrep_templates);
     if (m_showing_turn < 1)
         this->SetName(UserString("SITREP_PANEL_TITLE"));
     else
         this->SetName(boost::io::str(FlexibleFormat(UserString("SITREP_PANEL_TITLE_TURN")) % m_showing_turn));
 
+
+    auto& all_current_turn_sitreps = sitreps_by_turn[m_showing_turn];
+
+
+    // filter for valid / visible sitreps
+    std::vector<const SitRepEntry*> current_turn_sitreps;
+    current_turn_sitreps.reserve(all_current_turn_sitreps.size());
+    std::copy_if(std::make_move_iterator(all_current_turn_sitreps.begin()),
+                 std::make_move_iterator(all_current_turn_sitreps.end()),
+                 std::back_inserter(current_turn_sitreps),
+                 [this](const auto* s) { return s && !IsSitRepInvalid(*s, m_hidden_sitrep_templates); });
+
     // order sitreps for display
-    std::vector<SitRepEntry> ordered_sitreps;
-    ordered_sitreps.reserve(current_turn_sitreps.size());
-    for (const auto& templ : OrderedSitrepTemplateStrings()) {
-        for (auto sitrep_it = current_turn_sitreps.begin();
-             sitrep_it != current_turn_sitreps.end(); ++sitrep_it)
-        {
-            if (templ == (sitrep_it->GetLabelString().empty() ?
-                sitrep_it->GetTemplateString() : sitrep_it->GetLabelString()))
-            {
-                //DebugLogger() << "saving into ordered_sitreps -  sitrep of template " << templ << " with full string "<< sitrep_it->GetText();
-                ordered_sitreps.emplace_back(*sitrep_it);
-                //DebugLogger()<< "deleting above sitrep from current_turn_sitreps";
-                sitrep_it = --current_turn_sitreps.erase(sitrep_it);
-            }
+    const auto ordered_template_strings = OrderedSitrepTemplateStrings();
+    std::vector<std::vector<const SitRepEntry*>> sorted_sitreps;
+    sorted_sitreps.resize(ordered_template_strings.size());
+    std::vector<const SitRepEntry*> remaining_unordered_sitreps;
+    remaining_unordered_sitreps.reserve(current_turn_sitreps.size());
+
+    for (auto* sitrep : current_turn_sitreps) {
+        if (!sitrep)
+            continue;
+        const auto& s{*sitrep};
+        std::string_view label_string = s.GetLabelString().empty() ? s.GetTemplateString() : s.GetLabelString();
+        auto it = std::find_if(ordered_template_strings.begin(), ordered_template_strings.end(),
+                               [label_string](const auto& ts) { return label_string == ts; });
+        if (it == ordered_template_strings.end()) {
+            remaining_unordered_sitreps.push_back(sitrep);
+        } else {
+            auto idx = std::distance(ordered_template_strings.begin(), it);
+            sorted_sitreps[idx].push_back(sitrep);
         }
     }
 
+    // flatten vector of vectors to single vector
+    std::vector<const SitRepEntry*> ordered_sitreps;
+    ordered_sitreps.reserve(current_turn_sitreps.size());
+    std::for_each(sorted_sitreps.begin(), sorted_sitreps.end(),
+                  [&ordered_sitreps](auto& sitrep_vec) {
+                      ordered_sitreps.insert(ordered_sitreps.end(), sitrep_vec.begin(), sitrep_vec.end());
+                  });
+
     // create UI rows for all sitrps
-    GG::X width = m_sitreps_lb->ClientWidth();
+    const GG::X width = m_sitreps_lb->ClientWidth();
+    const GG::Y height{ClientUI::Pts()*2};
     // first the ordered sitreps
-    for (SitRepEntry& sitrep : ordered_sitreps) {
-        m_sitreps_lb->Insert(GG::Wnd::Create<SitRepRow>(width, GG::Y(ClientUI::Pts()*2),
-                                                        std::move(sitrep)));
-    }
+    for (auto* sitrep : ordered_sitreps)
+        m_sitreps_lb->Insert(GG::Wnd::Create<SitRepRow>(width, height, *sitrep));
     // then the remaining unordered sitreps
-    for (SitRepEntry& sitrep : current_turn_sitreps) {
-        m_sitreps_lb->Insert(GG::Wnd::Create<SitRepRow>(width, GG::Y(ClientUI::Pts()*2),
-                                                        std::move(sitrep)));
-    }
+    for (auto* sitrep : remaining_unordered_sitreps)
+        m_sitreps_lb->Insert(GG::Wnd::Create<SitRepRow>(width, height, *sitrep));
 
 
     if (m_sitreps_lb->NumRows() > first_visible_row) {
@@ -835,13 +830,13 @@ void SitRepPanel::Update() {
     }
 
     // if at first turn with visible sitreps, disable back button
-    int prev_turn_with_sitrep = GetNextNonEmptySitrepsTurn(turns, m_showing_turn, false);
+    int prev_turn_with_sitrep = GetNextNonEmptySitrepsTurn(sitreps_by_turn, m_showing_turn, false, m_hidden_sitrep_templates);
 
     bool disable_prev_turn = prev_turn_with_sitrep == INVALID_GAME_TURN;
     m_prev_turn_button->Disable(disable_prev_turn);
 
     // if at last turn with visible sitreps, disable forward button
-    int next_turn_with_sitrep = GetNextNonEmptySitrepsTurn(turns, m_showing_turn, true);
+    int next_turn_with_sitrep = GetNextNonEmptySitrepsTurn(sitreps_by_turn, m_showing_turn, true, m_hidden_sitrep_templates);
 
     bool disable_next_turn = next_turn_with_sitrep == INVALID_GAME_TURN;
     m_next_turn_button->Disable(disable_next_turn);
@@ -865,8 +860,9 @@ void SitRepPanel::SetHiddenSitRepTemplates(const std::set<std::string>& template
 
 int SitRepPanel::NumVisibleSitrepsThisTurn() const {
     auto turns = GetUnvalidatedSitRepsSortedByTurn(GGHumanClientApp::GetApp()->EmpireID());
-    auto& turn = turns[CurrentTurn()];
-    turn.remove_if(boost::bind(&SitRepPanel::IsSitRepInvalid, this, boost::placeholders::_1));
-    return turn.size();
+    auto& this_turn_sitreps = turns[GGHumanClientApp::GetApp()->CurrentTurn()];
+    auto is_valid = [this](const auto* s) { return s && !IsSitRepInvalid(*s, m_hidden_sitrep_templates); };
+
+    return std::count_if(this_turn_sitreps.begin(), this_turn_sitreps.end(), is_valid);
 }
 

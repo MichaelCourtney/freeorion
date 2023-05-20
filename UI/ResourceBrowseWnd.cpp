@@ -19,12 +19,12 @@ ResourceBrowseWnd::ResourceBrowseWnd(const std::string& title_text,
                                      float used,
                                      float output,
                                      float target_output,
-                                     bool show_stockpile /*=false*/,
-                                     float stockpile_use /*=0.0f*/,
-                                     float stockpile /*=0.0f*/,
-                                     float stockpile_change /*=0.0f*/,
-                                     bool show_stockpile_limit /* = false*/,
-                                     float stockpile_use_limit /*= 0.0f*/) :
+                                     bool show_stockpile,
+                                     float stockpile_use,
+                                     float stockpile,
+                                     float stockpile_change,
+                                     bool show_stockpile_limit ,
+                                     float stockpile_use_limit) :
     GG::BrowseInfoWnd(GG::X0, GG::Y0, BrowseTextWidth(), GG::Y1),
     m_title_text(GG::Wnd::Create<CUILabel>(title_text, GG::FORMAT_CENTER)),
     m_used_points_label(GG::Wnd::Create<CUILabel>(UserString("RESOURCE_TT_USED"), GG::FORMAT_RIGHT)),
@@ -74,10 +74,10 @@ void ResourceBrowseWnd::CompleteConstruction() {
 
     // info controls layout
     const int STAT_TEXT_PTS = ClientUI::Pts();
-    constexpr int CENTERLINE_GAP = 4;
+    static constexpr int CENTERLINE_GAP = 4;
     const GG::X LABEL_TEXT_WIDTH = (Width() - 4 - CENTERLINE_GAP) * 2 / 3;
     const GG::X VALUE_TEXT_WIDTH = Width() - 4 - CENTERLINE_GAP - LABEL_TEXT_WIDTH;
-    constexpr GG::X LEFT_TEXT_X{GG::X0};
+    static constexpr GG::X LEFT_TEXT_X{GG::X0};
     const GG::X RIGHT_TEXT_X = LEFT_TEXT_X + LABEL_TEXT_WIDTH + 8 + CENTERLINE_GAP;
     const GG::X P_LABEL_X = RIGHT_TEXT_X + FontBasedUpscale(40);
 
@@ -257,9 +257,9 @@ void ResourceBrowseWnd::Render() {
 ////////////////////////////////////////////////////////////
 WastedStockpiledResourceBrowseWnd::WastedStockpiledResourceBrowseWnd(
     const std::string& title_text, const std::string& unit_label,
-    float capacity, float excess, bool show_stockpile/* = false*/,
-    float stockpile_effic/* = 0.0f*/, float to_stockpile/* = 0.0f*/,
-    float wasted/* = 0.0f*/, const std::string& bottom_message/* = ""*/) :
+    float capacity, float excess, bool show_stockpile,
+    float stockpile_effic, float to_stockpile,
+    float wasted, const std::string& bottom_message) :
     GG::BrowseInfoWnd(GG::X0, GG::Y0, BrowseTextWidth(), GG::Y1),
     m_buffer(),
     m_title_text(GG::Wnd::Create<CUILabel>(title_text, GG::FORMAT_CENTER)),
@@ -308,10 +308,10 @@ void WastedStockpiledResourceBrowseWnd::CompleteConstruction() {
 
     // info controls layout
     const int STAT_TEXT_PTS = ClientUI::Pts();
-    constexpr int CENTERLINE_GAP = 4;
+    static constexpr int CENTERLINE_GAP = 4;
     const GG::X LABEL_TEXT_WIDTH = (Width() - 4 - CENTERLINE_GAP) * 2 / 3;
     const GG::X VALUE_TEXT_WIDTH = Width() - 4 - CENTERLINE_GAP - LABEL_TEXT_WIDTH;
-    constexpr GG::X LEFT_TEXT_X{GG::X0};
+    static constexpr GG::X LEFT_TEXT_X{GG::X0};
     const GG::X RIGHT_TEXT_X = LEFT_TEXT_X + LABEL_TEXT_WIDTH + 8 + CENTERLINE_GAP;
     const GG::X P_LABEL_X = RIGHT_TEXT_X + FontBasedUpscale(40);
 

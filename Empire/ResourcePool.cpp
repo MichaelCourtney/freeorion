@@ -1,47 +1,43 @@
 #include "ResourcePool.h"
 
 #include <cassert>
-#include <boost/lexical_cast.hpp>
 #include "../universe/Enums.h"
 #include "../universe/ObjectMap.h"
 #include "../universe/Planet.h"
 #include "../util/AppInterface.h"
 #include "../util/Logger.h"
 
-MeterType ResourceToMeter(ResourceType type) {
+MeterType ResourceToMeter(ResourceType type) noexcept {
     switch (type) {
     case ResourceType::RE_INDUSTRY:  return MeterType::METER_INDUSTRY;
     case ResourceType::RE_RESEARCH:  return MeterType::METER_RESEARCH;
     case ResourceType::RE_INFLUENCE: return MeterType::METER_INFLUENCE;
     case ResourceType::RE_STOCKPILE: return MeterType::METER_STOCKPILE;
     default:
-        assert(0);
         return MeterType::INVALID_METER_TYPE;
         break;
     }
 }
 
-MeterType ResourceToTargetMeter(ResourceType type) {
+MeterType ResourceToTargetMeter(ResourceType type) noexcept {
     switch (type) {
     case ResourceType::RE_INDUSTRY:  return MeterType::METER_TARGET_INDUSTRY;
     case ResourceType::RE_RESEARCH:  return MeterType::METER_TARGET_RESEARCH;
     case ResourceType::RE_INFLUENCE: return MeterType::METER_TARGET_INFLUENCE;
     case ResourceType::RE_STOCKPILE: return MeterType::METER_MAX_STOCKPILE;
     default:
-        assert(0);
         return MeterType::INVALID_METER_TYPE;
         break;
     }
 }
 
-ResourceType MeterToResource(MeterType type) {
+ResourceType MeterToResource(MeterType type) noexcept {
     switch (type) {
     case MeterType::METER_INDUSTRY:  return ResourceType::RE_INDUSTRY;
     case MeterType::METER_RESEARCH:  return ResourceType::RE_RESEARCH;
     case MeterType::METER_INFLUENCE: return ResourceType::RE_INFLUENCE;
     case MeterType::METER_STOCKPILE: return ResourceType::RE_STOCKPILE;
     default:
-        assert(0);
         return ResourceType::INVALID_RESOURCE_TYPE;
         break;
     }
@@ -50,20 +46,6 @@ ResourceType MeterToResource(MeterType type) {
 //////////////////////////////////////////////////
 // ResourcePool
 //////////////////////////////////////////////////
-ResourcePool::ResourcePool() :
-    m_type(ResourceType::INVALID_RESOURCE_TYPE)
-{}
-
-ResourcePool::ResourcePool(ResourceType type) :
-    m_type(type)
-{}
-
-const std::vector<int>& ResourcePool::ObjectIDs() const
-{ return m_object_ids; }
-
-float ResourcePool::Stockpile() const
-{ return m_stockpile; }
-
 float ResourcePool::TotalOutput() const {
     float retval = 0.0f;
     for (const auto& entry : m_connected_object_groups_resource_output)
@@ -71,13 +53,10 @@ float ResourcePool::TotalOutput() const {
     return retval;
 }
 
-const std::map<std::set<int>, float>& ResourcePool::Output() const
-{ return m_connected_object_groups_resource_output; }
-
 float ResourcePool::GroupOutput(int object_id) const {
     // find group containing specified object
     for (const auto& [group, output] : m_connected_object_groups_resource_output) {
-        if (group.count(object_id))
+        if (group.contains(object_id))
             return output;
     }
 
@@ -96,7 +75,7 @@ float ResourcePool::TargetOutput() const {
 float ResourcePool::GroupTargetOutput(int object_id) const {
     // find group containing specified object
     for (const auto& entry : m_connected_object_groups_resource_target_output) {
-        if (entry.first.count(object_id))
+        if (entry.first.contains(object_id))
             return entry.second;
     }
 
@@ -111,9 +90,6 @@ float ResourcePool::TotalAvailable() const {
         retval += entry.second;
     return retval;
 }
-
-std::map<std::set<int>, float> ResourcePool::Available() const
-{ return m_connected_object_groups_resource_output; }
 
 float ResourcePool::GroupAvailable(int object_id) const {
     TraceLogger() << "ResourcePool::GroupAvailable(" << object_id << ")";
@@ -156,15 +132,14 @@ void ResourcePool::Update(const ObjectMap& objects) {
 
     // temporary storage: indexed by group of systems, which objects
     // are located in that system group?
-    std::map<std::set<int>, std::set<std::shared_ptr<const UniverseObject>>>
-        system_groups_to_object_groups;
+    std::map<std::set<int>, std::set<const UniverseObject*>> system_groups_to_object_groups;
 
 
     // for every object, find if a connected system group contains the object's
     // system.  If a group does, place the object into that system group's set
     // of objects.  If no group contains the object, place the object in its own
     // single-object group.
-    for (auto& obj : objects.find<const UniverseObject>(m_object_ids)) {
+    for (auto* obj : objects.findRaw<const UniverseObject>(m_object_ids)) {
         int object_id = obj->ID();
         int object_system_id = obj->SystemID();
         // can't generate resources when not in a system
@@ -196,7 +171,7 @@ void ResourcePool::Update(const ObjectMap& objects) {
         } else {
             // if resource center's system is in a system group, record which system
             // group that is for later
-            system_groups_to_object_groups[std::move(object_system_group)].insert(std::move(obj));
+            system_groups_to_object_groups[std::move(object_system_group)].insert(obj);
         }
     }
 
@@ -207,7 +182,7 @@ void ResourcePool::Update(const ObjectMap& objects) {
         std::set<int> object_group_ids;
         float total_group_output = 0.0f;
         float total_group_target_output = 0.0f;
-        for (auto& obj : object_group) {
+        for (auto* obj : object_group) {
             if (const auto* m = obj->GetMeter(meter_type))
                 total_group_output += m->Current();
             if (const auto* m = obj->GetMeter(target_meter_type))

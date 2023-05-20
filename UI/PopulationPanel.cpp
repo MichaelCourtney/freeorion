@@ -5,8 +5,8 @@
 #include "../util/i18n.h"
 #include "../util/Logger.h"
 #include "../universe/UniverseObject.h"
-#include "../universe/PopCenter.h"
 #include "../universe/Enums.h"
+#include "../universe/Planet.h"
 #include "../client/human/GGHumanClientApp.h"
 #include "ClientUI.h"
 #include "CUIControls.h"
@@ -38,9 +38,9 @@ void PopulationPanel::CompleteConstruction() {
     m_expand_button->LeftPressedSignal.connect(
         boost::bind(&PopulationPanel::ExpandCollapseButtonPressed, this));
 
-    auto pop = Objects().get<PopCenter>(m_popcenter_id);
+    auto pop = Objects().get<Planet>(m_popcenter_id);
     if (!pop) {
-        ErrorLogger() << "Attempted to construct a PopulationPanel with an object id that is not a popcenter: " << m_popcenter_id;
+        ErrorLogger() << "Attempted to construct a PopulationPanel with an object id that is not a planet: " << m_popcenter_id;
         return;
     }
 
@@ -73,11 +73,11 @@ void PopulationPanel::CompleteConstruction() {
     for (const auto& meter_stat : m_meter_stats) {
         MeterType meter_type = meter_stat.first;
 
-        meter_stat.second->RightClickedSignal.connect([this, meter_type](const GG::Pt& pt) {
+        meter_stat.second->RightClickedSignal.connect([this, meter_type](GG::Pt pt) {
             auto meter_string = to_string(meter_type);
 
             auto popup = GG::Wnd::Create<CUIPopupMenu>(pt.x, pt.y);
-            auto pc = Objects().get<PopCenter>(m_popcenter_id);
+            auto* pc = Objects().getRaw<Planet>(m_popcenter_id);
             if (meter_type == MeterType::METER_POPULATION && pc) {
                 std::string species_name = pc->SpeciesName();
                 if (!species_name.empty()) {
@@ -106,7 +106,7 @@ void PopulationPanel::CompleteConstruction() {
     m_multi_meter_status_bar =     GG::Wnd::Create<MultiMeterStatusBar>(Width() - 2*EDGE_PAD,     m_popcenter_id, meters);
 
     // determine if this panel has been created yet.
-    std::map<int, bool>::iterator it = s_expanded_map.find(m_popcenter_id);
+    auto it = s_expanded_map.find(m_popcenter_id);
     if (it == s_expanded_map.end())
         s_expanded_map[m_popcenter_id] = false; // if not, default to collapsed state
 
@@ -127,9 +127,9 @@ void PopulationPanel::Update() {
         m_multi_icon_value_indicator->ClearToolTip(meter_name);
     }
 
-    auto pop = Objects().get<PopCenter>(m_popcenter_id);
+    auto pop = Objects().get<Planet>(m_popcenter_id);
     if (!pop) {
-        ErrorLogger() << "PopulationPanel::Update couldn't get PopCenter or couldn't get UniverseObject";
+        ErrorLogger() << "PopulationPanel::Update couldn't get Planet";
         return;
     }
 

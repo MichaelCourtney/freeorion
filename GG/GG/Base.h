@@ -15,6 +15,7 @@
 #define _GG_Base_h_
 
 
+#include <functional>
 #include <memory>
 #include <GL/glew.h>
 #include <GG/Clr.h>
@@ -65,7 +66,7 @@ void ProcessThenRemoveExpiredPtrs(
             process(wnd);
 
     // Remove if the process caused the pointer to expire.
-    Container not_expired;
+    Container not_expired{};
     for (auto& weak : container) {
         if (!weak.expired()) {
             // Swap them to avoid another reference count check
@@ -126,7 +127,7 @@ void ProcessThenRemoveExpiredPtrs(
 
 /** "Regions" of a window; used e.g. to determine direction(s) of drag when a
     window that has a drag-frame is clicked. */
-GG_ENUM(WndRegion,
+GG_ENUM(WndRegion, int8_t,
     WR_NONE = -1,
     WR_TOPLEFT = 0,
     WR_TOP,
@@ -140,7 +141,7 @@ GG_ENUM(WndRegion,
 )
 
 /** The orientations for scrollbars, sliders, etc. */
-GG_ENUM(Orientation,
+GG_ENUM(Orientation, uint8_t,
     VERTICAL,  ///< Vertical orientation.
     HORIZONTAL ///< Horizontal orientation.
 )
@@ -150,7 +151,7 @@ GG_ENUM(Orientation,
 /// (Keyboard/Keypad page).
 ///
 /// https://www.usb.org/sites/default/files/documents/hut1_12v2.pdf
-GG_ENUM(Key,
+GG_ENUM(Key, uint8_t,
     GGK_NONE            = 0x00,
     GGK_a               = 0x04,
     GGK_b               = 0x05,

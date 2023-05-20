@@ -26,7 +26,7 @@ public:
 
     std::string     GetChatText() const;
 
-    void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
+    void SizeMove(GG::Pt ul, GG::Pt lr) override;
 
     void Render() override;
 
@@ -49,7 +49,7 @@ protected:
         void CompleteConstruction() override;
 
         /** Set text of control at @p column to @p str */
-        void SetText(size_t column, const std::string& str);
+        void SetText(std::size_t column, const std::string& str);
 
         void Render() override;
     };

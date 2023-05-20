@@ -101,17 +101,14 @@ namespace {
         decltype(SegregateForces(owners, objects, categories, order)) forces;
 
         for (const auto& object: Objects().find(objects)) {
-            if (!object)
-                continue;
-
-            if (owners.count(object->Owner()) == 0)
+            if (!object || !owners.contains(object->Owner()))
                 continue;
 
             auto& owner_forces = forces[object->Owner()];
             if (owner_forces.empty())
                 owner_forces.resize(categories.size());
 
-            for (size_t i = 0; i < categories.size(); ++i) {
+            for (std::size_t i = 0; i < categories.size(); ++i) {
                 const auto& category = categories[i];
                 if (category(object)) {
                     auto& owner_forces_category = owner_forces[i];
@@ -137,9 +134,10 @@ namespace {
 
     std::string EmpireIdToText(int empire_id) {
         std::string retval;
-        constexpr size_t retval_sz = 24 + 1 + VarText::EMPIRE_ID_TAG.length()*2 + 1 + 8 + 1 + 30 + 3 + 1 + 10; // semi-guesstimate
+        static constexpr std::size_t retval_sz = 24 + 1 + VarText::EMPIRE_ID_TAG.length()*2 + 1 + 8 + 1 + 30 + 3 + 1 + 10 + 20; // semi-guesstimate
         retval.reserve(retval_sz);
-        if (const auto empire = GetEmpire(empire_id))
+        const ScriptingContext context;
+        if (const auto empire = context.GetEmpire(empire_id))
             return retval.append(GG::RgbaTag(empire->Color())).append("<").append(VarText::EMPIRE_ID_TAG).append(" ")
                          .append(std::to_string(empire->EmpireID())).append(">").append(empire->Name()).append("</")
                          .append(VarText::EMPIRE_ID_TAG).append(">").append("</rgba>");
@@ -148,11 +146,8 @@ namespace {
     }
 
     /// converts to "Empire_name: n" text
-    std::string CountToText(int empire_id, int forces_count) {
-        std::stringstream ss;
-        ss << EmpireIdToText(empire_id) << ": " << forces_count;
-        return ss.str();
-    }
+    std::string CountToText(int empire_id, int forces_count)
+    { return EmpireIdToText(empire_id).append(": ").append(std::to_string(forces_count)); }
 
     class OrderByNameAndId {
     public:
@@ -172,7 +167,7 @@ namespace {
                 // I, X β I, X α II
                 return lhs_public_name < rhs_public_name;
 #else
-                return GetLocale("en_US.UTF-8").operator()(lhs_public_name, rhs_public_name);
+                return GetLocale().operator()(lhs_public_name, rhs_public_name);
 #endif
             }
 
@@ -302,7 +297,7 @@ namespace {
 
     private:
         void ToggleExpansion();
-        static size_t CountForces(std::vector<std::vector<std::shared_ptr<UniverseObject>>> forces);
+        static std::size_t CountForces(std::vector<std::vector<std::shared_ptr<UniverseObject>>> forces);
 
         CombatLogWnd::Impl& log;
         const int viewing_empire_id = ALL_EMPIRES;
@@ -357,9 +352,10 @@ namespace {
         SetCollapsed(new_collapsed);
     }
 
-    size_t EmpireForcesAccordionPanel::CountForces(
-        std::vector<std::vector<std::shared_ptr<UniverseObject>>> forces) {
-        size_t n = 0;
+    std::size_t EmpireForcesAccordionPanel::CountForces(
+        std::vector<std::vector<std::shared_ptr<UniverseObject>>> forces)
+    {
+        std::size_t n = 0;
         for (const auto& owner_forces : forces)
             n += owner_forces.size();
         return n;
@@ -454,14 +450,11 @@ namespace {
             // Check if any part of text is in the scrollers visible area
             const auto* scroll_panel = FindParentOfType<GG::ScrollPanel>(Parent().get());
             if (scroll_panel && (scroll_panel->InClient(UpperLeft())
-                             || scroll_panel->InClient(LowerRight())
-                             || scroll_panel->InClient(GG::Pt(Right(), Top()))
-                             || scroll_panel->InClient(GG::Pt(Left(), Bottom()))))
+                              || scroll_panel->InClient(LowerRight())
+                              || scroll_panel->InClient(GG::Pt(Right(), Top()))
+                              || scroll_panel->InClient(GG::Pt(Left(), Bottom()))))
             {
-                for (boost::signals2::connection& signal : m_signals)
-                    signal.disconnect();
-
-                m_signals.clear();
+                m_signals.clear(); // should disconnect scoped signals
 
                 SetText(*m_text);
                 m_text.reset();
@@ -473,14 +466,14 @@ namespace {
         void HandleScrolledAndStopped(int start_pos, int end_post, int min_pos, int max_pos)
         { HandleMaybeVisible(); }
 
-        void SizeMove(const GG::Pt& ul, const GG::Pt& lr)  override {
+        void SizeMove(GG::Pt ul, GG::Pt lr)  override {
             LinkText::SizeMove(ul, lr);
             if (! m_signals.empty())
                 HandleMaybeVisible();
         }
 
         std::unique_ptr<std::string> m_text;
-        std::vector<boost::signals2::connection> m_signals;
+        std::vector<boost::signals2::scoped_connection> m_signals;
     };
 
 }
@@ -491,10 +484,10 @@ std::shared_ptr<LinkText> CombatLogWnd::Impl::DecorateLinkText(std::string text)
 
     links->SetTextFormat(m_text_format_flags);
 
-    links->SetDecorator(VarText::SHIP_ID_TAG, new ColorByOwner());
-    links->SetDecorator(VarText::PLANET_ID_TAG, new ColorByOwner());
-    links->SetDecorator(VarText::SYSTEM_ID_TAG, new ColorByOwner());
-    links->SetDecorator(VarText::EMPIRE_ID_TAG, new ColorByOwner());
+    links->SetDecorator(VarText::SHIP_ID_TAG, TextLinker::DecoratorType::ColorByOwner);
+    links->SetDecorator(VarText::PLANET_ID_TAG, TextLinker::DecoratorType::ColorByOwner);
+    links->SetDecorator(VarText::SYSTEM_ID_TAG, TextLinker::DecoratorType::ColorByOwner);
+    links->SetDecorator(VarText::EMPIRE_ID_TAG, TextLinker::DecoratorType::ColorByOwner);
 
     links->LinkClickedSignal.connect(m_wnd.LinkClickedSignal);
     links->LinkDoubleClickedSignal.connect(m_wnd.LinkDoubleClickedSignal);
@@ -640,10 +633,10 @@ void CombatLogWnd::SetFont(std::shared_ptr<GG::Font> font)
 void CombatLogWnd::SetLog(int log_id)
 { m_impl->SetLog(log_id); }
 
-GG::Pt CombatLogWnd::ClientUpperLeft() const
+GG::Pt CombatLogWnd::ClientUpperLeft() const noexcept
 { return UpperLeft() + GG::Pt(GG::X(MARGIN), GG::Y(MARGIN)); }
 
-GG::Pt CombatLogWnd::ClientLowerRight() const
+GG::Pt CombatLogWnd::ClientLowerRight() const noexcept 
 { return LowerRight() - GG::Pt(GG::X(MARGIN), GG::Y(MARGIN)); }
 
 GG::Pt CombatLogWnd::MinUsableSize() const

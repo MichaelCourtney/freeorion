@@ -12,7 +12,7 @@ namespace ValueRef {
 //! The common base class for all ValueRef classes. This class provides
 //! some the return-type-independent interface.
 struct FO_COMMON_API ValueRefBase {
-    ValueRefBase() = default;
+    constexpr ValueRefBase() = default;
     virtual ~ValueRefBase() = default;
 
     // these getters can't be noexcept due to a derived class doing complicated stuff
@@ -24,15 +24,19 @@ struct FO_COMMON_API ValueRefBase {
     [[nodiscard]] virtual bool ConstantExpr() const            { return m_constant_expr; }
 
     [[nodiscard]] std::string         InvariancePattern() const;
-    [[nodiscard]] virtual std::string Description() const = 0;                    //! Returns a user-readable text description of this ValueRef
-    [[nodiscard]] virtual std::string EvalAsString() const = 0;                   //! Returns a textual representation of the evaluation result  with an empty/default context
-    [[nodiscard]] virtual std::string Dump(unsigned short ntabs = 0) const = 0;   //! Returns a textual representation that should be parseable to recreate this ValueRef
+    [[nodiscard]] virtual std::string Description() const = 0;              //! Returns a user-readable text description of this ValueRef
+    [[nodiscard]] virtual std::string EvalAsString() const = 0;             //! Returns a textual representation of the evaluation result  with an empty/default context
+    [[nodiscard]] virtual std::string Dump(uint8_t ntabs = 0) const = 0;    //! Returns a textual representation that should be parseable to recreate this ValueRef
 
     virtual void SetTopLevelContent(const std::string& content_name) {}
 
-    [[nodiscard]] virtual unsigned int GetCheckSum() const { return 0; }
+    [[nodiscard]] virtual uint32_t GetCheckSum() const { return 0; }
 
 protected:
+    constexpr explicit ValueRefBase(bool constant_expr) :
+        m_constant_expr(constant_expr)
+    {}
+
     bool m_root_candidate_invariant = false;
     bool m_local_candidate_invariant = false;
     bool m_target_invariant = false;
@@ -41,37 +45,59 @@ protected:
     bool m_simple_increment = false;
 };
 
-template<typename T, typename std::enable_if_t<std::is_arithmetic_v<T>>* = nullptr>
+template<typename T>
 std::string FlexibleToString(T&& t)
 {
-    if constexpr (std::is_floating_point_v<T>)
+    static_assert(!std::is_enum_v<T>);
+
+    if constexpr (std::is_floating_point_v<std::decay_t<T>>) {
         return DoubleToString(t, 3, false);
-    else
+
+    } else if constexpr (std::is_convertible_v<std::decay_t<T>, std::string>) {
+        return std::forward<T>(t);
+
+    } else if constexpr (std::is_same_v<std::decay_t<T>, std::string_view>) {
+        return std::string{t};
+
+    } else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
+        std::size_t total_size = 0;
+        for (auto& ts : t)
+            total_size += ts.size();
+        std::string retval;
+        retval.reserve(total_size);
+        for (auto& ts: t)
+            retval.append(ts);
+        return retval;
+
+    } else {
         return std::to_string(t);
+    }
 }
 
-template<typename T, typename std::enable_if_t<std::is_enum_v<T>>* = nullptr>
-std::string FlexibleToString(T&& t)
-{ return std::to_string(static_cast<std::underlying_type_t<T>>(t)); }
+[[nodiscard]] FO_COMMON_API std::string FlexibleToString(StarType t);
+[[nodiscard]] FO_COMMON_API std::string FlexibleToString(PlanetEnvironment t);
+[[nodiscard]] FO_COMMON_API std::string FlexibleToString(PlanetType t);
+[[nodiscard]] FO_COMMON_API std::string FlexibleToString(PlanetSize t);
+[[nodiscard]] FO_COMMON_API std::string FlexibleToString(Visibility t);
+[[nodiscard]] FO_COMMON_API std::string FlexibleToString(UniverseObjectType t);
 
-[[nodiscard]] inline std::string FlexibleToString(std::string&& t)
-{ return std::move(t); }
 
-template<typename T, typename std::enable_if_t<std::is_same_v<T, std::vector<std::string>>>* = nullptr>
-[[nodiscard]] std::string FlexibleToString(T&& t)
-{
-    std::string s;
-    for (auto&& piece : t) s += piece;
-    return s;
-}
-
+enum class ReferenceType : int8_t {
+    INVALID_REFERENCE_TYPE = -1,
+    NON_OBJECT_REFERENCE,               // ValueRef::Variable is not evalulated on any specific object
+    SOURCE_REFERENCE,                   // ValueRef::Variable is evaluated on the source object
+    EFFECT_TARGET_REFERENCE,            // ValueRef::Variable is evaluated on the target object of an effect while it is being executed
+    EFFECT_TARGET_VALUE_REFERENCE,      // ValueRef::Variable is evaluated on the target object value of an effect while it is being executed
+    CONDITION_LOCAL_CANDIDATE_REFERENCE,// ValueRef::Variable is evaluated on an object that is a candidate to be matched by a condition.  In a subcondition, this will reference the local candidate, and not the candidate of an enclosing condition.
+    CONDITION_ROOT_CANDIDATE_REFERENCE  // ValueRef::Variable is evaluated on an object that is a candidate to be matched by a condition.  In a subcondition, this will still reference the root candidate, and not the candidate of the local condition.
+};
 
 //! The base class for all ValueRef classes returning type T. This class
 //! provides the public interface for a ValueRef expression tree.
 template <typename T>
 struct FO_COMMON_API ValueRef : public ValueRefBase
 {
-    ValueRef() = default;
+    constexpr ValueRef() = default;
     virtual ~ValueRef() = default;
 
     [[nodiscard]] virtual bool operator==(const ValueRef<T>& rhs) const;
@@ -91,16 +117,26 @@ struct FO_COMMON_API ValueRef : public ValueRefBase
       * that exist in the tree. */
     [[nodiscard]] virtual T Eval(const ScriptingContext& context) const = 0;
 
-    /** Evaluates the expression tree with an empty context and retuns the
+    /** Evaluates the expression tree with an empty context and returns the
       * a string representation of the result value iff the result type is
-      * supported (currently std::string, int, float, double, enum).
-      * See ValueRefs.cpp for specialisation implementations. */
-    [[nodiscard]] std::string EvalAsString() const final
-    { return FlexibleToString(Eval()); }
+      * supported. Otherwise returns and empty string. */
+    [[nodiscard]] std::string EvalAsString() const final { return FlexibleToString(Eval()); }
+
+    [[nodiscard]] constexpr auto GetReferenceType() const noexcept { return m_ref_type; }
 
     /** Makes a clone of this ValueRef in a new owning pointer. Required for Boost.Python, which
       * doesn't supports move semantics for returned values. */
     [[nodiscard]] virtual std::unique_ptr<ValueRef<T>> Clone() const = 0;
+
+protected:
+    constexpr ValueRef(ReferenceType ref_type) :
+        m_ref_type(ref_type)
+    {}
+    constexpr ValueRef(bool constant_expr) :
+        ValueRefBase(constant_expr)
+    {}
+
+    const ReferenceType m_ref_type = ReferenceType::INVALID_REFERENCE_TYPE;
 };
 
 FO_ENUM(
@@ -127,15 +163,20 @@ FO_ENUM(
 )
 
 template<typename T>
-[[nodiscard]] inline std::unique_ptr<T> CloneUnique(const std::unique_ptr<T>& ptr)
+[[nodiscard]] inline std::unique_ptr<std::remove_const_t<T>> CloneUnique(const T* ptr)
 { return ptr ? ptr->Clone() : nullptr; }
 
 template<typename T>
-[[nodiscard]] inline std::unique_ptr<T> CloneUnique(const std::shared_ptr<T>& ptr)
+[[nodiscard]] inline std::unique_ptr<std::remove_const_t<T>> CloneUnique(const std::unique_ptr<T>& ptr)
 { return ptr ? ptr->Clone() : nullptr; }
 
 template<typename T>
-[[nodiscard]] inline std::vector<std::unique_ptr<T>> CloneUnique(const std::vector<std::unique_ptr<T>>& vec) {
+[[nodiscard]] inline std::unique_ptr<std::remove_const_t<T>> CloneUnique(const std::shared_ptr<T>& ptr)
+{ return ptr ? ptr->Clone() : nullptr; }
+
+template<typename T>
+[[nodiscard]] inline auto CloneUnique(const std::vector<std::unique_ptr<T>>& vec)
+{
     std::vector<std::unique_ptr<T>> retval;
     retval.reserve(vec.size());
     for (const auto& val : vec)
@@ -144,12 +185,12 @@ template<typename T>
 }
 
 template<typename T>
-[[nodiscard]] inline std::vector<std::pair<std::string, std::unique_ptr<T>>> CloneUnique(const std::vector<std::pair<std::string, std::unique_ptr<T>>>& vec) {
+[[nodiscard]] inline auto CloneUnique(const std::vector<std::pair<std::string, std::unique_ptr<T>>>& vec)
+{
     std::vector<std::pair<std::string, std::unique_ptr<T>>> retval;
     retval.reserve(vec.size());
-    for (const auto& val : vec) {
+    for (const auto& val : vec)
         retval.emplace_back(val.first, CloneUnique(val.second));
-    }
     return retval;
 }
 

@@ -15,8 +15,8 @@ Encyclopedia& GetEncyclopedia() {
     return encyclopedia;
 }
 
-unsigned int Encyclopedia::GetCheckSum() const {
-    unsigned int retval{0};
+uint32_t Encyclopedia::GetCheckSum() const {
+    uint32_t retval{0};
 
     for (const auto& n : Articles()) {
         CheckSums::CheckSumCombine(retval, n.first);
@@ -42,10 +42,9 @@ const Encyclopedia::ArticleMap& Encyclopedia::Articles() const {
         std::swap(m_articles, *parsed);
 
         TraceLogger() << "(Category) Encyclopedia Articles:";
-        for (const auto& entry : m_articles) {
-            const std::string& category = entry.first;
-            for (const EncyclopediaArticle& article : entry.second)
-            { TraceLogger() << "(" << category << ") : " << article.name; }
+        for (const auto& [category, articles] : m_articles) {
+            for (const EncyclopediaArticle& article : articles)
+                TraceLogger() << "(" << category << ") : " << article.name;
         }
     }
 
@@ -64,7 +63,7 @@ const EncyclopediaArticle& Encyclopedia::GetArticleByKey(const std::string& key)
 }
 
 const EncyclopediaArticle& Encyclopedia::GetArticleByCategoryAndKey(
-    const std::string& category, const std::string& key) const
+    std::string_view category, std::string_view key) const
 {
     const auto& articles = Articles();
     auto it = articles.find(category);

@@ -26,9 +26,9 @@ namespace {
     constexpr GG::X INDENTATION{20};
     constexpr GG::X SPIN_WIDTH{128};
     constexpr GG::Y GAL_SETUP_PANEL_HT{Value(PANEL_CONTROL_SPACING) * 10};
-    const GG::X GalSetupWndWidth()
+    GG::X GalSetupWndWidth()
     { return GG::X{445 + FontBasedUpscale(300)}; }
-    const GG::Y GalSetupWndHeight()
+    GG::Y GalSetupWndHeight()
     { return GG::Y{FontBasedUpscale(29) + (PANEL_CONTROL_SPACING * 6) + GAL_SETUP_PANEL_HT}; }
     constexpr GG::Pt PREVIEW_SZ{GG::X{400}, GG::Y{222}};
 
@@ -52,7 +52,7 @@ namespace {
             DoLayout();
         }
 
-        void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override {
+        void SizeMove(GG::Pt ul, GG::Pt lr) override {
             const GG::Pt old_size = Size();
             GG::Control::SizeMove(ul, lr);
             if (old_size != Size())
@@ -93,7 +93,7 @@ namespace {
                 push_back(m_contents);
         }
 
-        void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override {
+        void SizeMove(GG::Pt ul, GG::Pt lr) override {
             //std::cout << "RuleListRow::SizeMove(" << ul << ", " << lr << ")" << std::endl;
             const GG::Pt old_size = Size();
             GG::ListBox::Row::SizeMove(ul, lr);
@@ -119,7 +119,7 @@ namespace {
             SetVScrollWheelIncrement(ClientUI::Pts() * 10);
         }
 
-        void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override {
+        void SizeMove(GG::Pt ul, GG::Pt lr) override {
             const GG::Pt old_size = Size();
             CUIListBox::SizeMove(ul, lr);
             if (old_size != Size()) {
@@ -151,6 +151,8 @@ namespace {
         db.Add("setup.initial.species",         UserStringNop("OPTIONS_DB_GAMESETUP_STARTING_SPECIES_NAME"),    std::string("SP_HUMAN"),    Validator<std::string>());
     }
     bool temp_bool = RegisterOptions(&AddOptions);
+
+    constexpr std::string_view formatting_chars = "<>;:,.@#$%&*(){}'\"/?\\`[]|\a\b\f\n\r\t\b";
 }
 
 ////////////////////////////////////////////////
@@ -216,7 +218,7 @@ std::map<std::string, std::string> GameRulesPanel::GetRulesAsStrings() const {
     return retval;
 }
 
-void GameRulesPanel::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
+void GameRulesPanel::SizeMove(GG::Pt ul, GG::Pt lr) {
     GG::Control::SizeMove(ul, lr);
     DoLayout();
 }
@@ -557,7 +559,7 @@ void GalaxySetupPanel::CompleteConstruction() {
     } else {
         m_seed_edit = GG::Wnd::Create<CUIEdit>(m_seed);
     }
-    m_seed_edit->DisallowChars("<>/\\[]'`?{}, ");
+    m_seed_edit->DisallowChars(formatting_chars);
 
     boost::filesystem::path button_texture_dir = ClientUI::ArtDir() / "icons" / "buttons";
 
@@ -615,7 +617,7 @@ void GalaxySetupPanel::CompleteConstruction() {
     m_monster_freq_label = GG::Wnd::Create<CUILabel>(UserString("GSETUP_MONSTER_FREQ"), GG::FORMAT_RIGHT, GG::INTERACTIVE);
     m_monster_freq_label->SetBrowseModeTime(GetOptionsDB().Get<int>("ui.tooltip.delay"));
     m_monster_freq_label->SetBrowseText(UserString(GetOptionsDB().GetDescription("setup.monster.frequency")));
-    m_monster_freq_list = GG::Wnd::Create<CUIDropDownList>(5);
+    m_monster_freq_list = GG::Wnd::Create<CUIDropDownList>(8);
     m_monster_freq_list->SetStyle(GG::LIST_NOSORT);
 
     // native frequency
@@ -722,9 +724,13 @@ void GalaxySetupPanel::CompleteConstruction() {
     m_specials_freq_list->Insert(GG::Wnd::Create<CUISimpleDropDownListRow>(UserString("GSETUP_RANDOM")));
 
     m_monster_freq_list->Insert(GG::Wnd::Create<CUISimpleDropDownListRow>(UserString("GSETUP_NONE")));
+    m_monster_freq_list->Insert(GG::Wnd::Create<CUISimpleDropDownListRow>(UserString("GSETUP_EXTREMELY_LOW")));
+    m_monster_freq_list->Insert(GG::Wnd::Create<CUISimpleDropDownListRow>(UserString("GSETUP_VERY_LOW")));
     m_monster_freq_list->Insert(GG::Wnd::Create<CUISimpleDropDownListRow>(UserString("GSETUP_LOW")));
     m_monster_freq_list->Insert(GG::Wnd::Create<CUISimpleDropDownListRow>(UserString("GSETUP_MEDIUM")));
     m_monster_freq_list->Insert(GG::Wnd::Create<CUISimpleDropDownListRow>(UserString("GSETUP_HIGH")));
+    m_monster_freq_list->Insert(GG::Wnd::Create<CUISimpleDropDownListRow>(UserString("GSETUP_VERY_HIGH")));
+    m_monster_freq_list->Insert(GG::Wnd::Create<CUISimpleDropDownListRow>(UserString("GSETUP_EXTREMELY_HIGH")));
     m_monster_freq_list->Insert(GG::Wnd::Create<CUISimpleDropDownListRow>(UserString("GSETUP_RANDOM")));
 
     m_native_freq_list->Insert(GG::Wnd::Create<CUISimpleDropDownListRow>(UserString("GSETUP_NONE")));
@@ -748,12 +754,12 @@ void GalaxySetupPanel::CompleteConstruction() {
     m_stars_spin->SetValue(GetOptionsDB().Get<int>("setup.star.count"));
     m_galaxy_shapes_list->Select(int(GetOptionsDB().Get<Shape>("setup.galaxy.shape")));
     ShapeChanged(m_galaxy_shapes_list->CurrentItem());
-    m_galaxy_ages_list->Select(int(GetOptionsDB().Get<GalaxySetupOption>("setup.galaxy.age")) - 1);
-    m_starlane_freq_list->Select(int(GetOptionsDB().Get<GalaxySetupOption>("setup.starlane.frequency")) - 1);
-    m_planet_density_list->Select(int(GetOptionsDB().Get<GalaxySetupOption>("setup.planet.density")) - 1);
-    m_specials_freq_list->Select(int(GetOptionsDB().Get<GalaxySetupOption>("setup.specials.frequency")));
-    m_monster_freq_list->Select(int(GetOptionsDB().Get<GalaxySetupOption>("setup.monster.frequency")));
-    m_native_freq_list->Select(int(GetOptionsDB().Get<GalaxySetupOption>("setup.native.frequency")));
+    m_galaxy_ages_list->Select(int(GetOptionsDB().Get<GalaxySetupOptionGeneric>("setup.galaxy.age")) - 1);
+    m_starlane_freq_list->Select(int(GetOptionsDB().Get<GalaxySetupOptionGeneric>("setup.starlane.frequency")) - 1);
+    m_planet_density_list->Select(int(GetOptionsDB().Get<GalaxySetupOptionGeneric>("setup.planet.density")) - 1);
+    m_specials_freq_list->Select(int(GetOptionsDB().Get<GalaxySetupOptionGeneric>("setup.specials.frequency")));
+    m_monster_freq_list->Select(int(GetOptionsDB().Get<GalaxySetupOptionMonsterFreq>("setup.monster.frequency")));
+    m_native_freq_list->Select(int(GetOptionsDB().Get<GalaxySetupOptionGeneric>("setup.native.frequency")));
     m_ai_aggression_list->Select(int(GetOptionsDB().Get<Aggression>("setup.ai.aggression")));
 
     TraceLogger() << "GalaxySetupPanel::CompleteConstruction settings changed signal...";
@@ -792,23 +798,23 @@ int GalaxySetupPanel::Systems() const
 Shape GalaxySetupPanel::GetShape() const
 { return Shape(m_galaxy_shapes_list->CurrentItemIndex()); }
 
-GalaxySetupOption GalaxySetupPanel::GetAge() const
-{ return GalaxySetupOption(m_galaxy_ages_list->CurrentItemIndex() + 1); }
+GalaxySetupOptionGeneric GalaxySetupPanel::GetAge() const
+{ return GalaxySetupOptionGeneric(m_galaxy_ages_list->CurrentItemIndex() + 1); }
 
-GalaxySetupOption GalaxySetupPanel::GetStarlaneFrequency() const
-{ return GalaxySetupOption(m_starlane_freq_list->CurrentItemIndex() + 1); }
+GalaxySetupOptionGeneric GalaxySetupPanel::GetStarlaneFrequency() const
+{ return GalaxySetupOptionGeneric(m_starlane_freq_list->CurrentItemIndex() + 1); }
 
-GalaxySetupOption GalaxySetupPanel::GetPlanetDensity() const
-{ return GalaxySetupOption(m_planet_density_list->CurrentItemIndex() + 1); }
+GalaxySetupOptionGeneric GalaxySetupPanel::GetPlanetDensity() const
+{ return GalaxySetupOptionGeneric(m_planet_density_list->CurrentItemIndex() + 1); }
 
-GalaxySetupOption GalaxySetupPanel::GetSpecialsFrequency() const
-{ return GalaxySetupOption(m_specials_freq_list->CurrentItemIndex()); }
+GalaxySetupOptionGeneric GalaxySetupPanel::GetSpecialsFrequency() const
+{ return GalaxySetupOptionGeneric(m_specials_freq_list->CurrentItemIndex()); }
 
-GalaxySetupOption GalaxySetupPanel::GetMonsterFrequency() const
-{ return GalaxySetupOption(m_monster_freq_list->CurrentItemIndex()); }
+GalaxySetupOptionMonsterFreq GalaxySetupPanel::GetMonsterFrequency() const
+{ return GalaxySetupOptionMonsterFreq(m_monster_freq_list->CurrentItemIndex()); }
 
-GalaxySetupOption GalaxySetupPanel::GetNativeFrequency() const
-{ return GalaxySetupOption(m_native_freq_list->CurrentItemIndex()); }
+GalaxySetupOptionGeneric GalaxySetupPanel::GetNativeFrequency() const
+{ return GalaxySetupOptionGeneric(m_native_freq_list->CurrentItemIndex()); }
 
 Aggression GalaxySetupPanel::GetAIAggression() const
 { return Aggression(m_ai_aggression_list->CurrentItemIndex()); }
@@ -816,7 +822,7 @@ Aggression GalaxySetupPanel::GetAIAggression() const
 std::shared_ptr<GG::Texture> GalaxySetupPanel::PreviewImage() const
 { return m_textures[int(GetShape())]; }
 
-void GalaxySetupPanel::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
+void GalaxySetupPanel::SizeMove(GG::Pt ul, GG::Pt lr) {
     GG::Control::SizeMove(ul, lr);
     DoLayout();
 }
@@ -913,7 +919,7 @@ void GalaxySetupPanel::DoLayout() {
     m_ai_aggression_list->SizeMove(control_ul, control_lr);
 }
 
-void GalaxySetupPanel::Disable(bool b/* = true*/) {
+void GalaxySetupPanel::Disable(bool b) {
     for (auto& child : Children())
         static_cast<GG::Control*>(child.get())->Disable(b);
 }
@@ -986,12 +992,14 @@ void GalaxySetupWnd::CompleteConstruction() {
     m_player_name_label->SetBrowseModeTime(GetOptionsDB().Get<int>("ui.tooltip.delay"));
     m_player_name_label->SetBrowseText(UserString(GetOptionsDB().GetDescription("setup.player.name")));
     m_player_name_edit = GG::Wnd::Create<CUIEdit>(GetOptionsDB().Get<std::string>("setup.player.name"));
+    m_player_name_edit->DisallowChars(formatting_chars);
 
     // empire name
     m_empire_name_label = GG::Wnd::Create<CUILabel>(UserString("GSETUP_EMPIRE_NAME"), GG::FORMAT_RIGHT, GG::INTERACTIVE);
     m_empire_name_label->SetBrowseModeTime(GetOptionsDB().Get<int>("ui.tooltip.delay"));
     m_empire_name_label->SetBrowseText(UserString(GetOptionsDB().GetDescription("setup.empire.name")));
     m_empire_name_edit = GG::Wnd::Create<CUIEdit>(GetOptionsDB().Get<std::string>("setup.empire.name"));
+    m_empire_name_edit->DisallowChars(formatting_chars);
 
     // empire color
     m_empire_color_label = GG::Wnd::Create<CUILabel>(UserString("GSETUP_EMPIRE_COLOR"), GG::FORMAT_RIGHT, GG::INTERACTIVE);
@@ -1091,7 +1099,7 @@ void GalaxySetupWnd::KeyPress(GG::Key key, std::uint32_t key_code_point, GG::Fla
         CancelClicked();
 }
 
-void GalaxySetupWnd::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
+void GalaxySetupWnd::SizeMove(GG::Pt ul, GG::Pt lr) {
     CUIWnd::SizeMove(ul, lr);
     DoLayout();
 }
@@ -1269,10 +1277,10 @@ void GalaxySetupWnd::OkClicked() {
     TraceLogger() << "GalaxySetupWnd::OkClicked end";
 
     m_ended_with_ok = true;
-    m_done = true;
+    m_modal_done.store(true);
 }
 
 void GalaxySetupWnd::CancelClicked() {
     m_ended_with_ok = false;
-    m_done = true;
+    m_modal_done.store(true);
 }

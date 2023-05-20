@@ -4,7 +4,7 @@ Policy
     short_description = "PLC_INDUSTRIALISM_SHORT_DESC"
     category = "ECONOMIC_CATEGORY"
     adoptioncost = floor(2.0 * [[POPULATION_OWNED_BY_EMPIRE]]^0.5)
-    exclusions = [ "PLC_MODERATION" "PLC_TECHNOCRACY" "PLC_ENVIRONMENTALISM" ]
+    exclusions = [ "PLC_ENVIRONMENTALISM" "PLC_MODERATION" "PLC_TECHNOCRACY" ]
     effectsgroups = [
         [[SPECIES_LIKES_OR_DISLIKES_POLICY_STABILITY_EFFECTS]]
 
@@ -32,7 +32,7 @@ Policy
                 SetTargetHappiness value = Value
                     + (NamedReal name = "PLC_INDUSTRIALISM_TARGET_HAPPINESS_FLAT" value = 2)
     ]
-    graphic = "icons/policies/industrialism.png"
+    graphic = "icons/policies/economic_industrialism.png"
 
 #include "/scripting/common/priorities.macros"
 #include "/scripting/policies/policies.macros"

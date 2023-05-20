@@ -1,11 +1,13 @@
 name: String tables checks
 on:
   pull_request:
-    types:
-      - opened
-      - edited
-      - reopened
-      - synchronize
+    branches: [ 'master' ]
+    types: ['opened', 'reopened', 'synchronize']
+    paths:
+      - '.github/**'
+      - 'check/st-tool.py'
+      - 'default/stringtables/**'
+
 jobs:
   lint-string-tables:
     runs-on: ubuntu-latest
@@ -13,14 +15,14 @@ jobs:
       matrix:
         python-version: ['3.9']
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Check string tables formatting
+      - name: Check en string table is formatted properly
         run: |
-          diff -u default/stringtables/en.txt <(check/st-tool.py format default/stringtables/en.txt) || { echo "String table is not properly formatted"; exit 1; }
+          ./check/st-tool.py format default/stringtables/en.txt
       - name: Validate string tables
         run: |
           ./check/st-tool.py check --reference default/stringtables/en.txt default/stringtables/??.txt

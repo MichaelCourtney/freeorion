@@ -25,20 +25,18 @@
 namespace fs = boost::filesystem;
 
 namespace {
-    const std::string UNABLE_TO_OPEN_FILE("Unable to open file");
-    const std::string XML_SAVE_FILE_DESCRIPTION("This is an XML archive FreeOrion saved game. Initial header information is uncompressed. The main gamestate information follows, possibly stored as zlib-comprssed XML archive in the last entry in the main archive.");
-    const std::string BIN_SAVE_FILE_DESCRIPTION("This is binary archive FreeOrion saved game.");
+    constexpr std::string_view UNABLE_TO_OPEN_FILE("Unable to open file");
+    constexpr std::string_view XML_SAVE_FILE_DESCRIPTION("This is an XML archive FreeOrion saved game. Initial header information is uncompressed. The main gamestate information follows, possibly stored as zlib-comprssed XML archive in the last entry in the main archive.");
+    constexpr std::string_view BIN_SAVE_FILE_DESCRIPTION("This is binary archive FreeOrion saved game.");
 
     const std::string XML_COMPRESSED_MARKER("zlib-xml");
 
     /// Splits time and date on separate lines for an ISO datetime string
-    std::string split_time(const std::string& time) {
-        std::string result = time;
-        std::string::size_type pos = result.find('T');
-        if (pos != std::string::npos) {
-            result.replace(pos, 1, "\n");
-        }
-        return result;
+    std::string split_time(std::string time) {
+        auto pos = time.find('T');
+        if (pos != std::string::npos)
+            time.replace(pos, 1, "\n");
+        return time;
     }
 
     /// Populates a SaveGamePreviewData from a given file
@@ -54,7 +52,7 @@ namespace {
         full.filename = PathToString(path.filename());
 
         if (!ifs)
-            throw std::runtime_error(UNABLE_TO_OPEN_FILE);
+            throw std::runtime_error(UNABLE_TO_OPEN_FILE.data());
 
         // alias structs so variable passed into NVP deserialization macro has the
         // same name as that passed into serialization macro in SaveGame function.
@@ -64,9 +62,10 @@ namespace {
         DebugLogger() << "LoadSaveGamePreviewData: Loading preview from: " << path.string();
         try {
             // read the first five letters of the stream and check if it is opening an xml file
-            std::string xxx5(5, ' ');
-            ifs.read(&xxx5[0], 5);
-            const std::string xml5{"<?xml"};
+            std::array<std::string::value_type, 5> xxx5{};
+            ifs.read(&xxx5[0], xxx5.size());
+            static constexpr std::array<std::string::value_type, 5> xml5{'<', '?', 'x', 'm', 'l'};
+
             // reset to start of stream
             boost::iostreams::seek(ifs, 0, std::ios_base::beg);
             // binary deserialization iff document is not xml
@@ -81,7 +80,7 @@ namespace {
                 freeorion_xml_iarchive ia(ifs);
                 ia >> BOOST_SERIALIZATION_NVP(save_preview_data);
 
-                if (BOOST_VERSION >= 106600 && save_preview_data.save_format_marker == XML_COMPRESSED_MARKER)
+                if (save_preview_data.save_format_marker == XML_COMPRESSED_MARKER)
                     throw std::invalid_argument("Save Format Not Compatible with Boost Version " BOOST_LIB_VERSION);
 
                 ia >> BOOST_SERIALIZATION_NVP(galaxy_setup_data);
@@ -136,9 +135,9 @@ bool SaveFileWithValidHeader(const boost::filesystem::path& path) {
     DebugLogger() << "SaveFileWithValidHeader: Loading headers from: " << path.string();
     try {
         // read the first five letters of the stream and check if it is opening an xml file
-        std::string xxx5(5, ' ');
-        ifs.read(&xxx5[0], 5);
-        const std::string xml5{"<?xml"};
+        std::array<std::string::value_type, 5> xxx5{};
+        ifs.read(&xxx5[0], xxx5.size());
+        static constexpr std::array<std::string::value_type, 5> xml5{'<', '?', 'x', 'm', 'l'};
         // reset to start of stream 
         boost::iostreams::seek(ifs, 0, std::ios_base::beg);
         // binary deserialization iff document is not xml
@@ -158,7 +157,7 @@ bool SaveFileWithValidHeader(const boost::filesystem::path& path) {
 
             ia >> BOOST_SERIALIZATION_NVP(ignored_save_preview_data);
 
-            if (BOOST_VERSION >= 106600 && ignored_save_preview_data.save_format_marker == XML_COMPRESSED_MARKER)
+            if (ignored_save_preview_data.save_format_marker == XML_COMPRESSED_MARKER)
                 throw std::invalid_argument("Save Format Not Compatible with Boost Version " BOOST_LIB_VERSION);
 
             ia >> BOOST_SERIALIZATION_NVP(ignored_galaxy_setup_data);
@@ -244,7 +243,7 @@ void LoadSaveGamePreviews(const fs::path& orig_path, const std::string& extensio
                 FullPreview data;
                 if (LoadSaveGamePreviewData(*it, data)) {
                     // Add preview entry to list
-                    previews.emplace_back(std::move(data));
+                    previews.push_back(std::move(data));
                 }
             }
         } catch (const std::exception& e) {

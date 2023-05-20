@@ -18,6 +18,8 @@ PasswordEnterWnd::PasswordEnterWnd() :
 {}
 
 void PasswordEnterWnd::CompleteConstruction() {
+    CUIWnd::CompleteConstruction();
+
     auto auth_desc_label = GG::Wnd::Create<CUILabel>(UserString("AUTHENTICATION_DESC"), GG::FORMAT_LEFT | GG::FORMAT_WORDBREAK);
     auto player_name_label = GG::Wnd::Create<CUILabel>(UserString("PLAYER_NAME_LABEL"), GG::FORMAT_LEFT);
     m_player_name_edit = GG::Wnd::Create<CUIEdit>("");
@@ -26,8 +28,8 @@ void PasswordEnterWnd::CompleteConstruction() {
     m_ok_bn = Wnd::Create<CUIButton>(UserString("OK"));
     m_cancel_bn = Wnd::Create<CUIButton>(UserString("CANCEL"));
 
-    constexpr GG::X OK_CANCEL_BUTTON_WIDTH{100};
-    constexpr int CONTROL_MARGIN = 5;
+    static constexpr GG::X OK_CANCEL_BUTTON_WIDTH{100};
+    static constexpr int CONTROL_MARGIN = 5;
 
     auto layout = GG::Wnd::Create<GG::Layout>(GG::X0, GG::Y0, GG::X1, GG::Y1, 4, 4, CONTROL_MARGIN);
     layout->SetMinimumColumnWidth(0, std::max(player_name_label->MinUsableSize().x,

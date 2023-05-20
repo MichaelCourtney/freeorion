@@ -31,10 +31,10 @@ struct FO_COMMON_API EncyclopediaArticle {
 class FO_COMMON_API Encyclopedia {
 public:
     // map from category name to list of articles in that category
-    using ArticleMap = std::map<std::string, std::vector<EncyclopediaArticle>>;
+    using ArticleMap = std::map<std::string, std::vector<EncyclopediaArticle>, std::less<>>;
 
     Encyclopedia() = default;
-    [[nodiscard]] unsigned int GetCheckSum() const;
+    [[nodiscard]] uint32_t GetCheckSum() const;
 
     /** Sets articles to the value of \p future. */
     FO_COMMON_API void SetArticles(Pending::Pending<ArticleMap>&& future);
@@ -42,7 +42,7 @@ public:
     [[nodiscard]] FO_COMMON_API const ArticleMap& Articles() const;
 
     [[nodiscard]] FO_COMMON_API const EncyclopediaArticle& GetArticleByKey(const std::string& key) const;
-    [[nodiscard]] FO_COMMON_API const EncyclopediaArticle& GetArticleByCategoryAndKey(const std::string& category, const std::string& key) const;
+    [[nodiscard]] FO_COMMON_API const EncyclopediaArticle& GetArticleByCategoryAndKey(std::string_view category, std::string_view key) const;
     [[nodiscard]] FO_COMMON_API const EncyclopediaArticle& GetArticleByName(const std::string& name) const;
 
 private:

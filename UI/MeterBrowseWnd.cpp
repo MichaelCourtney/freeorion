@@ -6,11 +6,11 @@
 #include "../universe/Building.h"
 #include "../universe/Effect.h"
 #include "../universe/Planet.h"
-#include "../universe/PopCenter.h"
 #include "../universe/Ship.h"
 #include "../universe/ShipDesign.h"
 #include "../universe/ShipPart.h"
 #include "../universe/UniverseObject.h"
+#include "../universe/ValueRef.h"
 #include "../Empire/Empire.h"
 #include "../combat/CombatDamage.h"
 #include "../client/human/GGHumanClientApp.h"
@@ -147,7 +147,7 @@ void MeterBrowseWnd::Initialize() {
         std::string summary_title_text;
         if (m_primary_meter_type == MeterType::METER_POPULATION) {
             std::string human_readable_species_name;
-            if (auto pop = std::dynamic_pointer_cast<const PopCenter>(obj)) {
+            if (auto pop = std::dynamic_pointer_cast<const Planet>(obj)) {
                 const std::string& species_name = pop->SpeciesName();
                 if (!species_name.empty())
                     human_readable_species_name = UserString(species_name);
@@ -342,7 +342,7 @@ void MeterBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
         switch (info.cause_type) {
         case EffectsCauseType::ECT_TECH: {
             name.clear();
-            if (const auto empire = GetEmpire(source->Owner()))
+            if (const auto empire = Empires().GetEmpire(source->Owner()))
                 name = empire->Name();
             const std::string& label_template = (info.custom_label.empty()
                 ? UserString("TT_TECH")
@@ -448,7 +448,7 @@ void MeterBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
         }
         case EffectsCauseType::ECT_POLICY: {
             name.clear();
-            if (const auto empire = GetEmpire(source->Owner()))
+            if (const auto empire = Empires().GetEmpire(source->Owner()))
                 name = empire->Name();
             const std::string& label_template = (info.custom_label.empty()
                 ? UserString("TT_POLICY")
@@ -561,7 +561,7 @@ void ShipDamageBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
     m_effect_labels_and_values.clear();
 
     // get object and meter, aborting if not valid
-    auto ship = Objects().get<Ship>(m_object_id);
+    auto ship = Objects().getRaw<Ship>(m_object_id);
     if (!ship) {
         ErrorLogger() << "ShipDamageBrowseWnd::UpdateEffectLabelsAndValues couldn't get ship with id " << m_object_id;
         return;
@@ -659,7 +659,7 @@ namespace {
     };
 }
 
-ShipFightersBrowseWnd::ShipFightersBrowseWnd(int object_id, MeterType primary_meter_type, bool show_all_bouts /* = false*/) :
+ShipFightersBrowseWnd::ShipFightersBrowseWnd(int object_id, MeterType primary_meter_type, bool show_all_bouts ) :
     MeterBrowseWnd(object_id, primary_meter_type),
     m_show_all_bouts(show_all_bouts)
 {}
@@ -773,9 +773,9 @@ void ShipFightersBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
         return;
 
     // colors used, these could be moved to OptionsDB if other controls utilize similar value types
-    constexpr GG::Clr DAMAGE_COLOR = GG::CLR_ORANGE;
-    constexpr GG::Clr BAY_COLOR = GG::Clr(0, 160, 255, 255);
-    constexpr GG::Clr HANGAR_COLOR = GG::CLR_YELLOW;
+    static constexpr GG::Clr DAMAGE_COLOR = GG::CLR_ORANGE;
+    static constexpr GG::Clr BAY_COLOR = GG::Clr(0, 160, 255, 255);
+    static constexpr GG::Clr HANGAR_COLOR = GG::CLR_YELLOW;
 
     const GG::X LABEL_WIDTH = FighterBrowseLabelWidth();
     const GG::X QTY_WIDTH = MeterBrowseQtyWidth();
@@ -856,7 +856,7 @@ void ShipFightersBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
                                                         DAMAGE_COLOR);
 
     if (!m_show_all_bouts) {
-        constexpr int BOUTS_TO_SHOW_LIMIT = 2;
+        static constexpr int BOUTS_TO_SHOW_LIMIT = 2;
 
         // Show damage for first wave (2nd combat round)
         auto bout_info = Combat::ResolveFighterBouts(

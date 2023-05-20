@@ -1,67 +1,175 @@
 #include "Meter.h"
 
+#include "../util/Serialize.h"
+
 #include <algorithm>
-
-#if __has_include(<charconv>)
 #include <array>
-#include <charconv>
+
+#if !__has_include(<charconv>)
+#include <cstdio>
 #endif
 
+namespace {
+    // rounding checks
+    constexpr Meter r1{65000.001f};
+    constexpr Meter r2 = []() {
+        Meter r2r = r1;
+        r2r.AddToCurrent(-1.0f);
+        return r2r;
+    }();
+    static_assert(r2.Current() == 64999.001f);
+    constexpr Meter r3 = []() {
+        Meter r3r = r2;
+        r3r.AddToCurrent(-0.01f);
+        return r3r;
+    }();
+    static_assert(r3.Current() == 64998.991f);
+    constexpr Meter r4 = []() {
+        Meter r4r = r3;
+        r4r.AddToCurrent(40.009f);
+        return r4r;
+    }();
+    static_assert(r4.Current() == 65039.0f);
 
-Meter::Meter(float current_value, float initial_value) :
-    m_current_value(current_value),
-    m_initial_value(initial_value)
-{}
+    constexpr Meter q1{2.01f};
+    constexpr Meter q2 = []() {
+        Meter q2r = q1;
+        q2r.AddToCurrent(-1.0f);
+        return q2r;
+    }();
+    static_assert(q2.Current() == 1.01f);
+    constexpr Meter q3 = []() {
+        Meter q3r = q2;
+        q3r.AddToCurrent(-1.0f);
+        return q3r;
+    }();
+    static_assert(q3.Current() == 0.01f);
+}
 
-float Meter::Current() const
-{ return m_current_value; }
-
-float Meter::Initial() const
-{ return m_initial_value; }
-
-std::string Meter::Dump(unsigned short ntabs) const {
-#if defined(__cpp_lib_to_chars)
+std::array<std::string::value_type, 64> Meter::Dump(uint8_t ntabs) const noexcept(dump_noexcept) {
     std::array<std::string::value_type, 64> buffer{"Cur: "}; // rest should be nulls
-    auto result = std::to_chars(buffer.data() + 5, buffer.data() + buffer.size(), m_current_value,
-                                std::chars_format::fixed, 3);
-    // the biggest result of to_chars should be like "-65535.999" or 10 chars per number
-    *result.ptr = ' ';
-    *++result.ptr = 'I';
-    *++result.ptr = 'n';
-    *++result.ptr = 'i';
-    *++result.ptr = 't';
-    *++result.ptr = ':';
-    *++result.ptr = ' ';
-    result = std::to_chars(result.ptr + 1, buffer.data() + buffer.size(), m_initial_value,
-                           std::chars_format::fixed, 3);
-    return buffer.data();
+#if defined(__cpp_lib_to_chars)
+    auto ToChars4Dump = [buf_end{buffer.data() + buffer.size()}](char* buf_start, float num)
+        noexcept(have_noexcept_to_chars) -> char *
+    {
+        const int precision = num < 10 ? 2 : 1;
+        return std::to_chars(buf_start, buf_end, num, std::chars_format::fixed, precision).ptr;
+    };
 #else
-    return std::string{"Cur: "}.append(std::to_string(m_current_value))
-             .append(" Init: ").append(std::to_string(m_initial_value));
+    auto ToChars4Dump = [buf_end{buffer.data() + buffer.size()}](char* buf_start, float num) -> char * {
+        const auto count = snprintf(buf_start, 10, num < 10 ? "%1.2f" : "%5.1f", num);
+        return buf_start + std::max(0, count);
+    };
+#endif
+    auto result_ptr = ToChars4Dump(buffer.data() + 5, FromInt(cur));
+    // due to decimal precision of at most 2, the biggest result of to_chars
+    // should be like "-65535.99" or 9 chars per number, if constrained by
+    // LARGE_VALUE, but Meter can be initialized with larger values, so
+    // a full 64-char array is used as the buffer and returned.
+    static constexpr std::string_view init_label = " Init: ";
+    std::copy_n(init_label.data(), init_label.size(), result_ptr); // assuming noexcept since result_ptr should point into buffer and init_label is constexpr
+    result_ptr += init_label.size();
+    ToChars4Dump(result_ptr, FromInt(init));
+
+    return buffer;
+}
+
+void Meter::ClampCurrentToRange(float min, float max) // no noexcept because using std::max and std::min in header cause symbol definintion problems on Windows
+{ cur = std::max(std::min(cur, FromFloat(max)), FromFloat(min)); }
+
+namespace {
+    template <typename T>
+    constexpr T Pow(T base, T exp) {
+        T retval = 1;
+        while (exp--)
+            retval *= base;
+        return retval;
+    }
+}
+
+Meter::ToCharsArrayT Meter::ToChars() const noexcept(have_noexcept_to_chars) {
+    static constexpr auto max_val = std::numeric_limits<int>::max();
+    static_assert(max_val < Pow(10LL, 10LL)); // ensure serialized form of int can fit in 11 digits
+    static_assert(max_val > Pow(10, 9));
+    static constexpr auto digits_one_int = 1 + 10;
+    static constexpr auto digits_meter = 2*digits_one_int + 1 + 1; // two numbers, one space, one padding to be safe
+    static_assert(std::size(ToCharsArrayT()) == digits_meter);
+
+    ToCharsArrayT buffer{};
+    ToChars(buffer.data(), buffer.data() + buffer.size());
+    return buffer;
+}
+
+int Meter::ToChars(char* buffer, char* const buffer_end) const noexcept(have_noexcept_to_chars) {
+#if defined(__cpp_lib_to_chars)
+    auto result_ptr = std::to_chars(buffer, buffer_end, cur).ptr;
+    *result_ptr++ = ' ';
+    const auto result_ptr2 = std::to_chars(result_ptr, buffer_end, init).ptr;
+    static_assert(noexcept(result_ptr2 - buffer));
+
+    return result_ptr2 - buffer;
+#else
+    std::size_t buffer_sz = std::distance(buffer, buffer_end);
+    auto temp = std::to_string(cur);
+    auto out_sz = temp.size();
+    std::copy_n(temp.begin(), std::min(buffer_sz, out_sz), buffer);
+    std::advance(buffer, temp.size());
+    *buffer++ = ' ';
+    out_sz += 1;
+    buffer_sz = std::distance(buffer, buffer_end);
+    temp = std::to_string(init);
+    out_sz += temp.size();
+    std::copy_n(temp.begin(), std::min(buffer_sz, temp.size()), buffer);
+    return out_sz;
 #endif
 }
 
-void Meter::SetCurrent(float current_value)
-{ m_current_value = current_value; }
+int Meter::SetFromChars(std::string_view chars) noexcept(have_noexcept_to_chars) {
+#if defined(__cpp_lib_to_chars)
+    const auto buffer_end = chars.data() + chars.size();
+    auto result = std::from_chars(chars.data(), buffer_end, cur);
+    if (result.ec == std::errc()) {
+        ++result.ptr; // for ' ' separator
+        result = std::from_chars(result.ptr, buffer_end, init);
+    }
+    return result.ptr - chars.data();
 
-void Meter::Set(float current_value, float initial_value) {
-    m_current_value = current_value;
-    m_initial_value = initial_value;
+    static_assert(noexcept(result.ptr - chars.data()));
+#else
+    int chars_consumed = 0;
+    std::sscanf(chars.data(), "%d %d%n", &cur, &init, &chars_consumed);
+    return chars_consumed;
+#endif
+
+    static_assert(DEFAULT_INT == FromFloat(DEFAULT_VALUE));
 }
 
-void Meter::ResetCurrent()
-{ m_current_value = DEFAULT_VALUE; } // initial unchanged
+template <>
+void Meter::serialize(boost::archive::xml_iarchive& ar, const unsigned int version)
+{
+    using namespace boost::serialization;
+    using Archive_t = typename std::remove_reference_t<decltype(ar)>;
+    static_assert(Archive_t::is_loading::value);
+    if (version < 2) {
+        float c = 0.0f, i = 0.0f;
+        ar  & make_nvp("c", c)
+            & make_nvp("i", i);
+        cur = FromFloat(c);
+        init = FromFloat(i);
 
-void Meter::Reset() {
-    m_current_value = DEFAULT_VALUE;
-    m_initial_value = DEFAULT_VALUE;
+    } else {
+        std::string buffer;
+        ar >> make_nvp("m", buffer);
+        SetFromChars(buffer);
+    }
 }
 
-void Meter::AddToCurrent(float adjustment)
-{ m_current_value += adjustment; }
-
-void Meter::ClampCurrentToRange(float min/* = DEFAULT_VALUE*/, float max/* = LARGE_VALUE*/)
-{ m_current_value = std::max(std::min(m_current_value, max), min); }
-
-void Meter::BackPropagate()
-{ m_initial_value = m_current_value; }
+template <>
+void Meter::serialize(boost::archive::xml_oarchive& ar, const unsigned int version)
+{
+    using namespace boost::serialization;
+    using Archive_t = typename std::remove_reference_t<decltype(ar)>;
+    static_assert(Archive_t::is_saving::value);
+    std::string s{ToChars().data()};
+    ar << make_nvp("m", s);
+}

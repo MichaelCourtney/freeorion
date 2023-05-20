@@ -4,14 +4,18 @@ Policy
     short_description = "PLC_CENTRALIZATION_SHORT_DESC"
     category = "ECONOMIC_CATEGORY"
     adoptioncost = floor(2.0 * [[POPULATION_OWNED_BY_EMPIRE]]^0.5)
-    exclusions = [ "PLC_CONFEDERATION" "PLC_COLONIZATION" "PLC_ISOLATION" ]
+    exclusions = [ "PLC_COLONIZATION" "PLC_CONFEDERATION" "PLC_FEUDALISM" "PLC_ISOLATION" ]
     unlock = [
-        Item type = Building name = "BLD_REGIONAL_ADMIN"
         Item type = Policy name = "PLC_METROPOLES"
+        Item type = Policy name = "PLC_BUREAUCRACY"
     ]
     effectsgroups = [
         [[SPECIES_LIKES_OR_DISLIKES_POLICY_STABILITY_EFFECTS]]
 
+        // Makes colony buildings and colony/outpost ship parts more expensive
+        // See COLONIZATION_POLICY_MULTIPLIER macro in ../common/upkeep.macros
+
+        // capital bonuses
         EffectsGroup
             scope = And [
                 Capital
@@ -24,15 +28,25 @@ Policy
                                  value = 0.5 * [[INDUSTRY_PER_POP]])
                 SetTargetResearch value = Value + Target.Population
                     * (NamedReal name = "PLC_CENTRALIZATION_TARGET_RESEARCH_PERPOP"
-                                 value = 0.5 * [[RESEARCH_PER_POP]])
+                                 value = 0.3 * [[RESEARCH_PER_POP]])
                 SetTargetConstruction value = Value
                     + (NamedReal name = "PLC_CENTRALIZATION_TARGET_CONSTRUCTION_FLAT" value = 10)
+            ]
+
+        // capital penalties
+        EffectsGroup
+            scope = And [
+                Capital
+                OwnedBy empire = Source.Owner
+            ]
+            effects = [
                 SetMaxSupply value = Value
                     + (NamedReal name = "PLC_CENTRALIZATION_MAX_SUPPLY_FLAT" value = -2)
                 SetMaxStockpile value = Value
                     + (NamedReal name = "PLC_CENTRALIZATION_MAX_STOCKPILE_FLAT" value = -2)
             ]
 
+        // penalty to populated planets that are not supply-connected to the empire capital
         EffectsGroup
             scope = And [
                 Planet
@@ -45,8 +59,9 @@ Policy
                 ]
             ]
             effects = SetTargetInfluence value = Value
-                        + (NamedReal name = "PLC_CENTRALIZATION_TARGET_INFLUENCE_FLAT" value = -3)
+                        + (NamedReal name = "PLC_CENTRALIZATION_TARGET_INFLUENCE_FLAT" value = -4)
 
+        // penalty to planets that are supply connected to the capital
         EffectsGroup
             scope = And [
                 Planet
@@ -60,11 +75,11 @@ Policy
                 Not Capital
             ]
             effects = SetTargetInfluence value = Value + max(
-                        (NamedReal name = "PLC_CENTRALIZATION_TARGET_INFLUENCE_MAX" value = -3),
-                        (NamedReal name = "PLC_CENTRALIZATION_TARGET_INFLUENCE_PERJUMP" value = -0.2)
+                        (NamedReal name = "PLC_CENTRALIZATION_TARGET_INFLUENCE_MAX" value = -4),
+                        (NamedReal name = "PLC_CENTRALIZATION_TARGET_INFLUENCE_PERJUMP" value = -0.5)
                             * JumpsBetween object = Source.ID object = Target.ID)
     ]
-    graphic = "icons/policies/centralization.png"
+    graphic = "icons/policies/economic_centralization.png"
 
 #include "/scripting/common/base_prod.macros"
 #include "/scripting/policies/policies.macros"

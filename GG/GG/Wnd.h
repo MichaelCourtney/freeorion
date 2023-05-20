@@ -15,6 +15,7 @@
 #define _GG_Wnd_h_
 
 
+#include <atomic>
 #include <list>
 #include <memory>
 #include <set>
@@ -37,37 +38,14 @@ class WndEvent;
 /** Wnd creation flags type. */
 GG_FLAG_TYPE(WndFlag);
 
-/** Clicks hit this window, rather than passing through it, and mouse-overs
-    detect that they are over this window. */
-extern GG_API const WndFlag INTERACTIVE;
-
-/** When a mouse button is held down over this window, it expects to receive
-    multiple *ButtonDown messages. */
-extern GG_API const WndFlag REPEAT_BUTTON_DOWN;
-
-/** This window can be dragged around independently. */
-extern GG_API const WndFlag DRAGABLE;
-
-/** This window can be resized by the user, with the mouse. */
-extern GG_API const WndFlag RESIZABLE;
-
-/** This windows is an "on-top" window, and will always appear above all
-    non-on-top and non-modal windows.  Note that this only applies to
-    top-level (Parent()-less) Wnds. */
-extern GG_API const WndFlag ONTOP;
-
-/** This window is modal; while it is active, no other windows are
-    interactive.  Modal windows are considered above "on-top" windows, and
-    should not be flagged as OnTop.  Note that this only applies to top-level
-    (Parent()-less) Wnds. */
-extern GG_API const WndFlag MODAL;
-
-/** When a keyboard key is held down while this window has input focus, it
-    expects to receive KeyPress messages. */
-extern GG_API const WndFlag REPEAT_KEY_PRESS;
-
-/** None of the above flags */
-extern GG_API const WndFlag NO_WND_FLAGS;
+constexpr WndFlag NO_WND_FLAGS       (0);       // None of the below flags
+constexpr WndFlag INTERACTIVE        (1 << 0);  // Clicks hit this window, rather than passing through it, and mouse-overs detect that they are over this window.
+constexpr WndFlag REPEAT_BUTTON_DOWN (1 << 1);  // When a mouse button is held down over this window, it expects to receive multiple *ButtonDown messages.
+constexpr WndFlag DRAGABLE           (1 << 2);  // This window can be dragged around independently.
+constexpr WndFlag RESIZABLE          (1 << 3);  // This window can be resized by the user, with the mouse.
+constexpr WndFlag ONTOP              (1 << 4);  // This windows is an "on-top" window, and will always appear above all non-on-top and non-modal windows.  Note that this only applies to top-level (Parent()-less) Wnds.
+constexpr WndFlag MODAL              (1 << 5);  // This window is modal; while it is active, no other windows are interactive.  Modal windows are considered above "on-top" windows, and should not be flagged as OnTop.  Note that this only applies to top-level (Parent()-less) Wnds.
+constexpr WndFlag REPEAT_KEY_PRESS   (1 << 6);  // When a keyboard key is held down while this window has input focus, it expects to receive KeyPress messages.
 
 
 /** \brief This is the basic GG window class.
@@ -296,7 +274,7 @@ public:
     typedef std::map<const Wnd*, bool>::iterator DropsAcceptableIter;
 
     /** The modes of child clipping. */
-    enum class ChildClippingMode : int {
+    enum class ChildClippingMode : uint8_t {
         /** No child clipping is performed. */
         DontClip,
 
@@ -323,7 +301,7 @@ public:
         derived from Wnd.  It requires that the T constructor followed by
         T->CompleteConstruction() produce a correct T. */
     template <typename T, typename... Args>
-    static std::shared_ptr<T> Create(Args&&... args)
+    [[nodiscard]] static std::shared_ptr<T> Create(Args&&... args)
     {
         // This intentionally doesn't use std::make_shared in order to make lazy cleanup of
         // weak_ptrs a low priority.
@@ -355,80 +333,80 @@ public:
     /** Returns true iff a click over this window does not pass through.  Note
         that this also determines whether a mouse-over will detect this window
         or the ones under it. */
-    bool Interactive() const;
+    [[nodiscard]] bool Interactive() const noexcept { return m_flags & INTERACTIVE; }
 
     /** Returns true iff holding a keyboard key while this Wnd has the input
         focus generates multiple key-press messages. */
-    bool RepeatKeyPress() const;
+    [[nodiscard]] bool RepeatKeyPress() const noexcept { return m_flags & REPEAT_KEY_PRESS; }
 
     /** Returns true iff holding a mouse button down over this Wnd generates
         multiple button-down messages. */
-    bool RepeatButtonDown() const;
+    [[nodiscard]] bool RepeatButtonDown() const noexcept { return m_flags & REPEAT_BUTTON_DOWN; }
 
     /** Returns true iff this Wnd be dragged by the user. */
-    bool Dragable() const;
+    [[nodiscard]] bool Dragable() const noexcept { return m_flags & DRAGABLE; }
 
     /** Returns true iff this Wnd can be resized by the user. */
-    bool Resizable() const;
+    [[nodiscard]] bool Resizable() const noexcept { return m_flags & RESIZABLE; }
 
     /** Returns true iff this Wnd is an on-top Wnd. */
-    bool OnTop() const;
+    [[nodiscard]] bool OnTop() const noexcept { return !Parent() && m_flags & ONTOP; }
 
     /** Returns true iff this Wnd is a modal Wnd. */
-    bool Modal() const;
+    [[nodiscard]] bool Modal() const noexcept { return !Parent() && m_flags & MODAL; }
 
     /** Returns the mode to use for child clipping. */
-    ChildClippingMode GetChildClippingMode() const;
+    [[nodiscard]] ChildClippingMode GetChildClippingMode() const noexcept { return m_child_clipping_mode; }
 
     /** Returns true iff this Wnd should be considered a non-client-area child
         of its parent, for clipping purposes.  \see ChildClippingMode. */
-    bool NonClientChild() const;
+    [[nodiscard]] bool NonClientChild() const noexcept { return m_non_client_child; }
 
     /** Returns true iff this Wnd will be rendered if it is registered. */
-    bool Visible() const;
+    [[nodiscard]] bool Visible() const noexcept { return m_visible; }
 
     /** Returns true if this Wnd will be pre-rendered. */
-    bool PreRenderRequired() const;
+    [[nodiscard]] bool PreRenderRequired() const;
 
     /** Returns the name of this Wnd.  This name is not used by GG in any way;
         it only exists for user convenience. */
-    const std::string& Name() const;
+    [[nodiscard]] const auto& Name() const noexcept { return m_name; }
 
     /** Returns the string key that defines the type of data that this Wnd
         represents in drag-and-drop drags.  Returns an empty string when this
         Wnd cannot be drag-and-dropped. */
-    const std::string& DragDropDataType() const;
+    [[nodiscard]] const auto& DragDropDataType() const noexcept { return m_drag_drop_data_type; }
 
     /** Returns the upper-left corner of window in \a screen \a coordinates
         (taking into account parent's screen position, if any) */
-    Pt UpperLeft() const;
-    X Left() const;
-    Y Top() const;
+    [[nodiscard]] Pt UpperLeft() const noexcept;
+    [[nodiscard]] X Left() const noexcept { return UpperLeft().x; }
+    [[nodiscard]] Y Top() const noexcept { return UpperLeft().y; }
 
     /** Returns (one pixel past) the lower-right corner of window in \a screen
         \a coordinates (taking into account parent's screen position, if
         any) */
-    Pt LowerRight() const;
-    X Right() const;
-    Y Bottom() const;
+    [[nodiscard]] Pt LowerRight() const noexcept;
+    [[nodiscard]] X Right() const noexcept { return LowerRight().x; }
+    [[nodiscard]] Y Bottom() const noexcept { return LowerRight().y; }
 
     /** Returns the upper-left corner of window, relative to its parent's
         client area, or in screen coordinates if no parent exists. */
-    Pt RelativeUpperLeft() const;
+    [[nodiscard]] Pt RelativeUpperLeft() const noexcept { return m_upperleft; }
 
     /** Returns (one pixel past) the lower-right corner of window, relative to
         its parent's client area, or in screen coordinates if no parent
         exists. */
-    Pt RelativeLowerRight() const;
+    [[nodiscard]] Pt RelativeLowerRight() const noexcept { return m_lowerright; }
 
-    X Width() const;  ///< Returns width of window.
-    Y Height() const; ///< Returns height of window.
+    [[nodiscard]] X Width() const noexcept { return m_lowerright.x - m_upperleft.x; }
+    [[nodiscard]] Y Height() const noexcept { return m_lowerright.y - m_upperleft.y; }
 
     /** Returns a \a Pt packed with width in \a x and height in \a y. */
-    Pt Size() const;
+    [[nodiscard]] Pt Size() const noexcept { return Pt(m_lowerright.x - m_upperleft.x, m_lowerright.y - m_upperleft.y); }
 
-    Pt MinSize() const; ///< Returns the minimum allowable size of window.
-    Pt MaxSize() const; ///< Returns the maximum allowable size of window.
+    [[nodiscard]] Pt MinSize() const noexcept { return m_min_size; } ///< Returns the minimum allowable size of window.
+    [[nodiscard]] Pt MaxSize() const noexcept { return m_max_size; } ///< Returns the maximum allowable size of window.
 
     /** Returns the size of the minimum bounding box that can enclose the Wnd
         and still show all of its elements, plus enough room for interaction
@@ -436,58 +414,58 @@ public:
         MinUsableSize() is just the area of its text, and a Scroll's
         MinUsableSize() is the combined sizes of its up-button, down-button,
         and tab (plus a bit of room in which to drag the tab). */
-    virtual Pt MinUsableSize() const;
+    [[nodiscard]] virtual Pt MinUsableSize() const;
 
     /** Returns upper-left corner of window's client area in screen
         coordinates (or of the entire area, if no client area is specified).
         Virtual because different windows have different shapes (and so ways
         of calculating client area). */
-    virtual Pt ClientUpperLeft() const;
+    [[nodiscard]] virtual Pt ClientUpperLeft() const noexcept { return UpperLeft(); }
 
     /** Returns (one pixel past) lower-right corner of window's client area in
         screen coordinates (or of the entire area, if no client area is
         specified).  Virtual because different windows have different shapes
         (and so ways of calculating client area). */
-    virtual Pt ClientLowerRight() const;
+    [[nodiscard]] virtual Pt ClientLowerRight() const { return LowerRight(); }
 
     /** Returns the size of the client area \see Size(). */
-    Pt ClientSize() const;
+    [[nodiscard]] Pt ClientSize() const noexcept { return ClientLowerRight() - ClientUpperLeft(); }
 
-    X ClientWidth() const;  ///< Returns the width of the client area.
-    Y ClientHeight() const; ///< Returns the height of the client area.
+    [[nodiscard]] X ClientWidth() const noexcept { return ClientLowerRight().x - ClientUpperLeft().x; }
+    [[nodiscard]] Y ClientHeight() const noexcept { return ClientLowerRight().y - ClientUpperLeft().y; }
 
     /** Returns \a pt translated from screen- to window-coordinates. */
-    Pt ScreenToWindow(const Pt& pt) const;
+    [[nodiscard]] Pt ScreenToWindow(Pt pt) const noexcept { return pt - UpperLeft(); }
 
     /** Returns \a pt translated from screen- to client-coordinates. */
-    Pt ScreenToClient(const Pt& pt) const;
+    [[nodiscard]] Pt ScreenToClient(Pt pt) const noexcept { return pt - ClientUpperLeft(); }
 
     /** Returns true if screen-coordinate point \a pt falls within the
         window. */
-    virtual bool InWindow(const Pt& pt) const;
+    [[nodiscard]] virtual bool InWindow(Pt pt) const { return pt >= UpperLeft() && pt < LowerRight(); }
 
     /** Returns true if screen-coordinate point \a pt falls within the
         window's client area. */
-    virtual bool InClient(const Pt& pt) const;
+    [[nodiscard]] virtual bool InClient(Pt pt) const { return pt >= ClientUpperLeft() && pt < ClientLowerRight(); }
 
     /** Returns child list; the list is const, but the children may be
         manipulated. */
-    const std::list<std::shared_ptr<Wnd>>& Children() const;
+    [[nodiscard]] const auto& Children() const noexcept { return m_children; }
 
     /** Returns the window's parent (may be null). */
-    std::shared_ptr<Wnd> Parent() const;
+    [[nodiscard]] std::shared_ptr<Wnd> Parent() const noexcept;
 
     /** Returns true iff \a wnd is an ancestor (indirect parent) of this wnd. */
-    bool IsAncestorOf(const std::shared_ptr<Wnd>& wnd) const;
+    [[nodiscard]] bool IsAncestorOf(const std::shared_ptr<Wnd>& wnd) const noexcept;
 
     /** Returns the earliest ancestor window (may be null). */
-    std::shared_ptr<Wnd> RootParent() const;
+    [[nodiscard]] std::shared_ptr<Wnd> RootParent() const noexcept;
 
     /** Returns the layout for the window, if any. */
-    std::shared_ptr<Layout> GetLayout() const;
+    [[nodiscard]] std::shared_ptr<Layout> GetLayout() const noexcept;
 
     /** Returns the layout containing the window, if any. */
-    Layout* ContainingLayout() const;
+    [[nodiscard]] Layout* ContainingLayout() const noexcept;
 
     /** Returns the browse modes for the Wnd, including time cutoffs (in
         milliseconds), the BrowseInfoWnds to be displayed for each browse info
@@ -496,19 +474,19 @@ public:
         corresponding Wnd is shown superimposed over this Wnd and its
         children.  Set the first time cutoff to 0 for immediate browse info
         display. */
-    const std::vector<BrowseInfoMode>& BrowseModes() const;
+    [[nodiscard]] const auto& BrowseModes() const noexcept { return m_browse_modes; }
 
     /** Returns the text to display for browse info mode \a mode.  \throw
         std::out_of_range May throw std::out_of_range if \a mode is not a
         valid browse mode. */
-    const std::string& BrowseInfoText(std::size_t mode) const;
+    [[nodiscard]] const auto& BrowseInfoText(std::size_t mode) const { return m_browse_modes.at(mode).text; }
 
     /** Returns the currently-installed style factory if none exists, or the
         GUI-wide one otherwise. */
-    const std::shared_ptr<StyleFactory>& GetStyleFactory() const;
+    [[nodiscard]] const std::shared_ptr<StyleFactory>& GetStyleFactory() const;
 
     /** Returns the region under point \a pt. */
-    virtual WndRegion WindowRegion(const Pt& pt) const;
+    [[nodiscard]] virtual WndRegion WindowRegion(Pt pt) const;
 
     /** Adjusts \p ul and \p lr to correct for minsize and maxsize.*/
     void ClampRectWithMinAndMaxSize(Pt& ul, Pt& lr) const;
@@ -516,7 +494,7 @@ public:
     /** Sets the string key that defines the type of data that this Wnd
         represents in a drag-and-drop drag.  This should be set to the empty
         string when this Wnd cannot be used in drag-and-drop. */
-    void SetDragDropDataType(std::string data_type);
+    void SetDragDropDataType(std::string data_type) noexcept { m_drag_drop_data_type = std::move(data_type); }
     void SetDragDropDataType(std::string_view data_type) { SetDragDropDataType(std::string{data_type}); }
     void SetDragDropDataType(const char* data_type) { SetDragDropDataType(std::string{data_type}); }
 
@@ -525,7 +503,7 @@ public:
         associated drag-and-drop Wnds (see GUI::RegisterDragDropWnd()).  \a
         offset indicates the position of the mouse relative to \a wnd's
         UpperLeft(). */
-    virtual void StartingChildDragDrop(const Wnd* wnd, const Pt& offset);
+    virtual void StartingChildDragDrop(const Wnd* wnd, Pt offset) {}
 
     /** When the user drops Wnds onto this Wnd, a DragDropHere event is
         generated, which determines which of the dropped Wnds are acceptable
@@ -535,7 +513,7 @@ public:
 
         The shared_ptrs are passed by value to allow the compiler to move rvalues.
     */
-    virtual void AcceptDrops(const Pt& pt, std::vector<std::shared_ptr<Wnd>> wnds, Flags<ModKey> mod_keys);
+    virtual void AcceptDrops(Pt pt, std::vector<std::shared_ptr<Wnd>> wnds, Flags<ModKey> mod_keys);
 
     /** Handles the cancellation of the dragging of one or more child windows,
         whose dragging was established by the most recent call to
@@ -545,7 +523,7 @@ public:
         and ChildrenDraggedAway() are always called in that order, and are
         always called at the end of any drag-and-drop sequence performed on a
         child of this Wnd, whether the drag-and-drop is successful or not. */
-    virtual void CancellingChildDragDrop(const std::vector<const Wnd*>& wnds);
+    virtual void CancellingChildDragDrop(const std::vector<const Wnd*>& wnds) {}
 
     /** Handles the removal of one or more child windows that have been
         dropped onto another window which has accepted them as drops via
@@ -557,8 +535,9 @@ public:
     virtual void ChildrenDraggedAway(const std::vector<Wnd*>& wnds, const Wnd* destination);
 
     /** Sets a name for this Wnd.  This name is not used by GG in any way; it
-        only exists for user convenience. */
-    void SetName(std::string name);
+        only exists for user convenience. not noexcept because overrides might
+        need to allocate if duplicating \a name */
+    virtual void SetName(std::string name) { m_name = std::move(name); }
 
     /** Suppresses rendering of this window (and possibly its children) during
         render loop. */
@@ -571,30 +550,30 @@ public:
     /** Called during Run(), after a modal window is registered, this is the
         place that subclasses should put specialized modal window
         initialization, such as setting focus to child controls. */
-    virtual void ModalInit();
+    virtual void ModalInit() {}
 
     /** Sets the mode to use for child clipping. */
-    void SetChildClippingMode(ChildClippingMode mode);
+    void SetChildClippingMode(ChildClippingMode mode) noexcept { m_child_clipping_mode = mode; }
 
     /** Sets whether this Wnd should be considered a non-client-area child of
         its parent, for clipping purposes.  \see ChildClippingMode. */
-    void NonClientChild(bool b);
+    void NonClientChild(bool b) noexcept { m_non_client_child = b; }
 
-    void MoveTo(const Pt& pt);     ///< Moves upper-left corner of window to \a pt.
-    void OffsetMove(const Pt& pt); ///< Moves window by \a pt pixels.
+    void MoveTo(Pt pt);     ///< Moves upper-left corner of window to \a pt.
+    void OffsetMove(Pt pt); ///< Moves window by \a pt pixels.
 
     /** Resizes and/or moves window to new upper-left and lower right
         boundaries. */
-    virtual void SizeMove(const Pt& ul, const Pt& lr);
+    virtual void SizeMove(Pt ul, Pt lr);
 
     /** Resizes window without moving upper-left corner. */
-    void Resize(const Pt& sz);
+    void Resize(Pt sz);
 
     /** Sets the minimum allowable size of window \a pt. */
-    virtual void SetMinSize(const Pt& sz);
+    virtual void SetMinSize(Pt sz);
 
     /** Sets the maximum allowable size of window \a pt. */
-    virtual void SetMaxSize(const Pt& sz);
+    virtual void SetMaxSize(Pt sz);
 
     /** Places \a wnd in child ptr list, sets's child's \a m_parent member to
         \a this. This takes ownership of \p wnd. */
@@ -626,8 +605,7 @@ public:
     void DetachChildren();
 
     /** Adds \a wnd to the front of the event filtering chain. */
-    void InstallEventFilter(const std::shared_ptr<Wnd>& wnd);
-    void InstallEventFilter(std::shared_ptr<Wnd>&& wnd);
+    void InstallEventFilter(std::shared_ptr<Wnd> wnd);
 
     /** Removes \a wnd from the filter chain. */
     void RemoveEventFilter(const std::shared_ptr<Wnd>& wnd);
@@ -685,7 +663,7 @@ public:
     virtual void PreRender();
 
     /** Require that PreRender() be called to update layout before the next Render(). */
-    virtual void RequirePreRender();
+    virtual void RequirePreRender() noexcept { m_needs_prerender = true; }
 
     /** Draws this Wnd.  Note that Wnds being dragged for a drag-and-drop
         operation are rendered twice -- once in-place as normal, once in the
@@ -693,7 +671,7 @@ public:
         wish to render themselves differently in those two cases.  To
         determine which render is being performed, they can call
         GUI::GetGUI()->RenderingDragDropWnds(). */
-    virtual void Render();
+    virtual void Render() {}
 
     /** This executes a modal window and gives it its modality.  For non-modal
         windows, this function is a no-op.  It returns false if the window is
@@ -701,7 +679,9 @@ public:
     virtual bool Run();
 
     /** Ends the current execution of Run(), if any. */
-    virtual void EndRun();
+    virtual void EndRun() { m_modal_done.store(true); }
+
+    [[nodiscard]] bool ModalDone() const noexcept { return m_modal_done.load(); }
 
     /** Sets the time cutoff (in milliseconds) for a browse info mode.  If \a
         mode is not less than the current number of modes, extra modes will be
@@ -734,27 +714,28 @@ public:
         corresponding Wnd is shown superimposed over this Wnd and its
         children.  Set the first time cutoff to 0 for immediate browse info
         display. */
-    void SetBrowseModes(std::vector<BrowseInfoMode> modes);
+    void SetBrowseModes(std::vector<BrowseInfoMode> modes) noexcept { m_browse_modes = std::move(modes); }
 
     /** Sets the currently-installed style factory. */
-    void SetStyleFactory(std::shared_ptr<StyleFactory> factory);
+    void SetStyleFactory(std::shared_ptr<StyleFactory> factory) noexcept { m_style_factory = std::move(factory); }
 
     /** Returns the single time to place in the browse modes during Wnd
         construction. */
-    static unsigned int DefaultBrowseTime();
+    static unsigned int DefaultBrowseTime() noexcept { return s_default_browse_time; }
 
     /** Sets the single time to place in the browse modes during Wnd
         construction. */
-    static void SetDefaultBrowseTime(unsigned int time);
+    static void SetDefaultBrowseTime(unsigned int time) noexcept { s_default_browse_time = time; }
 
     /** Returns the single BrowseInfoWnd to place in the browse modes during
         Wnd construction.  This returns a TextBoxBrowseInfoWnd with a default
         parameterization. */
-    static const std::shared_ptr<BrowseInfoWnd>& DefaultBrowseInfoWnd();
+    static const auto& DefaultBrowseInfoWnd() noexcept { return s_default_browse_info_wnd; }
 
     /** Sets the single BrowseInfoWnd to place in the browse modes during Wnd
         construction. */
-    static void SetDefaultBrowseInfoWnd(std::shared_ptr<BrowseInfoWnd> browse_info_wnd);
+    static void SetDefaultBrowseInfoWnd(std::shared_ptr<BrowseInfoWnd> browse_info_wnd) noexcept
+    { s_default_browse_info_wnd = std::move(browse_info_wnd); }
 
     /** The base class for Wnd exceptions. */
     GG_ABSTRACT_EXCEPTION(Exception);
@@ -769,12 +750,12 @@ protected:
         indicating whether the Wnd in the \a first member would be accepted if
         dropped on this Wnd at \a pt. */
     virtual void DropsAcceptable(DropsAcceptableIter first, DropsAcceptableIter last,
-                                 const Pt& pt, Flags<ModKey> mod_keys) const;
+                                 Pt, Flags<ModKey> mod_keys) const;
 
     /** The states a Wnd may be in, with respect to drag-and-drop operations.
         Wnds may wish to consider the current state when rendering to provide
         visual feedback to the user. */
-    enum class DragDropRenderingState : int {
+    enum class DragDropRenderingState : uint8_t {
         /** No drag-and-drop is taking place at all with this Wnd. */
         NOT_DRAGGED,
 
@@ -791,7 +772,7 @@ protected:
         DRAGGED_OVER_ACCEPTING_DROP_TARGET
     };
 
-    Wnd();
+    Wnd() = default;
 
     /** Ctor that allows a size and position to be specified, as well as
         creation flags. */
@@ -807,7 +788,7 @@ protected:
         \note If this Wnd was created with the REPEAT_BUTTON_DOWN flag, this
         method may be called multiple times during a single button
         press-release cycle.  \see GG::GUI */
-    virtual void LButtonDown(const Pt& pt, Flags<ModKey> mod_keys);
+    virtual void LButtonDown(Pt, Flags<ModKey> mod_keys);
 
     /** Respond to left button drag msg (even if this Wnd is not dragable).
         Drag messages are only sent to the window over which the button was
@@ -815,19 +796,19 @@ protected:
         any input device button is down and the cursor is moving while over
         the window.  The window will also receive drag messages when the mouse
         is being dragged outside the window's area. */
-    virtual void LDrag(const Pt& pt, const Pt& move, Flags<ModKey> mod_keys);
+    virtual void LDrag(Pt pt, Pt move, Flags<ModKey> mod_keys);
 
     /** Respond to release of left mouse button outside this Wnd, if it was
         originally depressed over this Wnd.  A Wnd will receive an LButtonUp()
         message whenever a drag that started over its area ends, even if the
         cursor is not currently over the window when this happens. */
-    virtual void LButtonUp(const Pt& pt, Flags<ModKey> mod_keys);
+    virtual void LButtonUp(Pt pt, Flags<ModKey> mod_keys);
 
     /** Respond to release of left mouse button over this Wnd, if it was also
         originally depressed over this Wnd.  A Wnd will receive an LButtonUp()
         message whenever a drag that started over its area ends over its area
         as well. */
-    virtual void LClick(const Pt& pt, Flags<ModKey> mod_keys);
+    virtual void LClick(Pt pt, Flags<ModKey> mod_keys);
 
     /** Respond to second left click in window within the time limit.  A
         window will receive an LDoubleClick() message instead of an
@@ -836,67 +817,67 @@ protected:
         interval.  Note that this means a double click is always preceded by a
         click.  For a double click to occur, no other window may have received
         a *Click() or *ButtonDown() message in during the interval. */
-    virtual void LDoubleClick(const Pt& pt, Flags<ModKey> mod_keys);
+    virtual void LDoubleClick(Pt, Flags<ModKey> mod_keys);
 
     /** Respond to middle button down msg.  \see LButtonDown() */
-    virtual void MButtonDown(const Pt& pt, Flags<ModKey> mod_keys);
+    virtual void MButtonDown(Pt, Flags<ModKey> mod_keys);
 
     /** Respond to middle button drag msg (even if this Wnd is not dragable).
         \see LDrag() */
-    virtual void MDrag(const Pt& pt, const Pt& move, Flags<ModKey> mod_keys);
+    virtual void MDrag(Pt, Pt move, Flags<ModKey> mod_keys);
 
     /** Respond to release of middle mouse button outside this Wnd, if it was
         originally depressed over this Wnd.  \see LButtonUp()  */
-    virtual void MButtonUp(const Pt& pt, Flags<ModKey> mod_keys);
+    virtual void MButtonUp(Pt, Flags<ModKey> mod_keys);
 
     /** Respond to release of middle mouse button over this Wnd, if it was
         also originally depressed over this Wnd.  \see LClick()  */
-    virtual void MClick(const Pt& pt, Flags<ModKey> mod_keys);
+    virtual void MClick(Pt, Flags<ModKey> mod_keys);
 
     /** Respond to second middle click in window within the time limit.  \see
         LDoubleClick() */
-    virtual void MDoubleClick(const Pt& pt, Flags<ModKey> mod_keys);
+    virtual void MDoubleClick(Pt, Flags<ModKey> mod_keys);
 
     /** Respond to right button down msg.  \see LButtonDown() */
-    virtual void RButtonDown(const Pt& pt, Flags<ModKey> mod_keys);
+    virtual void RButtonDown(Pt, Flags<ModKey> mod_keys);
 
     /** Respond to right button drag msg (even if this Wnd is not dragable).
         \see LDrag() */
-    virtual void RDrag(const Pt& pt, const Pt& move, Flags<ModKey> mod_keys);
+    virtual void RDrag(Pt, Pt move, Flags<ModKey> mod_keys);
 
     /** Respond to release of right mouse button outside this Wnd, if it was
         originally depressed over this Wnd.  \see LButtonUp()  */
-    virtual void RButtonUp(const Pt& pt, Flags<ModKey> mod_keys);
+    virtual void RButtonUp(Pt pt, Flags<ModKey> mod_keys);
 
     /** Respond to release of right mouse button over this Wnd, if it was also
         originally depressed over this Wnd.  \see LClick()  */
-    virtual void RClick(const Pt& pt, Flags<ModKey> mod_keys);
+    virtual void RClick(Pt pt, Flags<ModKey> mod_keys);
 
     /** Respond to second right click in window within the time limit.  \see
         LDoubleClick() */
-    virtual void RDoubleClick(const Pt& pt, Flags<ModKey> mod_keys);
+    virtual void RDoubleClick(Pt, Flags<ModKey> mod_keys);
 
     /** Respond to cursor entering window's coords. */
-    virtual void MouseEnter(const Pt& pt, Flags<ModKey> mod_keys);
+    virtual void MouseEnter(Pt, Flags<ModKey> mod_keys);
 
     /** Respond to cursor moving about within the Wnd, or to cursor lingering
         within the Wnd for a long period of time.  A MouseHere() message will
         not be generated the first time the cursor enters the window's area.
         In that case, a MouseEnter() message is generated. */
-    virtual void MouseHere(const Pt& pt, Flags<ModKey> mod_keys);
+    virtual void MouseHere(Pt pt, Flags<ModKey> mod_keys);
 
     /** Respond to cursor leaving window's coords. */
     virtual void MouseLeave();
 
     /** Respond to movement of the mouse wheel (move > 0 indicates the wheel
         is rolled up, < 0 indicates down) */
-    virtual void MouseWheel(const Pt& pt, int move, Flags<ModKey> mod_keys);
+    virtual void MouseWheel(Pt pt, int move, Flags<ModKey> mod_keys);
 
     /** Respond to the cursor entering the Wnd's coords while dragging
         drag-and-drop Wnds.  \a drop_wnds_acceptable will have the bools
         set to true or valse to indicate whether this Wnd can accept the
         dragged wnds as a drop. */
-    virtual void DragDropEnter(const Pt& pt, std::map<const Wnd*, bool>& drop_wnds_acceptable,
+    virtual void DragDropEnter(Pt pt, std::map<const Wnd*, bool>& drop_wnds_acceptable,
                                Flags<ModKey> mod_keys);
 
     /** Respond to cursor moving about within the Wnd, or to cursor lingering
@@ -906,12 +887,12 @@ protected:
         message is generated.  \a drop_wnds_acceptable will have the bools
         set to true or valse to indicate whether this Wnd can accept the
         dragged wnds as a drop. */
-    virtual void DragDropHere(const Pt& pt, std::map<const Wnd*, bool>& drop_wnds_acceptable,
+    virtual void DragDropHere(Pt pt, std::map<const Wnd*, bool>& drop_wnds_acceptable,
                               Flags<ModKey> mod_keys);
 
     /** Polls this Wnd about whether the Wnds in \a drop_wnds_acceptable will
         be accpeted by this Wnd by calling DropsAcceptable(...) */
-    virtual void CheckDrops(const Pt& pt, std::map<const Wnd*, bool>& drop_wnds_acceptable,
+    virtual void CheckDrops(Pt, std::map<const Wnd*, bool>& drop_wnds_acceptable,
                             Flags<ModKey> mod_keys);
 
     /** Respond to cursor leaving the Wnd's bounds while dragging
@@ -941,18 +922,18 @@ protected:
     virtual void TextInput(const std::string& text);
 
     /** Respond to this window gaining the input focus. */
-    virtual void GainingFocus();
+    virtual void GainingFocus() {}
 
     /** Respond to this window losing the input focus. */
-    virtual void LosingFocus();
+    virtual void LosingFocus() {}
 
     /** Respond to Timer \a timer firing at time \a ticks. */
-    virtual void TimerFiring(unsigned int ticks, Timer* timer);
+    virtual void TimerFiring(unsigned int ticks, Timer* timer) {}
 
     /** Handles an WndEvent destined for Wnd \a w, but which this Wnd is
         allowed to handle first.  Returns true if this filter processed the
         message. */
-    virtual bool EventFilter(Wnd* w, const WndEvent& event);
+    virtual bool EventFilter(Wnd* w, const WndEvent& event) { return false; }
 
     /** Handles all messages, and calls appropriate function (LButtonDown(),
         LDrag(), etc.). */
@@ -979,10 +960,10 @@ protected:
         GetChildClippingMode() is ClipToClientAndWindowSeparately. */
     void EndNonclientClipping();
 
-    virtual void SetParent(std::shared_ptr<Wnd> wnd);
+    virtual void SetParent(std::shared_ptr<Wnd> wnd) { m_parent = std::move(wnd); }
 
     /** Modal Wnd's set this to true to stop modal loop. */
-    bool m_done = false;
+    std::atomic<bool> m_modal_done{false};
 
 private:
     void ValidateFlags();              ///< Sanity-checks the window creation flags
@@ -997,18 +978,18 @@ protected:
 
 private:
     /// m_parent may be expired or null if there is no parent.  m_parent will reset itself if expired.
-    mutable std::weak_ptr<Wnd>      m_parent;
-    std::string                     m_name;                     ///< A user-significant name for this Wnd
-    std::list<std::shared_ptr<Wnd>> m_children;                 ///< List of ptrs to child windows kept in order of decreasing area
-    bool                            m_visible = true;
-    bool                            m_needs_prerender = false;  ///< Indicates if Wnd needs a PreRender();
-    std::string                     m_drag_drop_data_type;      ///< The type of drag-and-drop data this Wnd represents, if any. If empty/blank, indicates that this Wnd cannot be drag-dropped.
-    ChildClippingMode               m_child_clipping_mode;
-    bool                            m_non_client_child = false;
-    Pt                              m_upperleft;                ///< Upper left point of window
-    Pt                              m_lowerright;               ///< Lower right point of window
-    Pt                              m_min_size;                 ///< Minimum window size Pt(0, 0) (= none) by default
-    Pt                              m_max_size;                 ///< Maximum window size Pt(1 << 30, 1 << 30) (= none) by default
+    mutable std::weak_ptr<Wnd>        m_parent;
+    std::string                       m_name;                     ///< A user-significant name for this Wnd
+    std::vector<std::shared_ptr<Wnd>> m_children;                 ///< List of ptrs to child windows kept in order of decreasing area
+    std::string                       m_drag_drop_data_type;      ///< The type of drag-and-drop data this Wnd represents, if any. If empty/blank, indicates that this Wnd cannot be drag-dropped.
+    ChildClippingMode                 m_child_clipping_mode = ChildClippingMode::DontClip;
+    Pt                                m_upperleft{X0, Y0};            ///< Upper left point of window
+    Pt                                m_lowerright{X1, Y1};           ///< Lower right point of window
+    Pt                                m_min_size{X0, Y0};             ///< Minimum window size
+    Pt                                m_max_size{X{1<<15},Y{1<<15}};  ///< Maximum window size
+    bool                              m_non_client_child = false;
+    bool                              m_visible = true;
+    bool                              m_needs_prerender = false;  ///< Indicates if Wnd needs a PreRender();
 
     /** The Wnds that are filtering this Wnd's events. These are in reverse
         order: top of the stack is back(). */
@@ -1018,7 +999,7 @@ private:
                                     m_filtering;                ///< The Wnds in whose filter chains this Wnd lies
     mutable std::weak_ptr<Layout>   m_layout;                   ///< The layout for this Wnd, if any
     mutable std::weak_ptr<Layout>   m_containing_layout;        ///< The layout that contains this Wnd, if any
-    std::vector<BrowseInfoMode>     m_browse_modes;             ///< The browse info modes for this window
+    std::vector<BrowseInfoMode>     m_browse_modes{{s_default_browse_time, s_default_browse_info_wnd, ""}}; ///< The browse info modes for this window
 
     /** The style factory to use when creating dialogs or child controls. */
     std::shared_ptr<StyleFactory>   m_style_factory;

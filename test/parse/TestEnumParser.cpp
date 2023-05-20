@@ -23,19 +23,16 @@ namespace {
 }
 
 struct EnumParserFixture {
-    template <typename Grammar>
-    Grammar& make_grammar(
-        const parse::lexer& lexer,
-        typename std::enable_if_t<std::is_constructible_v<Grammar, const parse::lexer&>>* = nullptr)
+    template <typename Grammar> requires (std::is_constructible_v<Grammar, const parse::lexer&>)
+    Grammar& make_grammar(const parse::lexer& lexer)
     {
         static Grammar grammar(lexer);
         return grammar;
     }
 
     template <typename Grammar>
-    Grammar& make_grammar(
-        const parse::lexer& lexer,
-        typename std::enable_if_t<std::is_constructible_v<Grammar, const parse::lexer&, parse::detail::Labeller&>>* = nullptr)
+        requires (std::is_constructible_v<Grammar, const parse::lexer&, parse::detail::Labeller&>)
+    Grammar& make_grammar(const parse::lexer& lexer)
     {
         parse::detail::Labeller label;
         static Grammar grammar(lexer, label);
@@ -43,10 +40,10 @@ struct EnumParserFixture {
     }
 
     template <typename Grammar>
-    Grammar& make_grammar(
-        const parse::lexer& lexer,
-        typename std::enable_if_t<std::is_constructible_v<Grammar, const parse::lexer&, parse::detail::Labeller&,
-                                                          const parse::detail::condition_parser_grammar&>>* = nullptr)
+        requires (std::is_constructible_v<Grammar,
+                                          const parse::lexer&, parse::detail::Labeller&,
+                                          const parse::detail::condition_parser_grammar&>)
+    Grammar& make_grammar(const parse::lexer& lexer)
     {
         parse::detail::Labeller label;
         parse::conditions_parser_grammar cond(lexer, label);
@@ -349,14 +346,12 @@ BOOST_AUTO_TEST_CASE(UniverseObjectTypeParser)
 {
     // Literal is number of tests, not number of enums.
     // XXX: OBJ_FIGHTER has no token, so no test, +1
-    BOOST_REQUIRE_MESSAGE(int(UniverseObjectType::NUM_OBJ_TYPES) == 8 + 1, "Untested enumeration value.");
+    BOOST_REQUIRE_MESSAGE(int(UniverseObjectType::NUM_OBJ_TYPES) == 6 + 1, "Untested enumeration value.");
 
     CHECK_ENUM_EXPR_AND_RESULT("Building", UniverseObjectType::OBJ_BUILDING, UniverseObjectType, parse::detail::universe_object_type_parser_rules);
     CHECK_ENUM_EXPR_AND_RESULT("Ship", UniverseObjectType::OBJ_SHIP, UniverseObjectType, parse::detail::universe_object_type_parser_rules);
     CHECK_ENUM_EXPR_AND_RESULT("Fleet ", UniverseObjectType::OBJ_FLEET , UniverseObjectType, parse::detail::universe_object_type_parser_rules);
     CHECK_ENUM_EXPR_AND_RESULT("Planet", UniverseObjectType::OBJ_PLANET, UniverseObjectType, parse::detail::universe_object_type_parser_rules);
-    CHECK_ENUM_EXPR_AND_RESULT("PopulationCenter", UniverseObjectType::OBJ_POP_CENTER, UniverseObjectType, parse::detail::universe_object_type_parser_rules);
-    CHECK_ENUM_EXPR_AND_RESULT("ProductionCenter", UniverseObjectType::OBJ_PROD_CENTER, UniverseObjectType, parse::detail::universe_object_type_parser_rules);
     CHECK_ENUM_EXPR_AND_RESULT("System", UniverseObjectType::OBJ_SYSTEM, UniverseObjectType, parse::detail::universe_object_type_parser_rules);
     CHECK_ENUM_EXPR_AND_RESULT("Field", UniverseObjectType::OBJ_FIELD, UniverseObjectType, parse::detail::universe_object_type_parser_rules);
     CHECK_FAILED_ENUM_EXPR(UniverseObjectType, parse::detail::universe_object_type_parser_rules);

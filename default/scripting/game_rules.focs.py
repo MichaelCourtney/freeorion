@@ -23,7 +23,7 @@ GameRule(
     description="RULE_TECH_COST_FACTOR_DESC",
     category="BALANCE",
     type=float,
-    default=2.0,
+    default=1.0,
     min=0.1,
     max=10.0,
 )
@@ -146,11 +146,131 @@ GameRule(
 GameRule(
     name="RULE_BASELINE_PLANET_STABILITY",
     description="RULE_BASELINE_PLANET_STABILITY_DESC",
-    category="BALANCE",
-    type=float,
-    default=0.0,
-    min=-20.0,
-    max=20.0,
+    category="BALANCE_STABILITY",
+    type=int,
+    default=0,
+    min=-20,
+    max=20,
+)
+
+GameRule(
+    name="RULE_PROTECTION_FOCUS_STABILITY",
+    description="RULE_PROTECTION_FOCUS_STABILITY_DESC",
+    category="BALANCE_STABILITY",
+    type=int,
+    default=15,
+    min=-20,
+    max=20,
+)
+
+GameRule(
+    name="RULE_IMPERIAL_PALACE_INFLUENCE",
+    description="RULE_IMPERIAL_PALACE_INFLUENCE_DESC",
+    category="BALANCE_STABILITY",
+    type=int,
+    default=3,
+    min=-20,
+    max=20,
+)
+
+GameRule(
+    name="RULE_GOOD_ENVIRONMENT_STABILITY",
+    description="RULE_GOOD_ENVIRONMENT_STABILITY_DESC",
+    category="BALANCE_STABILITY",
+    type=int,
+    default=2,
+    min=-20,
+    max=20,
+)
+
+GameRule(
+    name="RULE_ADEQUATE_ENVIRONMENT_STABILITY",
+    description="RULE_ADEQUATE_ENVIRONMENT_STABILITY_DESC",
+    category="BALANCE_STABILITY",
+    type=int,
+    default=1,
+    min=-20,
+    max=20,
+)
+
+GameRule(
+    name="RULE_POOR_ENVIRONMENT_STABILITY",
+    description="RULE_POOR_ENVIRONMENT_STABILITY_DESC",
+    category="BALANCE_STABILITY",
+    type=int,
+    default=0,
+    min=-20,
+    max=20,
+)
+
+GameRule(
+    name="RULE_HOSTILE_ENVIRONMENT_STABILITY",
+    description="RULE_HOSTILE_ENVIRONMENT_STABILITY_DESC",
+    category="BALANCE_STABILITY",
+    type=int,
+    default=-1,
+    min=-20,
+    max=20,
+)
+
+GameRule(
+    name="RULE_TINY_SIZE_STABILITY",
+    description="RULE_TINY_SIZE_STABILITY_DESC",
+    category="BALANCE_STABILITY",
+    type=int,
+    default=2,
+    min=-20,
+    max=20,
+)
+
+GameRule(
+    name="RULE_SMALL_SIZE_STABILITY",
+    description="RULE_SMALL_SIZE_STABILITY_DESC",
+    category="BALANCE_STABILITY",
+    type=int,
+    default=1,
+    min=-20,
+    max=20,
+)
+
+GameRule(
+    name="RULE_MEDIUM_SIZE_STABILITY",
+    description="RULE_MEDIUM_SIZE_STABILITY_DESC",
+    category="BALANCE_STABILITY",
+    type=int,
+    default=0,
+    min=-20,
+    max=20,
+)
+
+GameRule(
+    name="RULE_LARGE_SIZE_STABILITY",
+    description="RULE_LARGE_SIZE_STABILITY_DESC",
+    category="BALANCE_STABILITY",
+    type=int,
+    default=-1,
+    min=-20,
+    max=20,
+)
+
+GameRule(
+    name="RULE_HUGE_SIZE_STABILITY",
+    description="RULE_HUGE_SIZE_STABILITY_DESC",
+    category="BALANCE_STABILITY",
+    type=int,
+    default=-2,
+    min=-20,
+    max=20,
+)
+
+GameRule(
+    name="RULE_GAS_GIANT_SIZE_STABILITY",
+    description="RULE_GAS_GIANT_SIZE_STABILITY_DESC",
+    category="BALANCE_STABILITY",
+    type=int,
+    default=0,
+    min=-20,
+    max=20,
 )
 
 GameRule(
@@ -177,4 +297,22 @@ GameRule(
     default=3,
     min=1,
     max=20,
+)
+
+GameRule(
+    name="RULE_ALLOW_REPEATED_SPECIES",
+    description="RULE_ALLOW_REPEATED_SPECIES_DESC",
+    category="CONTENT",
+    type=bool,
+    default=False,
+)
+
+GameRule(
+    name="RULE_MINIMUM_MONSTER_DISTANCE_CAPITAL",
+    description="RULE_MINIMUM_MONSTER_DISTANCE_CAPITAL_DESC",
+    category="BALANCE",
+    type=int,
+    default=3,
+    min=1,
+    max=10,
 )

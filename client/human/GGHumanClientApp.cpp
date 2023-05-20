@@ -43,7 +43,6 @@
 
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/algorithm/string/trim.hpp>
-#include <boost/lexical_cast.hpp>
 #include <boost/filesystem/operations.hpp>
 #include <boost/filesystem/fstream.hpp>
 #include <boost/format.hpp>
@@ -121,19 +120,19 @@ namespace {
     /** These options can only be validated after the graphics system (SDL) is initialized,
         so that display size can be detected
      */
-    constexpr int DEFAULT_WIDTH = 1024;
-    constexpr int DEFAULT_HEIGHT = 768;
+    constexpr int DEFAULT_WIDTH = 1280;
+    constexpr int DEFAULT_HEIGHT = 800;
     constexpr int DEFAULT_LEFT = static_cast<int>(SDL_WINDOWPOS_CENTERED);
     constexpr int DEFAULT_TOP = 50;
     constexpr int MIN_WIDTH = 800;
     constexpr int MIN_HEIGHT = 600;
 
     /** Sets the default and current values for the string option @p option_name to @p option_value if initially empty */
-    void SetEmptyStringDefaultOption(const std::string& option_name, const std::string& option_value) {
+    void SetEmptyStringDefaultOption(std::string_view option_name, std::string option_value) {
         OptionsDB& db = GetOptionsDB();
         if (db.Get<std::string>(option_name).empty()) {
-            db.SetDefault<std::string>(option_name, option_value);
-            db.Set(option_name, option_value);
+            db.SetDefault(option_name, option_value);
+            db.Set(option_name, std::move(option_value));
         }
     }
 
@@ -145,8 +144,13 @@ namespace {
         SetEmptyStringDefaultOption("setup.multiplayer.player.name", player_name);
     }
 
-    std::string GetGLVersionString()
-    { return boost::lexical_cast<std::string>(glGetString(GL_VERSION)); }
+    std::string GetGLVersionString() {
+        std::array<std::string::value_type, 64> buff{};
+        auto* v = glGetString(GL_VERSION);
+        for (auto buff_it = buff.begin(); v && *v && buff_it != buff.end();)
+            *buff_it++ = *v++;
+        return buff.data();
+    }
 
     static float stored_gl_version = -1.0f;  // to be replaced when gl version first checked
 
@@ -211,7 +215,8 @@ std::string GGHumanClientApp::EncodeServerAddressOption(const std::string& serve
 GGHumanClientApp::GGHumanClientApp(int width, int height, bool calculate_fps, std::string name,
                                    int x, int y, bool fullscreen, bool fake_mode_change) :
     ClientApp(),
-    SDLGUI(width, height, calculate_fps, std::move(name), x, y, fullscreen, fake_mode_change)
+    SDLGUI(width, height, calculate_fps, std::move(name), x, y, fullscreen, fake_mode_change),
+    m_fsm(*this)
 {
 #ifdef ENABLE_CRASH_BACKTRACE
     signal(SIGSEGV, SigHandler);
@@ -219,7 +224,6 @@ GGHumanClientApp::GGHumanClientApp(int width, int height, bool calculate_fps, st
 #ifdef FREEORION_MACOSX
     SDL_SetHint(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK, "1");
 #endif
-    m_fsm = std::make_unique<HumanClientFSM>(*this);
 
     // Force the log file if requested.
     if (GetOptionsDB().Get<std::string>("log-file").empty()) {
@@ -350,7 +354,7 @@ GGHumanClientApp::GGHumanClientApp(int width, int height, bool calculate_fps, st
     // Register LinkText tags with GG::Font
     RegisterLinkTags();
 
-    m_fsm->initiate();
+    m_fsm.initiate();
 
     // Start parsing content
     std::promise<void> barrier;
@@ -396,11 +400,11 @@ bool GGHumanClientApp::CanSaveNow() const {
         return false;
 
     // can't save while AIs are playing their turns...
-    for (const auto& entry : Empires()) {
-        if (GetEmpireClientType(entry.first) != Networking::ClientType::CLIENT_TYPE_AI_PLAYER)
+    for (const auto& [id, empire] : m_empires) {
+        if (GetEmpireClientType(id) != Networking::ClientType::CLIENT_TYPE_AI_PLAYER)
             continue;   // only care about AIs
 
-        if (!entry.second->Ready()) {
+        if (!empire->Ready()) {
             return false;
         }
     }
@@ -408,7 +412,7 @@ bool GGHumanClientApp::CanSaveNow() const {
     return true;
 }
 
-void GGHumanClientApp::SetSinglePlayerGame(bool sp/* = true*/)
+void GGHumanClientApp::SetSinglePlayerGame(bool sp)
 { m_single_player_game = sp; }
 
 #ifdef FREEORION_MACOSX
@@ -479,7 +483,7 @@ void GGHumanClientApp::StartServer() {
         args.push_back("--skip-checksum");
     }
     DebugLogger() << "Launching server process with args: ";
-    for (auto arg : args)
+    for (const auto& arg : args)
         DebugLogger() << arg;
     m_server_process = Process(SERVER_CLIENT_EXE, args);
     DebugLogger() << "... finished launching server process.";
@@ -500,7 +504,7 @@ void GGHumanClientApp::NewSinglePlayerGame(bool quickstart) {
         m_single_player_game = true;
         try {
             StartServer();
-        } catch (const LocalServerAlreadyRunningException& err) {
+        } catch (const LocalServerAlreadyRunningException&) {
             ClientUI::MessageBox(UserString("LOCAL_SERVER_ALREADY_RUNNING_ERROR"), true);
             return;
         } catch (const std::runtime_error& err) {
@@ -549,12 +553,12 @@ void GGHumanClientApp::NewSinglePlayerGame(bool quickstart) {
     setup_data.SetSeed(GetOptionsDB().Get<std::string>("setup.seed"));
     setup_data.size =             GetOptionsDB().Get<int>("setup.star.count");
     setup_data.shape =            GetOptionsDB().Get<Shape>("setup.galaxy.shape");
-    setup_data.age =              GetOptionsDB().Get<GalaxySetupOption>("setup.galaxy.age");
-    setup_data.starlane_freq =    GetOptionsDB().Get<GalaxySetupOption>("setup.starlane.frequency");
-    setup_data.planet_density =   GetOptionsDB().Get<GalaxySetupOption>("setup.planet.density");
-    setup_data.specials_freq =    GetOptionsDB().Get<GalaxySetupOption>("setup.specials.frequency");
-    setup_data.monster_freq =     GetOptionsDB().Get<GalaxySetupOption>("setup.monster.frequency");
-    setup_data.native_freq =      GetOptionsDB().Get<GalaxySetupOption>("setup.native.frequency");
+    setup_data.age =              GetOptionsDB().Get<GalaxySetupOptionGeneric>("setup.galaxy.age");
+    setup_data.starlane_freq =    GetOptionsDB().Get<GalaxySetupOptionGeneric>("setup.starlane.frequency");
+    setup_data.planet_density =   GetOptionsDB().Get<GalaxySetupOptionGeneric>("setup.planet.density");
+    setup_data.specials_freq =    GetOptionsDB().Get<GalaxySetupOptionGeneric>("setup.specials.frequency");
+    setup_data.monster_freq =     GetOptionsDB().Get<GalaxySetupOptionMonsterFreq>("setup.monster.frequency");
+    setup_data.native_freq =      GetOptionsDB().Get<GalaxySetupOptionGeneric>("setup.native.frequency");
     setup_data.ai_aggr =          GetOptionsDB().Get<Aggression>("setup.ai.aggression");
     setup_data.game_rules =       game_rules;
 
@@ -575,16 +579,16 @@ void GGHumanClientApp::NewSinglePlayerGame(bool quickstart) {
     if (colour_index >= 0 && colour_index < static_cast<int>(empire_colours.size()))
         human_player_setup_data.empire_color = empire_colours[colour_index];
     else
-        human_player_setup_data.empire_color = {{GG::CLR_GREEN.r, GG::CLR_GREEN.g, GG::CLR_GREEN.b, GG::CLR_GREEN.a}};
+        human_player_setup_data.empire_color = GG::CLR_GREEN.RGBA();
 
     human_player_setup_data.starting_species_name = GetOptionsDB().Get<std::string>("setup.initial.species");
     if (human_player_setup_data.starting_species_name == "1")
         human_player_setup_data.starting_species_name = "SP_HUMAN";   // kludge / bug workaround for bug with options storage and retreival.  Empty-string options are stored, but read in as "true" boolean, and converted to string equal to "1"
 
+    const SpeciesManager& sm = this->GetSpeciesManager();
     if (human_player_setup_data.starting_species_name != "RANDOM" &&
-        !GetSpecies(human_player_setup_data.starting_species_name))
+        !sm.GetSpecies(human_player_setup_data.starting_species_name))
     {
-        const SpeciesManager& sm = GetSpeciesManager();
         if (sm.NumPlayableSpecies() < 1)
             human_player_setup_data.starting_species_name.clear();
         else
@@ -595,7 +599,7 @@ void GGHumanClientApp::NewSinglePlayerGame(bool quickstart) {
     human_player_setup_data.client_type = Networking::ClientType::CLIENT_TYPE_HUMAN_PLAYER;
 
     // add to setup data players
-    setup_data.players.push_back(human_player_setup_data);
+    setup_data.players.push_back(std::move(human_player_setup_data));
 
 
     // AI player setup data.  One entry for each requested AI
@@ -614,8 +618,8 @@ void GGHumanClientApp::NewSinglePlayerGame(bool quickstart) {
 
 
     TraceLogger() << "Sending host SP setup message";
-    m_networking->SendMessage(HostSPGameMessage(setup_data));
-    m_fsm->process_event(HostSPGameRequested());
+    m_networking->SendMessage(HostSPGameMessage(setup_data, DependencyVersions()));
+    m_fsm.process_event(HostSPGameRequested());
     TraceLogger() << "GGHumanClientApp::NewSinglePlayerGame done";
 }
 
@@ -641,7 +645,7 @@ void GGHumanClientApp::MultiPlayerGame() {
             try {
                 StartServer();
                 FreeServer();
-            } catch (const LocalServerAlreadyRunningException& err) {
+            } catch (const LocalServerAlreadyRunningException&) {
                 ClientUI::MessageBox(UserString("LOCAL_SERVER_ALREADY_RUNNING_ERROR"), true);
                 return;
             } catch (const std::runtime_error& err) {
@@ -663,20 +667,21 @@ void GGHumanClientApp::MultiPlayerGame() {
     }
 
     if (server_connect_wnd->GetResult().server_dest == "HOST GAME SELECTED") {
-        m_networking->SendMessage(HostMPGameMessage(server_connect_wnd->GetResult().player_name));
-        m_fsm->process_event(HostMPGameRequested());
+        m_networking->SendMessage(HostMPGameMessage(server_connect_wnd->GetResult().player_name, DependencyVersions()));
+        m_fsm.process_event(HostMPGameRequested());
     } else {
         boost::uuids::uuid cookie = boost::uuids::nil_uuid();
         try {
-            std::string cookie_option = EncodeServerAddressOption(server_dest);
+            const std::string cookie_option = EncodeServerAddressOption(server_dest);
             if (!GetOptionsDB().OptionExists(cookie_option + ".cookie"))
                 GetOptionsDB().Add<std::string>(cookie_option + ".cookie", "OPTIONS_DB_SERVER_COOKIE", boost::uuids::to_string(cookie));
             if (!GetOptionsDB().OptionExists(cookie_option + ".address"))
                 GetOptionsDB().Add<std::string>(cookie_option + ".address", "OPTIONS_DB_SERVER_COOKIE", "");
             GetOptionsDB().Set(cookie_option + ".address", server_dest);
-            std::string cookie_str = GetOptionsDB().Get<std::string>(cookie_option + ".cookie");
-            boost::uuids::string_generator gen;
+            const std::string cookie_str = GetOptionsDB().Get<std::string>(cookie_option + ".cookie");
+            static constexpr boost::uuids::string_generator gen{};
             cookie = gen(cookie_str);
+
         } catch(const std::exception& err) {
             WarnLogger() << "Cann't get cookie for server " << server_dest << ". Get error message"
                          << err.what();
@@ -685,16 +690,17 @@ void GGHumanClientApp::MultiPlayerGame() {
 
         m_networking->SendMessage(JoinGameMessage(server_connect_wnd->GetResult().player_name,
                                                   server_connect_wnd->GetResult().type,
+                                                  DependencyVersions(),
                                                   cookie));
-        m_fsm->process_event(JoinMPGameRequested());
+        m_fsm.process_event(JoinMPGameRequested());
     }
 }
 
 void GGHumanClientApp::StartMultiPlayerGameFromLobby()
-{ m_fsm->process_event(StartMPGameClicked()); }
+{ m_fsm.process_event(StartMPGameClicked()); }
 
 void GGHumanClientApp::CancelMultiplayerGameFromLobby()
-{ m_fsm->process_event(CancelMPGameClicked()); }
+{ m_fsm.process_event(CancelMPGameClicked()); }
 
 void GGHumanClientApp::SaveGame(const std::string& filename) {
     m_game_saves_in_progress.push(filename);
@@ -724,7 +730,7 @@ void GGHumanClientApp::SaveGameCompleted() {
     }
 }
 
-void GGHumanClientApp::LoadSinglePlayerGame(std::string filename/* = ""*/) {
+void GGHumanClientApp::LoadSinglePlayerGame(std::string filename) {
     DebugLogger() << "GGHumanClientApp::LoadSinglePlayerGame";
 
     if (!filename.empty()) {
@@ -767,7 +773,7 @@ void GGHumanClientApp::LoadSinglePlayerGame(std::string filename/* = ""*/) {
         m_single_player_game = true;
         try {
             StartServer();
-        } catch (const LocalServerAlreadyRunningException& err) {
+        } catch (const LocalServerAlreadyRunningException&) {
             ClientUI::MessageBox(UserString("LOCAL_SERVER_ALREADY_RUNNING_ERROR"), true);
             return;
         } catch (const std::runtime_error& err) {
@@ -798,8 +804,8 @@ void GGHumanClientApp::LoadSinglePlayerGame(std::string filename/* = ""*/) {
     // leving setup_data.m_players empty : not specified when loading a game, as server will generate from save file
 
 
-    m_networking->SendMessage(HostSPGameMessage(setup_data));
-    m_fsm->process_event(HostSPGameRequested());
+    m_networking->SendMessage(HostSPGameMessage(setup_data, DependencyVersions()));
+    m_fsm.process_event(HostSPGameRequested());
 }
 
 void GGHumanClientApp::RequestSavePreviews(const std::string& relative_directory) {
@@ -813,7 +819,7 @@ void GGHumanClientApp::RequestSavePreviews(const std::string& relative_directory
         m_single_player_game = true;
         try {
             StartServer();
-        } catch (const LocalServerAlreadyRunningException& err) {
+        } catch (const LocalServerAlreadyRunningException&) {
             ClientUI::MessageBox(UserString("LOCAL_SERVER_ALREADY_RUNNING_ERROR"), true);
             return;
         } catch (const std::runtime_error& err) {
@@ -917,17 +923,16 @@ float GGHumanClientApp::GLVersion() const
 void GGHumanClientApp::StartTurn(const SaveGameUIData& ui_data) {
     DebugLogger() << "GGHumanClientApp::StartTurn";
 
-    if (const Empire* empire = GetEmpire(EmpireID())) {
-        double RP = empire->ResourceOutput(ResourceType::RE_RESEARCH);
-        double PP = empire->ResourceOutput(ResourceType::RE_INDUSTRY);
-        int turn_number = CurrentTurn();
-        float ratio = RP / std::max(PP, 0.0001);
-        const GG::Clr& color = empire->Color();
-        DebugLogger() << "Current Output (turn " << turn_number << ") RP/PP: " << ratio << " (" << RP << "/" << PP << ")";
-        DebugLogger() << "EmpireColors: " << static_cast<int>(color.r)
-                      << " " << static_cast<int>(color.g)
-                      << " " << static_cast<int>(color.b)
-                      << " " << static_cast<int>(color.a);
+    if (auto empire = m_empires.GetEmpire(EmpireID())) {
+        const double RP = empire->ResourceOutput(ResourceType::RE_RESEARCH);
+        const double PP = empire->ResourceOutput(ResourceType::RE_INDUSTRY);
+        const auto turn_number = this->m_current_turn;
+        const auto ratio = RP / std::max(PP, 0.0001);
+        const auto [r, g, b, a] = empire->Color();
+        DebugLogger() << "Current Output (turn " << turn_number << ") RP/PP: " << ratio
+                      << " (" << RP << "/" << PP << ")";
+        DebugLogger() << "EmpireColors: " << static_cast<int>(r) << " " << static_cast<int>(g)
+                      << " " << static_cast<int>(b) << " " << static_cast<int>(a);
     }
 
     // Do the turn end autosave.
@@ -937,7 +942,7 @@ void GGHumanClientApp::StartTurn(const SaveGameUIData& ui_data) {
     }
 
     ClientApp::StartTurn(ui_data);
-    m_fsm->process_event(TurnEnded());
+    m_fsm.process_event(TurnEnded());
 }
 
 void GGHumanClientApp::UnreadyTurn()
@@ -954,8 +959,8 @@ boost::intrusive_ptr<const boost::statechart::event_base> GGHumanClientApp::GetD
     std::scoped_lock lock(m_event_queue_guard);
     if (m_posted_event_queue.empty())
         return nullptr;
-    auto retval = m_posted_event_queue.front();
-    m_posted_event_queue.pop_front();
+    auto retval = std::move(m_posted_event_queue.front());
+    m_posted_event_queue.pop();
     return retval;
 }
 
@@ -963,7 +968,7 @@ void GGHumanClientApp::PostDeferredEvent(
     boost::intrusive_ptr<const boost::statechart::event_base> event)
 {
     std::scoped_lock lock(m_event_queue_guard);
-    m_posted_event_queue.push_back(std::move(event));
+    m_posted_event_queue.push(std::move(event));
 }
 
 void GGHumanClientApp::HandleSystemEvents() {
@@ -976,7 +981,7 @@ void GGHumanClientApp::HandleSystemEvents() {
         m_connected = false;
         DisconnectedFromServer();
     } else if (auto event_ptr = GetDeferredPostedEvent()) {
-        m_fsm->process_event(*event_ptr);
+        m_fsm.process_event(*event_ptr);
     } else if (auto msg = Networking().GetMessage()) {
         HandleMessage(std::move(*msg));
     }
@@ -988,43 +993,45 @@ void GGHumanClientApp::RenderBegin() {
 }
 
 void GGHumanClientApp::HandleMessage(Message&& msg) {
+    auto msg_type = msg.Type();
+
     if (INSTRUMENT_MESSAGE_HANDLING)
-        std::cerr << "GGHumanClientApp::HandleMessage(" << msg.Type() << ")\n";
+        std::cerr << "GGHumanClientApp::HandleMessage(" << msg_type << ")\n";
 
     try {
-        switch (msg.Type()) {
-        case Message::MessageType::ERROR_MSG:               m_fsm->process_event(Error(msg));                   break;
-        case Message::MessageType::HOST_MP_GAME:            m_fsm->process_event(HostMPGame(msg));              break;
-        case Message::MessageType::HOST_SP_GAME:            m_fsm->process_event(HostSPGame(msg));              break;
-        case Message::MessageType::JOIN_GAME:               m_fsm->process_event(JoinGame(msg));                break;
-        case Message::MessageType::HOST_ID:                 m_fsm->process_event(HostID(msg));                  break;
-        case Message::MessageType::LOBBY_UPDATE:            m_fsm->process_event(LobbyUpdate(msg));             break;
-        case Message::MessageType::SAVE_GAME_COMPLETE:      m_fsm->process_event(SaveGameComplete(msg));        break;
-        case Message::MessageType::CHECKSUM:                m_fsm->process_event(CheckSum(msg));                break;
-        case Message::MessageType::GAME_START:              m_fsm->process_event(GameStart(msg));               break;
-        case Message::MessageType::TURN_UPDATE:             m_fsm->process_event(TurnUpdate(msg));              break;
-        case Message::MessageType::TURN_PARTIAL_UPDATE:     m_fsm->process_event(TurnPartialUpdate(msg));       break;
-        case Message::MessageType::TURN_PROGRESS:           m_fsm->process_event(TurnProgress(msg));            break;
-        case Message::MessageType::UNREADY:                 m_fsm->process_event(TurnRevoked(msg));             break;
-        case Message::MessageType::PLAYER_STATUS:           m_fsm->process_event(::PlayerStatus(msg));          break;
-        case Message::MessageType::PLAYER_CHAT:             m_fsm->process_event(PlayerChat(msg));              break;
-        case Message::MessageType::DIPLOMACY:               m_fsm->process_event(Diplomacy(msg));               break;
-        case Message::MessageType::DIPLOMATIC_STATUS:       m_fsm->process_event(DiplomaticStatusUpdate(msg));  break;
-        case Message::MessageType::END_GAME:                m_fsm->process_event(::EndGame(msg));               break;
+        switch (msg_type) {
+        case Message::MessageType::ERROR_MSG:               m_fsm.process_event(Error(msg));                   break;
+        case Message::MessageType::HOST_MP_GAME:            m_fsm.process_event(HostMPGame(msg));              break;
+        case Message::MessageType::HOST_SP_GAME:            m_fsm.process_event(HostSPGame(msg));              break;
+        case Message::MessageType::JOIN_GAME:               m_fsm.process_event(JoinGame(msg));                break;
+        case Message::MessageType::HOST_ID:                 m_fsm.process_event(HostID(msg));                  break;
+        case Message::MessageType::LOBBY_UPDATE:            m_fsm.process_event(LobbyUpdate(msg));             break;
+        case Message::MessageType::SAVE_GAME_COMPLETE:      m_fsm.process_event(SaveGameComplete(msg));        break;
+        case Message::MessageType::CHECKSUM:                m_fsm.process_event(CheckSum(msg));                break;
+        case Message::MessageType::GAME_START:              m_fsm.process_event(GameStart(msg));               break;
+        case Message::MessageType::TURN_UPDATE:             m_fsm.process_event(TurnUpdate(msg));              break;
+        case Message::MessageType::TURN_PARTIAL_UPDATE:     m_fsm.process_event(TurnPartialUpdate(msg));       break;
+        case Message::MessageType::TURN_PROGRESS:           m_fsm.process_event(TurnProgress(msg));            break;
+        case Message::MessageType::UNREADY:                 m_fsm.process_event(TurnRevoked(msg));             break;
+        case Message::MessageType::PLAYER_STATUS:           m_fsm.process_event(::PlayerStatus(msg));          break;
+        case Message::MessageType::PLAYER_CHAT:             m_fsm.process_event(PlayerChat(msg));              break;
+        case Message::MessageType::DIPLOMACY:               m_fsm.process_event(Diplomacy(msg));               break;
+        case Message::MessageType::DIPLOMATIC_STATUS:       m_fsm.process_event(DiplomaticStatusUpdate(msg));  break;
+        case Message::MessageType::END_GAME:                m_fsm.process_event(::EndGame(msg));               break;
 
-        case Message::MessageType::DISPATCH_COMBAT_LOGS:    m_fsm->process_event(DispatchCombatLogs(msg));      break;
+        case Message::MessageType::DISPATCH_COMBAT_LOGS:    m_fsm.process_event(DispatchCombatLogs(msg));      break;
         case Message::MessageType::DISPATCH_SAVE_PREVIEWS:  HandleSaveGamePreviews(msg);                        break;
-        case Message::MessageType::AUTH_REQUEST:            m_fsm->process_event(AuthRequest(msg));             break;
-        case Message::MessageType::CHAT_HISTORY:            m_fsm->process_event(ChatHistory(msg));             break;
+        case Message::MessageType::AUTH_REQUEST:            m_fsm.process_event(AuthRequest(msg));             break;
+        case Message::MessageType::CHAT_HISTORY:            m_fsm.process_event(ChatHistory(msg));             break;
         case Message::MessageType::SET_AUTH_ROLES:          HandleSetAuthRoles(msg);                            break;
-        case Message::MessageType::TURN_TIMEOUT:            m_fsm->process_event(TurnTimeout(msg));             break;
-        case Message::MessageType::PLAYER_INFO:             m_fsm->process_event(PlayerInfoMsg(msg));           break;
+        case Message::MessageType::TURN_TIMEOUT:            m_fsm.process_event(TurnTimeout(msg));             break;
+        case Message::MessageType::PLAYER_INFO:             m_fsm.process_event(PlayerInfoMsg(msg));           break;
         default:
-            ErrorLogger() << "GGHumanClientApp::HandleMessage : Received an unknown message type \"" << msg.Type() << "\".";
+            ErrorLogger() << "GGHumanClientApp::HandleMessage : Received an unknown message type \"" << msg_type << "\".";
         }
     } catch (const std::exception& e) {
         ErrorLogger() << "GGHumanClientApp::HandleMessage : Exception while reacting to message of type \""
-                      << msg.Type() << "\". what: " << e.what();
+                      << msg_type << "\". what: " << e.what();
     }
 }
 
@@ -1032,12 +1039,15 @@ void GGHumanClientApp::UpdateCombatLogs(const Message& msg) {
     ScopedTimer timer("GGHumanClientApp::UpdateCombatLogs");
 
     // Unpack the combat logs from the message
-    std::vector<std::pair<int, CombatLog>> logs;
-    ExtractDispatchCombatLogsMessageData(msg, logs);
+    try {
+        std::vector<std::pair<int, CombatLog>> logs;
+        ExtractDispatchCombatLogsMessageData(msg, logs);
 
-    // Update the combat log manager with the completed logs.
-    for (auto it = logs.begin(); it != logs.end(); ++it)
-        GetCombatLogManager().CompleteLog(it->first, it->second);
+        // Update the combat log manager with the completed logs.
+        auto& clm{GetCombatLogManager()};
+        for (auto& [log_id, log] : logs)
+            clm.CompleteLog(log_id, std::move(log));
+    } catch (...) {}
 }
 
 void GGHumanClientApp::HandleSaveGamePreviews(const Message& msg) {
@@ -1045,16 +1055,20 @@ void GGHumanClientApp::HandleSaveGamePreviews(const Message& msg) {
     if (!sfd)
         return;
 
-    PreviewInformation previews;
-    ExtractDispatchSavePreviewsMessageData(msg, previews);
-    DebugLogger() << "GGHumanClientApp::RequestSavePreviews Got " << previews.previews.size() << " previews.";
+    try {
+        PreviewInformation previews;
+        ExtractDispatchSavePreviewsMessageData(msg, previews);
+        DebugLogger() << "GGHumanClientApp::RequestSavePreviews Got " << previews.previews.size() << " previews.";
 
-    sfd->SetPreviewList(std::move(previews));
+        sfd->SetPreviewList(std::move(previews));
+    } catch (...) {}
 }
 
 void GGHumanClientApp::HandleSetAuthRoles(const Message& msg) {
-    ExtractSetAuthorizationRolesMessage(msg, m_networking->AuthorizationRoles());
-    DebugLogger() << "New roles: " << m_networking->AuthorizationRoles().Text();
+    try {
+        ExtractSetAuthorizationRolesMessage(msg, m_networking->AuthorizationRoles());
+        DebugLogger() << "New roles: " << m_networking->AuthorizationRoles().Text();
+    } catch (...) {}
 }
 
 void GGHumanClientApp::ChangeLoggerThreshold(const std::string& option_name, LogLevel option_value) {
@@ -1177,15 +1191,18 @@ void GGHumanClientApp::StartGame(bool is_new_game) {
 
 void GGHumanClientApp::UpdateCombatLogManager() {
     auto incomplete_ids = GetCombatLogManager().IncompleteLogIDs();
-    if (incomplete_ids) {
-        for (auto it = incomplete_ids->begin(); it != incomplete_ids->end();) {
-            // request at most 50 logs per message to avoid trying to allocate too much space to send all at once
-            std::vector<int> a_few_log_ids;
-            for (unsigned int count = 0; count < 50 && it != incomplete_ids->end(); ++it, ++count)
-                a_few_log_ids.push_back(*it);
-            DebugLogger() << "Requesting " << a_few_log_ids.size() << " combat logs from server";
-            m_networking->SendMessage(RequestCombatLogsMessage(a_few_log_ids));
-        }
+    if (incomplete_ids.empty())
+        return;
+
+    static constexpr std::size_t log_batch_size = 50;
+    for (auto it = incomplete_ids.begin(); it != incomplete_ids.end();) {
+        // request at most 50 logs per message to avoid trying to allocate too much space to send all at once
+        std::vector<int> a_few_log_ids;
+        a_few_log_ids.reserve(log_batch_size);
+        for (unsigned int count = 0; count < log_batch_size && it != incomplete_ids.end(); ++it, ++count)
+            a_few_log_ids.push_back(*it);
+        DebugLogger() << "Requesting " << a_few_log_ids.size() << " combat logs from server";
+        m_networking->SendMessage(RequestCombatLogsMessage(a_few_log_ids));
     }
 }
 
@@ -1223,7 +1240,7 @@ namespace {
             for (auto file_it = files_by_write_time.rbegin();
                  file_it != files_by_write_time.rend(); ++file_it)
             {
-                auto file = file_it->second;
+                const auto& file = file_it->second;
                 // attempt to load header
                 if (SaveFileWithValidHeader(file))
                     return PathToString(file);  // load succeeded, return path to OK file
@@ -1278,16 +1295,14 @@ namespace {
         }
     }
 
-    boost::filesystem::path CreateNewAutosaveFilePath(int client_empire_id, bool is_single_player) {
-        constexpr const char* legal_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890_-";
+    boost::filesystem::path CreateNewAutosaveFilePath(int client_empire_id, bool is_single_player,
+                                                      const EmpireManager& empires, int turn)
+    {
+        static constexpr const char* legal_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890_-";
 
         // get empire name, filtered for filename acceptability
-        const Empire* empire = GetEmpire(client_empire_id);
-        std::string empire_name;
-        if (empire)
-            empire_name = empire->Name();
-        else
-            empire_name = UserString("OBSERVER");
+        auto empire =  empires.GetEmpire(client_empire_id);
+        std::string empire_name{empire ? empire->Name() : UserString("OBSERVER")};
         std::string::size_type first_good_empire_char = empire_name.find_first_of(legal_chars);
         if (first_good_empire_char == std::string::npos) {
             empire_name.clear();
@@ -1312,11 +1327,14 @@ namespace {
         const auto& extension = is_single_player ? SP_SAVE_FILE_EXTENSION : MP_SAVE_FILE_EXTENSION;
 
         // Add timestamp to autosave generated files
-        std::string datetime_str = FilenameTimestamp();
+        auto datetime_str = FilenameTimestamp();
 
-        boost::filesystem::path autosave_dir_path((is_single_player ? GetSaveDir() : GetServerSaveDir()) / "auto");
+        boost::filesystem::path autosave_dir_path(
+            (is_single_player ? GetSaveDir() : GetServerSaveDir()) / "auto");
 
-        std::string save_filename = boost::io::str(boost::format("FreeOrion_%s_%s_%04d_%s%s") % player_name % empire_name % CurrentTurn() % datetime_str % extension);
+        auto save_filename = boost::io::str(boost::format("FreeOrion_%s_%s_%04d_%s%s")
+                                            % player_name % empire_name % turn
+                                            % datetime_str % extension);
         boost::filesystem::path save_path(autosave_dir_path / save_filename);
 
         try {
@@ -1352,20 +1370,26 @@ void GGHumanClientApp::Autosave() {
          && GetOptionsDB().Get<bool>("save.auto.turn.multiplayer.start.enabled"));
     bool is_valid_autosave =
         (autosave_turns > 0
-         && CurrentTurn() % autosave_turns == 0
+         && this->m_current_turn % autosave_turns == 0
          && (is_single_player_enabled || is_multi_player_enabled));
 
     // is_initial_save is gated in HumanClientFSM for new game vs loaded game
-    bool is_initial_save = (GetOptionsDB().Get<bool>("save.auto.initial.enabled") && CurrentTurn() == 1);
-    bool is_final_save = (GetOptionsDB().Get<bool>("save.auto.exit.enabled") && !m_game_started);
+    bool is_initial_save =
+        (GetOptionsDB().Get<bool>("save.auto.initial.enabled")
+         && this->m_current_turn == 1);
+    bool is_final_save =
+        (GetOptionsDB().Get<bool>("save.auto.exit.enabled")
+         && !m_game_started);
 
     if (!(is_initial_save || is_valid_autosave || is_final_save))
         return;
 
-    auto autosave_file_path = CreateNewAutosaveFilePath(EmpireID(), m_single_player_game);
+    auto autosave_file_path = CreateNewAutosaveFilePath(EmpireID(), m_single_player_game,
+                                                        m_empires, m_current_turn);
 
     // check for and remove excess oldest autosaves.
-    boost::filesystem::path autosave_dir_path((m_single_player_game ? GetSaveDir() : GetServerSaveDir()) / "auto");
+    boost::filesystem::path autosave_dir_path(
+        (m_single_player_game ? GetSaveDir() : GetServerSaveDir()) / "auto");
     int max_turns = std::max(1, GetOptionsDB().Get<int>("save.auto.file.limit"));
     bool is_two_saves_per_turn =
         (m_single_player_game
@@ -1435,7 +1459,8 @@ void GGHumanClientApp::ExitApp(int exit_code)
 void GGHumanClientApp::ExitSDL(int exit_code)
 { SDLGUI::ExitApp(exit_code); }
 
-void GGHumanClientApp::ResetOrExitApp(bool reset, bool skip_savegame, int exit_code /* = 0*/) {
+void GGHumanClientApp::ResetOrExitApp(bool reset, bool skip_savegame, int exit_code ) {
+    DebugLogger() << "GGHumanClientApp::ResetOrExitApp(" << reset << ", " << skip_savegame << ", " << exit_code << ")";
     if (m_exit_handled) {
         static int repeat_count = 0;
         if (repeat_count++ > 2) {
@@ -1509,7 +1534,7 @@ void GGHumanClientApp::ResetOrExitApp(bool reset, bool skip_savegame, int exit_c
         // This throws to exit the GUI
         after_server_shutdown_action = boost::bind(&GGHumanClientApp::ExitSDL, this, exit_code);
 
-    m_fsm->process_event(StartQuittingGame(m_server_process, std::move(after_server_shutdown_action)));
+    m_fsm.process_event(StartQuittingGame(m_server_process, std::move(after_server_shutdown_action)));
 
     m_exit_handled = false;
 }
@@ -1531,6 +1556,38 @@ int GGHumanClientApp::AutoTurnsLeft() const
 
 bool GGHumanClientApp::HaveWindowFocus() const
 { return m_have_window_focus; }
+
+int GGHumanClientApp::SelectedSystemID() const {
+    if (m_ui) {
+        if (auto mapwnd = m_ui->GetMapWnd())
+            return mapwnd->SelectedSystemID();
+    }
+    return INVALID_OBJECT_ID;
+}
+
+int GGHumanClientApp::SelectedPlanetID() const {
+    if (m_ui) {
+        if (auto mapwnd = m_ui->GetMapWnd())
+            return mapwnd->SelectedPlanetID();
+    }
+    return INVALID_OBJECT_ID;
+}
+
+int GGHumanClientApp::SelectedFleetID() const {
+    if (m_ui) {
+        if (auto mapwnd = m_ui->GetMapWnd())
+            return mapwnd->SelectedFleetID();
+    }
+    return INVALID_OBJECT_ID;
+}
+
+int GGHumanClientApp::SelectedShipID() const {
+    if (m_ui) {
+        if (auto mapwnd = m_ui->GetMapWnd())
+            return mapwnd->SelectedShipID();
+    }
+    return INVALID_OBJECT_ID;
+}
 
 int GGHumanClientApp::EffectsProcessingThreads() const
 { return GetOptionsDB().Get<int>("effects.ui.threads"); }
@@ -1566,14 +1623,8 @@ void GGHumanClientApp::HandleResoureDirChange() {
 
 void GGHumanClientApp::DisconnectedFromServer() {
     DebugLogger() << "GGHumanClientApp::DisconnectedFromServer";
-    m_fsm->process_event(Disconnection());
+    m_fsm.process_event(Disconnection());
 }
-
-GGHumanClientApp* GGHumanClientApp::GetApp()
-{ return static_cast<GGHumanClientApp*>(GG::GUI::GetGUI()); }
-
-void GGHumanClientApp::Initialize()
-{}
 
 void GGHumanClientApp::OpenURL(const std::string& url) {
     // make sure it's a legit url

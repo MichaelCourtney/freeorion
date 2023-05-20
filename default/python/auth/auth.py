@@ -32,9 +32,9 @@ class AuthProvider:
                     else:
                         login, roles, password = line.rsplit(":", 2)
                         self.logins[login] = (password.strip(), self.__parse_roles(roles.strip()))
-        except IOError:
+        except OSError:
             exctype, value = sys.exc_info()[:2]
-            warning("Can't read auth file %s: %s %s" % (fo.get_user_config_dir() + "/auth.txt", exctype, value))
+            warning("Can't read auth file {}: {} {}".format(fo.get_user_config_dir() + "/auth.txt", exctype, value))
             self.default_roles = [
                 fo.roleType.clientTypeModerator,
                 fo.roleType.clientTypePlayer,
@@ -53,7 +53,7 @@ class AuthProvider:
                 roles.append(r)
         return roles
 
-    def is_require_auth_or_return_roles(self, player_name):
+    def is_require_auth_or_return_roles(self, player_name: str, ip_address: str):
         """Returns True if player should be authenticated, False if user not allowed,
         or list of roles for anonymous players"""
         known_login = player_name in self.logins

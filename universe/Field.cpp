@@ -12,9 +12,9 @@
 /////////////////////////////////////////////////
 // Field                                       //
 /////////////////////////////////////////////////
-Field::Field(const std::string& field_type, double x, double y, double radius) :
-    UniverseObject("", x, y),
-    m_type_name(field_type)
+Field::Field(std::string field_type, double x, double y, double radius, int creation_turn) :
+    UniverseObject{UniverseObjectType::OBJ_FIELD, "", x, y, ALL_EMPIRES, creation_turn},
+    m_type_name(std::move(field_type))
 {
     if (const FieldType* type = GetFieldType(m_type_name))
         Rename(UserString(type->Name()));
@@ -29,57 +29,56 @@ Field::Field(const std::string& field_type, double x, double y, double radius) :
     UniverseObject::GetMeter(MeterType::METER_SIZE)->Set(radius, radius);
 }
 
-Field* Field::Clone(const Universe& universe, int empire_id) const {
+std::shared_ptr<UniverseObject> Field::Clone(const Universe& universe, int empire_id) const {
     Visibility vis = universe.GetObjectVisibilityByEmpire(this->ID(), empire_id);
 
     if (!(vis >= Visibility::VIS_BASIC_VISIBILITY && vis <= Visibility::VIS_FULL_VISIBILITY))
         return nullptr;
 
-    auto retval = std::make_unique<Field>();
-    retval->Copy(shared_from_this(), universe, empire_id);
-    return retval.release();
+    auto retval = std::make_shared<Field>();
+    retval->Copy(*this, universe, empire_id);
+    return retval;
 }
 
-void Field::Copy(std::shared_ptr<const UniverseObject> copied_object,
-                 const Universe& universe, int empire_id)
-{
-    if (copied_object.get() == this)
+void Field::Copy(const UniverseObject& copied_object, const Universe& universe, int empire_id) {
+    if (&copied_object == this)
         return;
-    std::shared_ptr<const Field> copied_field = std::dynamic_pointer_cast<const Field>(copied_object);
-    if (!copied_field) {
+    if (copied_object.ObjectType() != UniverseObjectType::OBJ_FIELD) {
         ErrorLogger() << "Field::Copy passed an object that wasn't a Field";
         return;
     }
 
-    int copied_object_id = copied_object->ID();
+    Copy(static_cast<const Field&>(copied_object), universe, empire_id);
+}
+
+void Field::Copy(const Field& copied_field, const Universe& universe, int empire_id) {
+    if (&copied_field == this)
+        return;
+
+    int copied_object_id = copied_field.ID();
     Visibility vis = universe.GetObjectVisibilityByEmpire(copied_object_id, empire_id);
     auto visible_specials = universe.GetObjectVisibleSpecialsByEmpire(copied_object_id, empire_id);
 
-    UniverseObject::Copy(std::move(copied_object), vis, visible_specials, universe);
+    UniverseObject::Copy(copied_field, vis, visible_specials, universe);
 
     if (vis >= Visibility::VIS_BASIC_VISIBILITY) {
-        this->m_name =      copied_field->m_name;
-        this->m_type_name = copied_field->m_type_name;
+        this->m_name =      copied_field.m_name;
+        this->m_type_name = copied_field.m_type_name;
     }
 }
 
-std::set<std::string> Field::Tags(const ScriptingContext&) const {
-    const FieldType* type = GetFieldType(m_type_name);
-    if (!type)
-        return {};
-    return type->Tags();
+UniverseObject::TagVecs Field::Tags(const ScriptingContext&) const {
+    if (const FieldType* type = GetFieldType(m_type_name))
+        return type->Tags();
+    return {};
 }
 
-bool Field::HasTag(const std::string& name, const ScriptingContext&) const {
+bool Field::HasTag(std::string_view name, const ScriptingContext&) const {
     const FieldType* type = GetFieldType(m_type_name);
-
-    return type && type->Tags().count(name);
+    return type && type->HasTag(name);
 }
 
-UniverseObjectType Field::ObjectType() const
-{ return UniverseObjectType::OBJ_FIELD; }
-
-std::string Field::Dump(unsigned short ntabs) const {
+std::string Field::Dump(uint8_t ntabs) const {
     std::stringstream os;
     os << UniverseObject::Dump(ntabs);
     os << " field type: " << m_type_name;
@@ -93,9 +92,6 @@ const std::string& Field::PublicName(int empire_id, const Universe&) const {
 
 std::shared_ptr<UniverseObject> Field::Accept(const UniverseObjectVisitor& visitor) const
 { return visitor.Visit(std::const_pointer_cast<Field>(std::static_pointer_cast<const Field>(shared_from_this()))); }
-
-int Field::ContainerObjectID() const
-{ return this->SystemID(); }
 
 bool Field::ContainedBy(int object_id) const {
     return object_id != INVALID_OBJECT_ID
@@ -118,6 +114,7 @@ bool Field::InField(double x, double y) const {
 void Field::ResetTargetMaxUnpairedMeters() {
     UniverseObject::ResetTargetMaxUnpairedMeters();
 
+    static_assert(noexcept(GetMeter(MeterType::METER_SPEED)->ResetCurrent()));
     GetMeter(MeterType::METER_SPEED)->ResetCurrent();
     // intentionally not resetting size, so that it is presistant
 }

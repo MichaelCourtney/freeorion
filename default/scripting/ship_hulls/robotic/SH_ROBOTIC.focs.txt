@@ -29,19 +29,7 @@ Hull
         ]
     ]
     effectsgroups = [
-        EffectsGroup
-            scope = And [
-                Source
-                Or [
-                    Not InSystem
-                    And [
-                        InSystem
-                        Turn low = LocalCandidate.System.LastTurnBattleHere + 1
-                    ]
-                ]
-                Structure high = LocalCandidate.MaxStructure - 0.001
-            ]
-            effects = SetStructure value = Value + (2 * [[SHIP_STRUCTURE_FACTOR]])
+        [[ROBOTIC_REPAIR]]
 
         [[AVERAGE_FUEL_EFFICIENCY]]
         [[ADD_HULL_FUEL_TO_MAX_FUEL_METER]]

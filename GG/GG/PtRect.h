@@ -26,13 +26,13 @@ namespace GG {
     \brief The x-coordinate value type.
 
     X has an underlying value type of int.  \see GG_STRONG_INTEGRAL_TYPEDEF */
-GG_STRONG_INTEGRAL_TYPEDEF(X, int);
+GG_STRONG_INTEGRAL_TYPEDEF(X, int32_t);
 
 /** \class GG::Y
     \brief The y-coordinate value type.
 
     Y has an underlying value type of int.  \see GG_STRONG_INTEGRAL_TYPEDEF */
-GG_STRONG_INTEGRAL_TYPEDEF(Y, int);
+GG_STRONG_INTEGRAL_TYPEDEF(Y, int32_t);
 
 // some useful coordinate constants
 constexpr X X0{0};
@@ -43,27 +43,24 @@ constexpr Y Y1{1};
 /** \brief A GG screen coordinate class. */
 struct GG_API Pt
 {
-    constexpr Pt() :
-        x{X0},
-        y{Y0}
-    {}
+    constexpr Pt() = default;
 
-    constexpr Pt(X x_, Y y_) :
+    constexpr Pt(X x_, Y y_) noexcept :
         x(x_),
         y(y_)
     {}
 
-    constexpr Pt(X_d x_, Y y_) :
+    constexpr Pt(X_d x_, Y y_) noexcept :
         x(x_),
         y(y_)
     {}
 
-    constexpr Pt(X x_, Y_d y_) :
+    constexpr Pt(X x_, Y_d y_) noexcept :
         x(x_),
         y(y_)
     {}
 
-    constexpr Pt(X_d x_, Y_d y_) :
+    constexpr Pt(X_d x_, Y_d y_) noexcept :
         x(x_),
         y(y_)
     {}
@@ -71,98 +68,97 @@ struct GG_API Pt
     /** Returns true if x < \a rhs.x or returns true if x == \a rhs.x and y
         <\a rhs.y.  This is useful for sorting Pts in STL containers and
         algorithms. */
-    constexpr bool Less(const Pt& rhs) const
+    [[nodiscard]] constexpr bool Less(Pt rhs) const noexcept
     { return x < rhs.x ? true : (x == rhs.x ? (y < rhs.y ? true : false) : false); }
 
-    constexpr Pt operator-() const            { return Pt(-x, -y); }                    ///< Negates Pt.
-    Pt&          operator+=(const Pt& rhs)    { x += rhs.x; y += rhs.y; return *this; } ///< Adds \a rhs to Pt.
-    Pt&          operator-=(const Pt& rhs)    { x -= rhs.x; y -= rhs.y; return *this; } ///< Subtracts \a rhs from Pt.
-    Pt&          operator/=(const double rhs) { x /= rhs;   y /= rhs;   return *this; } ///< Devides components of Pt by \a rhs
-    Pt&          operator*=(const double rhs) { x *= rhs;   y *= rhs;   return *this; } ///< Multiplies components of Pt by \a rhs
+    [[nodiscard]] constexpr Pt operator-() const noexcept { return Pt(-x, -y); }
+    constexpr Pt& operator+=(Pt rhs) noexcept             { x += rhs.x; y += rhs.y; return *this; }
+    constexpr Pt& operator-=(Pt rhs) noexcept             { x -= rhs.x; y -= rhs.y; return *this; }
+    constexpr Pt& operator/=(const double rhs) noexcept   { x /= rhs;   y /= rhs;   return *this; }
+    constexpr Pt& operator*=(const double rhs) noexcept   { x *= rhs;   y *= rhs;   return *this; }
+
+    [[nodiscard]] operator std::string() const;
 
     X x = X0;
     Y y = Y0;
 };
 
-GG_API std::ostream& operator<<(std::ostream& os, const Pt& pt);
+GG_API std::ostream& operator<<(std::ostream& os, Pt pt);
 
-GG_API constexpr inline bool operator==(const Pt& lhs, const Pt& rhs) { return lhs.x == rhs.x && lhs.y == rhs.y; } ///< returns true if \a lhs is identical to \a rhs
-GG_API constexpr inline bool operator!=(const Pt& lhs, const Pt& rhs) { return !(lhs == rhs); }                    ///< returns true if \a lhs differs from \a rhs
-GG_API constexpr inline bool operator<(const Pt& lhs, const Pt& rhs)  { return lhs.x < rhs.x && lhs.y < rhs.y; }   ///< returns true if \a lhs.x and \a lhs.y are both less than the corresponding components of \a rhs
-GG_API constexpr inline bool operator>(const Pt& lhs, const Pt& rhs)  { return lhs.x > rhs.x && lhs.y > rhs.y; }   ///< returns true if \a lhs.x and \a lhs.y are both greater than the corresponding components of \a rhs
-GG_API constexpr inline bool operator<=(const Pt& lhs, const Pt& rhs) { return lhs.x <= rhs.x && lhs.y <= rhs.y; } ///< returns true if \a lhs.x and \a lhs.y are both less than or equal to the corresponding components of \a rhs
-GG_API constexpr inline bool operator>=(const Pt& lhs, const Pt& rhs) { return lhs.x >= rhs.x && lhs.y >= rhs.y; } ///< returns true if \a lhs.x and \a lhs.y are both greater than or equal to the corresponding components of \a rhs
-GG_API           inline Pt   operator+(const Pt& lhs, const Pt& rhs)  { return Pt(lhs.x + rhs.x, lhs.y + rhs.y); } ///< returns the vector sum of \a lhs and \a rhs
-GG_API           inline Pt   operator-(const Pt& lhs, const Pt& rhs)  { return Pt(lhs.x - rhs.x, lhs.y - rhs.y); } ///< returns the vector difference of \a lhs and \a rhs
-GG_API           inline Pt   operator*(const Pt& lhs, double rhs)     { return Pt(lhs.x * rhs, lhs.y * rhs); }     ///< returns the vector with components multiplied by \a rhs
-GG_API           inline Pt   operator/(const Pt& lhs, double rhs)     { return Pt(lhs.x / rhs, lhs.y / rhs); }     ///< returns the vector with components divided by \a rhs
+[[nodiscard]] GG_API constexpr inline bool operator==(Pt lhs, Pt rhs) noexcept    { return lhs.x == rhs.x && lhs.y == rhs.y; } ///< returns true if \a lhs is identical to \a rhs
+[[nodiscard]] GG_API constexpr inline bool operator!=(Pt lhs, Pt rhs) noexcept    { return !(lhs == rhs); }                    ///< returns true if \a lhs differs from \a rhs
+[[nodiscard]] GG_API constexpr inline bool operator<(Pt lhs, Pt rhs) noexcept     { return lhs.x < rhs.x && lhs.y < rhs.y; }   ///< returns true if \a lhs.x and \a lhs.y are both less than the corresponding components of \a rhs
+[[nodiscard]] GG_API constexpr inline bool operator>(Pt lhs, Pt rhs) noexcept     { return lhs.x > rhs.x && lhs.y > rhs.y; }   ///< returns true if \a lhs.x and \a lhs.y are both greater than the corresponding components of \a rhs
+[[nodiscard]] GG_API constexpr inline bool operator<=(Pt lhs, Pt rhs) noexcept    { return lhs.x <= rhs.x && lhs.y <= rhs.y; } ///< returns true if \a lhs.x and \a lhs.y are both less than or equal to the corresponding components of \a rhs
+[[nodiscard]] GG_API constexpr inline bool operator>=(Pt lhs, Pt rhs) noexcept    { return lhs.x >= rhs.x && lhs.y >= rhs.y; } ///< returns true if \a lhs.x and \a lhs.y are both greater than or equal to the corresponding components of \a rhs
+[[nodiscard]] GG_API constexpr inline Pt   operator+(Pt lhs, Pt rhs) noexcept     { return Pt{lhs.x + rhs.x, lhs.y + rhs.y}; } ///< returns the vector sum of \a lhs and \a rhs
+[[nodiscard]] GG_API constexpr inline Pt   operator-(Pt lhs, Pt rhs) noexcept     { return Pt{lhs.x - rhs.x, lhs.y - rhs.y}; } ///< returns the vector difference of \a lhs and \a rhs
+[[nodiscard]] GG_API constexpr inline Pt   operator*(Pt lhs, double rhs) noexcept { return Pt{lhs.x * rhs, lhs.y * rhs}; }     ///< returns the vector with components multiplied by \a rhs
+[[nodiscard]] GG_API constexpr inline Pt   operator/(Pt lhs, double rhs) noexcept { return Pt{lhs.x / rhs, lhs.y / rhs}; }     ///< returns the vector with components divided by \a rhs
 
 /** \brief A GG rectangle class.
 
     This is essentially just two points that bound the rectangle. */
 struct GG_API Rect
 {
-    constexpr Rect() :
-        ul{},
-        lr{}
-    {}
+    constexpr Rect() = default;
 
-    constexpr Rect(const Pt& pt1, const Pt& pt2) :
+    constexpr Rect(const Pt pt1, const Pt pt2) noexcept(noexcept(std::min(X0, X1))) :
         ul{std::min(pt1.x, pt2.x), std::min(pt1.y, pt2.y)},
         lr{std::max(pt1.x, pt2.x), std::max(pt1.y, pt2.y)}
     {}
 
-    constexpr Rect(X x1, Y y1, X x2, Y y2) :
+    constexpr Rect(X x1, Y y1, X x2, Y y2) noexcept :
         ul{x1, y1},
         lr{x2, y2}
     {}
 
-    constexpr X  Left() const       { return ul.x; }            ///< returns the left boundary of the Rect
-    constexpr X  Right() const      { return lr.x; }            ///< returns the right boundary of the Rect
-    constexpr Y  Top() const        { return ul.y; }            ///< returns the top boundary of the Rect
-    constexpr Y  Bottom() const     { return lr.y; }            ///< returns the bottom boundary of the Rect
-    constexpr Pt UpperLeft() const  { return ul; }              ///< returns the upper-left corner of the Rect
-    constexpr Pt LowerRight() const { return lr; }              ///< returns the lower-right corner of the Rect
-    X  Width() const                { return lr.x - ul.x; }     ///< returns the width of the Rect
-    Y  Height() const               { return lr.y - ul.y; }     ///< returns the height of the Rect
-    X  MidX() const                 { return (lr.x + ul.x)/2; } ///< returns the horizontal mid-point of the Rect
-    Y  MidY() const                 { return (lr.y + ul.y)/2; } ///< returns the vertical mid-point of the Rect
+    [[nodiscard]] constexpr X  Left() const noexcept       { return ul.x; }            ///< returns the left boundary of the Rect
+    [[nodiscard]] constexpr X  Right() const noexcept      { return lr.x; }            ///< returns the right boundary of the Rect
+    [[nodiscard]] constexpr Y  Top() const  noexcept       { return ul.y; }            ///< returns the top boundary of the Rect
+    [[nodiscard]] constexpr Y  Bottom() const noexcept     { return lr.y; }            ///< returns the bottom boundary of the Rect
+    [[nodiscard]] constexpr Pt UpperLeft() const noexcept  { return ul; }              ///< returns the upper-left corner of the Rect
+    [[nodiscard]] constexpr Pt LowerRight() const noexcept { return lr; }              ///< returns the lower-right corner of the Rect
+    [[nodiscard]] constexpr X  Width() const noexcept      { return lr.x - ul.x; }     ///< returns the width of the Rect
+    [[nodiscard]] constexpr Y  Height() const noexcept     { return lr.y - ul.y; }     ///< returns the height of the Rect
+    [[nodiscard]] constexpr X  MidX() const noexcept       { return (lr.x + ul.x)/2; } ///< returns the horizontal mid-point of the Rect
+    [[nodiscard]] constexpr Y  MidY() const noexcept       { return (lr.y + ul.y)/2; } ///< returns the vertical mid-point of the Rect
 
-    constexpr bool Contains(const Pt& pt) const { return ul <= pt && pt < lr; }
+    [[nodiscard]] constexpr bool Contains(Pt pt) const noexcept { return ul <= pt && pt < lr; }
 
-    void operator+=(const Pt& pt) { ul += pt; lr += pt; } ///< shifts the Rect by adding \a pt to each corner
-    void operator-=(const Pt& pt) { ul -= pt; lr -= pt; } ///< shifts the Rect by subtracting \a pt from each corner
+    constexpr Rect& operator+=(Pt pt) noexcept { ul += pt; lr += pt; return *this; } ///< shifts the Rect by adding \a pt to each corner
+    constexpr Rect& operator-=(Pt pt) noexcept { ul -= pt; lr -= pt; return *this; } ///< shifts the Rect by subtracting \a pt from each corner
 
     Pt ul; ///< the upper-left corner of the Rect
     Pt lr; ///< the lower-right corner of the Rect
 };
 
-GG_API std::ostream& operator<<(std::ostream& os, const Pt& pt); ///< Pt stream-output operator for debug output
+GG_API std::ostream& operator<<(std::ostream& os, Pt pt); ///< Pt stream-output operator for debug output
 
 /** returns true if \a lhs is identical to \a rhs */
-GG_API inline bool operator==(const Rect& lhs, const Rect& rhs) { return lhs.ul.x == rhs.ul.x && lhs.lr.x == rhs.lr.x && lhs.ul.y == rhs.ul.y && lhs.lr.y == rhs.lr.y; }
+[[nodiscard]] GG_API inline constexpr bool operator==(Rect lhs, Rect rhs) noexcept { return lhs.ul.x == rhs.ul.x && lhs.lr.x == rhs.lr.x && lhs.ul.y == rhs.ul.y && lhs.lr.y == rhs.lr.y; }
 
 /** returns true if \a lhs differs from \a rhs */
-GG_API inline bool operator!=(const Rect& lhs, const Rect& rhs) { return !(lhs == rhs); }
+[[nodiscard]] GG_API inline constexpr bool operator!=(Rect lhs, Rect rhs) noexcept { return !(lhs == rhs); }
 
-GG_API inline Rect operator+(const Rect& rect, const Pt& pt) { return Rect(rect.ul + pt, rect.lr + pt); } ///< returns \a rect shifted by adding \a pt to each corner
-GG_API inline Rect operator-(const Rect& rect, const Pt& pt) { return Rect(rect.ul - pt, rect.lr - pt); } ///< returns \a rect shifted by subtracting \a pt from each corner
-GG_API inline Rect operator+(const Pt& pt, const Rect& rect) { return rect + pt; } ///< returns \a rect shifted by adding \a pt to each corner
-GG_API inline Rect operator-(const Pt& pt, const Rect& rect) { return rect - pt; } ///< returns \a rect shifted by subtracting \a pt from each corner
+[[nodiscard]] GG_API inline constexpr Rect operator+(Rect rect, Pt pt) noexcept { return Rect(rect.ul + pt, rect.lr + pt); } ///< returns \a rect shifted by adding \a pt to each corner
+[[nodiscard]] GG_API inline constexpr Rect operator-(Rect rect, Pt pt) noexcept { return Rect(rect.ul - pt, rect.lr - pt); } ///< returns \a rect shifted by subtracting \a pt from each corner
+[[nodiscard]] GG_API inline constexpr Rect operator+(Pt pt, Rect rect) noexcept { return rect + pt; } ///< returns \a rect shifted by adding \a pt to each corner
+[[nodiscard]] GG_API inline constexpr Rect operator-(Pt pt, Rect rect) noexcept { return rect - pt; } ///< returns \a rect shifted by subtracting \a pt from each corner
 
-GG_API std::ostream& operator<<(std::ostream& os, const Rect& rect); ///< Rect stream-output operator for debug output
+GG_API std::ostream& operator<<(std::ostream& os, Rect rect); ///< Rect stream-output operator for debug output
 
 // Hash functions
 // Replace with C++11 equilvalent when converted to C++11
-GG_API inline std::size_t hash_value(X const& x) { return boost::hash<int>()(Value(x)); }
-GG_API inline std::size_t hash_value(Y const& y) { return boost::hash<int>()(Value(y)); }
-GG_API inline std::size_t hash_value(Pt const& pt) {
+[[nodiscard]] GG_API inline std::size_t hash_value(X x) { return boost::hash<int>()(Value(x)); }
+[[nodiscard]] GG_API inline std::size_t hash_value(Y y) { return boost::hash<int>()(Value(y)); }
+[[nodiscard]] GG_API inline std::size_t hash_value(Pt pt) {
     std::size_t seed(0);
     boost::hash_combine(seed, pt.x);
     boost::hash_combine(seed, pt.y);
     return seed;
 }
-GG_API inline std::size_t hash_value(Rect const& r) {
+[[nodiscard]] GG_API inline std::size_t hash_value(Rect r) {
     std::size_t seed(0);
     boost::hash_combine(seed, r.ul);
     boost::hash_combine(seed, r.lr);

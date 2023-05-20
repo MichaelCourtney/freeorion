@@ -12,7 +12,7 @@
 #include "../util/Directories.h"
 
 #include <boost/spirit/include/qi.hpp>
-#include <boost/spirit/include/phoenix_core.hpp>
+#include <boost/phoenix/core.hpp>
 
 #include <typeinfo>
 
@@ -28,15 +28,16 @@ namespace std {
 namespace parse {
 
     template <typename T>
-    void insert_named_ref(std::map<std::string, std::unique_ptr<ValueRef::ValueRefBase>>& named_refs,
+    void insert_named_ref(std::map<std::string, std::unique_ptr<ValueRef::ValueRefBase>, std::less<>>& named_refs,
                           const std::string& name,
                           const parse::detail::MovableEnvelope<ValueRef::ValueRef<T>>& ref_envelope,
                           bool& pass)
     {
         DebugLogger() << "Registering from named_values.focs.txt : " << name << " ! ValueRef<" << typeid(T).name() << ">";
-        // Note: Other parsers might also register value refs, so the normal pending mechanism does not suffice.
-        //       So we do not collect the value refs in the given named_refs reference but register directly.
-        std::unique_ptr<ValueRef::ValueRef<T>> vref = ref_envelope.OpenEnvelope(pass);
+        // Note: Other parsers might also register value refs, so the normal pending
+        // mechanism does not suffice. So, we do not collect the value refs in the
+        // given named_refs reference, but instead register directly here...
+        auto vref = ref_envelope.OpenEnvelope(pass);
         // Signal to log an error if CurrentContent is used
         vref->SetTopLevelContent("THERE_IS_NO_TOP_LEVEL_CONTENT");
         ::RegisterValueRef<T>(name, std::move(vref));
@@ -83,10 +84,15 @@ namespace parse {
                    > label(tok.value_) > qi::as<parse::detail::MovableEnvelope<ValueRef::ValueRef<double>>>()[double_rules.expr]
                     ) [ insert_named_ref_(_r1, _2, _3, _pass) ]
                     |
-                    ((omit_[tok.Named_] >> tok.planettype_) > label(tok.name_) > tok.string > label(tok.value_) > planet_type_rules.expr
+                    ((omit_[tok.Named_] >> tok.String_)
+                   > label(tok.name_) > tok.string
+                   > label(tok.value_) > qi::as<parse::detail::MovableEnvelope<ValueRef::ValueRef<std::string>>>()[string_grammar.expr]
                     ) [ insert_named_ref_(_r1, _2, _3, _pass) ]
                     |
-                    ((omit_[tok.Named_] >> tok.environment_) > label(tok.name_) > tok.string > label(tok.value_) > planet_environment_rules.expr
+                    ((omit_[tok.Named_] >> tok.PlanetType_) > label(tok.name_) > tok.string > label(tok.value_) > planet_type_rules.expr
+                    ) [ insert_named_ref_(_r1, _2, _3, _pass) ]
+                    |
+                    ((omit_[tok.Named_] >> tok.Environment_) > label(tok.name_) > tok.string > label(tok.value_) > planet_environment_rules.expr
                     ) [ insert_named_ref_(_r1, _2, _3, _pass) ] 
                 ;
 
@@ -105,7 +111,7 @@ namespace parse {
         }
 
         using named_value_ref_rule = parse::detail::rule<
-            void (std::map<std::string, std::unique_ptr<ValueRef::ValueRefBase>>&)>;
+            void (std::map<std::string, std::unique_ptr<ValueRef::ValueRefBase>, std::less<>>&)>;
 
         using start_rule = parse::detail::rule<start_rule_signature>;
 

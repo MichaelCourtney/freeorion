@@ -4,7 +4,7 @@
 #include "../util/Logger.h"
 
 
-std::string UnlockableItem::Dump(unsigned short ntabs) const {
+std::string UnlockableItem::Dump(uint8_t ntabs) const {
     std::string retval = "Item type = ";
     switch (type) {
     case UnlockableItemType::UIT_BUILDING:    retval += "Building";   break;
@@ -18,17 +18,8 @@ std::string UnlockableItem::Dump(unsigned short ntabs) const {
     return retval;
 }
 
-bool operator==(const UnlockableItem& lhs, const UnlockableItem& rhs) {
-    return lhs.type == rhs.type &&
-    lhs.name == rhs.name;
-}
-
-bool operator!=(const UnlockableItem& lhs, const UnlockableItem& rhs)
-{ return !(lhs == rhs); }
-
-
 namespace CheckSums {
-    void CheckSumCombine(unsigned int& sum, const UnlockableItem& item) {
+    void CheckSumCombine(uint32_t& sum, const UnlockableItem& item) {
         TraceLogger() << "CheckSumCombine(Slot): " << typeid(item).name();
         CheckSumCombine(sum, item.type);
         CheckSumCombine(sum, item.name);

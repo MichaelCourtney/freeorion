@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from __future__ import print_function
 
 import os
 import sys
@@ -13,20 +12,21 @@ from subprocess import CalledProcessError, check_output
 INVALID_BUILD_NO = "???"
 
 
-class Generator(object):
+class Generator:
     def __init__(self, infile, outfile):
         self.infile = infile
         self.outfile = outfile
 
-    def compile_output(self, template, version, branch, build_no, build_sys):
+    def compile_output(self, template, version, branch, build_no, build_sys, version_file_name):
         return template.substitute(
             FreeOrion_VERSION=version,
             FreeOrion_BRANCH=branch,
             FreeOrion_BUILD_NO=build_no,
             FreeOrion_BUILDSYS=build_sys,
+            FreeOrion_VERSION_FILENAME=version_file_name,
         )
 
-    def execute(self, version, branch, build_no, build_sys):
+    def execute(self, version, branch, build_no, build_sys, version_file_name):
         if build_no == INVALID_BUILD_NO:
             print("WARNING: Can't determine git commit!")
 
@@ -44,19 +44,19 @@ class Generator(object):
         try:
             with open(self.infile) as template_file:
                 template = Template(template_file.read())
-        except IOError:
-            print("WARNING: Can't access %s, %s not updated!" % (self.infile, self.outfile))
+        except OSError:
+            print(f"WARNING: Can't access {self.infile}, {self.outfile} not updated!")
             return
 
         print("Writing file: %s" % self.outfile)
         with open(self.outfile, "w") as generated_file:
-            generated_file.write(self.compile_output(template, version, branch, build_no, build_sys))
+            generated_file.write(self.compile_output(template, version, branch, build_no, build_sys, version_file_name))
 
 
 class NsisInstScriptGenerator(Generator):
     def compile_dll_list(self):
         all_dll_files = glob("*.dll")
-        accepted_dll_files = set(["GiGi.dll"])
+        accepted_dll_files = {"GiGi.dll"}
         for dll_file in all_dll_files:
             if dll_file.startswith("boost_"):
                 if dll_file.partition(".")[0] in required_boost_libraries:
@@ -65,7 +65,7 @@ class NsisInstScriptGenerator(Generator):
                 accepted_dll_files.add(dll_file)
         return sorted(accepted_dll_files)
 
-    def compile_output(self, template, version, branch, build_no, build_sys):
+    def compile_output(self, template, version, branch, build_no, build_sys, version_file_name):
         dll_files = self.compile_dll_list()
         if dll_files:
             return template.substitute(
@@ -104,6 +104,7 @@ else:
     boost_python_suffix = "%d%d" % (sys.version_info.major, sys.version_info.minor)
 
 required_boost_libraries = [
+    "boost_atomic",
     "boost_chrono",
     "boost_date_time",
     "boost_filesystem",
@@ -121,35 +122,41 @@ required_boost_libraries = [
 
 
 # A list of tuples containing generators
-generators = [Generator("util/Version.cpp.in", "util/Version.cpp")]
+generators = [
+    Generator("util/Version.cpp.in", "util/Version.cpp"),
+    Generator("cmake/FreeOrionVersion.cmake.in", "cmake/FreeOrionVersion.cmake"),
+]
 if system() == "Windows":
     generators.append(NsisInstScriptGenerator("packaging/windows_installer.nsi.in", "packaging/windows_installer.nsi"))
 if system() == "Darwin":
     generators.append(Generator("packaging/Info.plist.in", "packaging/Info.plist"))
 
-version = "0.4.10+"
+version = "0.5+"
 branch = ""
 build_no = INVALID_BUILD_NO
+version_file_name = version
 
 try:
-    branch = check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"], universal_newlines=True).strip()
-    if (branch == "master") or (branch[:7] == "release"):
+    branch = check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"], text=True).strip()
+    if (branch == "master") or (branch == "weekly-test-builds") or (branch[:7] == "release"):
         branch = ""
     else:
         branch += " "
     commit = check_output(
-        ["git", "show", "--no-show-signature", "-s", "--format=%h", "--abbrev=7", "HEAD"], universal_newlines=True
+        ["git", "show", "--no-show-signature", "-s", "--format=%h", "--abbrev=7", "HEAD"], text=True
     ).strip()
     timestamp = float(
-        check_output(
-            ["git", "show", "--no-show-signature", "-s", "--format=%ct", "HEAD"], universal_newlines=True
-        ).strip()
+        check_output(["git", "show", "--no-show-signature", "-s", "--format=%ct", "HEAD"], text=True).strip()
     )
     build_no = ".".join([datetime.utcfromtimestamp(timestamp).strftime("%Y-%m-%d"), commit])
-except (IOError, CalledProcessError):
+    if branch[:7] == "release":
+        version_file_name = "v" + version
+    else:
+        version_file_name = build_no + "_Test"
+except (OSError, CalledProcessError):
     print("WARNING: git not installed or not setup correctly")
 
 for generator in generators:
-    generator.execute(version, branch, build_no, build_sys)
+    generator.execute(version, branch, build_no, build_sys, version_file_name)
 
-print("Building v%s %sbuild %s" % (version, branch, build_no))
+print(f"Building v{version} {branch}build {build_no}")

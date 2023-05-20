@@ -13,9 +13,9 @@ class RotatingGraphic;
 class ScanlineControl;
 
 /** represents one or more fleets of an empire at a location on the map. */
-class FleetButton : public GG::Button {
+class FleetButton final : public GG::Button {
 public:
-    enum class SizeType : int {
+    enum class SizeType : uint8_t {
         NONE,
         TINY,
         SMALL,
@@ -31,12 +31,12 @@ public:
     void Refresh(SizeType size_type);
 
     /** Returns true if \a pt is within or over the button. */
-    bool InWindow(const GG::Pt& pt) const override;
+    bool InWindow(GG::Pt pt) const noexcept override;
 
     const std::vector<int>& Fleets() const      { return m_fleets; }    ///< returns the fleets represented by this control
     bool                    Selected() const    { return m_selected; }  ///< returns whether this button has been marked selected
-    void                    MouseHere(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
-    void                    SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
+    void                    MouseHere(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) override;
+    void                    SizeMove(GG::Pt ul, GG::Pt lr) override;
     void                    SetSelected(bool selected = true);      ///< sets selection status of button.  if selected = true, marks button as selected.  otherwise marks button as not selected
 
     static void             PlayFleetButtonOpenSound();

@@ -5,7 +5,6 @@ from itertools import product
 
 import planets
 import universe_tables
-
 import util
 
 # tuple of available star types
@@ -94,7 +93,9 @@ def generate_systems(pos_list, gsd):
         if system == fo.invalid_object():
             # create system failed, report an error and try to continue with next position
             util.report_error(
-                "Python generate_systems: create system at position (%f, %f) failed" % (position[0], position[1])
+                "Python generate_systems: create system at position ({:f}, {:f}) failed".format(
+                    position[0], position[1]
+                )
             )
             continue
         sys_list.append(system)

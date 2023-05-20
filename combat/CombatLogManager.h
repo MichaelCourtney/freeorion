@@ -41,22 +41,23 @@ public:
     /** Return the requested combat log or boost::none.*/
     [[nodiscard]] boost::optional<const CombatLog&> GetLog(int log_id) const;
 
-    /** Return the ids of all incomplete logs or boost::none if they are all complete.*/
-    [[nodiscard]] boost::optional<std::vector<int>> IncompleteLogIDs() const;
+    /** Return the ids of all incomplete logs, if any. */
+    [[nodiscard]] std::vector<int> IncompleteLogIDs() const { return {m_incomplete_logs.begin(), m_incomplete_logs.end()}; }
 
-    int AddNewLog(const CombatLog& log); // adds log, returns unique log id
-    int AddNewLog(CombatLog&& log);      // adds log, returns unique log id
+    int AddNewLog(CombatLog log);      // adds log, returns unique log id
 
     /** Replace incomplete log with \p id with \p log. An incomplete log is a
         partially downloaded log where only the log id is known.*/
-    void CompleteLog(int id, const CombatLog& log); // TODO: add && override
+    void CompleteLog(int id, CombatLog log);
     void Clear();
+
+    static constexpr int INVALID_COMBAT_LOG_ID = -1;
 
 private:
     std::unordered_map<int, CombatLog> m_logs;
     //! Set of logs ids that do not have bodies and need to be fetched from the server
     std::set<int>                      m_incomplete_logs;
-    std::atomic<int>                   m_latest_log_id = -1;
+    std::atomic<int>                   m_latest_log_id = 0;
 
     template <typename Archive>
     friend void serialize(Archive&, CombatLogManager&, const unsigned int);

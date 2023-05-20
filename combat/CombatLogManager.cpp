@@ -13,17 +13,13 @@ namespace {
         if (object.ObjectType() == UniverseObjectType::OBJ_SHIP) {
             return object.GetMeter(MeterType::METER_MAX_STRUCTURE)->Current();
 
-        } else if ( object.ObjectType() == UniverseObjectType::OBJ_PLANET ) {
-            const Meter* defense = object.GetMeter(MeterType::METER_MAX_DEFENSE);
-            const Meter* shield = object.GetMeter(MeterType::METER_MAX_SHIELD);
-            const Meter* construction = object.GetMeter(MeterType::METER_TARGET_CONSTRUCTION);
-
+        } else if (object.ObjectType() == UniverseObjectType::OBJ_PLANET) {
             float ret = 0.0f;
-            if (defense)
+            if (const Meter* defense = object.GetMeter(MeterType::METER_MAX_DEFENSE))
                 ret += defense->Current();
-            if (shield)
+            if (const Meter* shield = object.GetMeter(MeterType::METER_MAX_SHIELD))
                 ret += shield->Current();
-            if (construction)
+            if (const Meter* construction = object.GetMeter(MeterType::METER_TARGET_CONSTRUCTION))
                 ret += construction->Current();
             return ret;
         }
@@ -69,13 +65,13 @@ CombatLog::CombatLog(const CombatInfo& combat_info) :
     turn(combat_info.turn),
     system_id(combat_info.system_id),
     empire_ids(combat_info.empire_ids),
-    damaged_object_ids(combat_info.damaged_object_ids),
-    destroyed_object_ids(combat_info.destroyed_object_ids),
+    damaged_object_ids(combat_info.damaged_object_ids.begin(), combat_info.damaged_object_ids.end()),
+    destroyed_object_ids(combat_info.destroyed_object_ids.begin(), combat_info.destroyed_object_ids.end()),
     combat_events(combat_info.combat_events)
 {
     // compile all remaining and destroyed objects' ids
-    object_ids = combat_info.destroyed_object_ids;
-    for (const auto& obj : combat_info.objects->all()) {
+    object_ids.insert(combat_info.destroyed_object_ids.begin(), combat_info.destroyed_object_ids.end());
+    for (const auto& obj : combat_info.objects.allRaw()) {
         object_ids.insert(obj->ID());
         participant_states[obj->ID()] = CombatParticipantState(*obj);
     }
@@ -99,19 +95,13 @@ boost::optional<const CombatLog&> CombatLogManager::GetLog(int log_id) const {
     return boost::none;
 }
 
-int CombatLogManager::AddNewLog(const CombatLog& log) {
-    int new_log_id = ++m_latest_log_id;
-    m_logs.emplace(new_log_id, log);
-    return new_log_id;
-}
-
-int CombatLogManager::AddNewLog(CombatLog&& log) {
+int CombatLogManager::AddNewLog(CombatLog log) {
     int new_log_id = ++m_latest_log_id;
     m_logs.emplace(new_log_id, std::move(log));
     return new_log_id;
 }
 
-void CombatLogManager::CompleteLog(int id, const CombatLog& log) {
+void CombatLogManager::CompleteLog(int id, CombatLog log) {
     auto incomplete_it = m_incomplete_logs.find(id);
     if (incomplete_it == m_incomplete_logs.end()) {
         DebugLogger(combat_log) << "CombatLogManager::CompleteLog id = " << id << " is not a known incomplete log";
@@ -121,7 +111,7 @@ void CombatLogManager::CompleteLog(int id, const CombatLog& log) {
     } else {
         m_incomplete_logs.erase(incomplete_it);
     }
-    m_logs[id] = log;
+    m_logs.insert_or_assign(id, std::move(log));
 
     if (id > m_latest_log_id) {
         for (++m_latest_log_id; m_latest_log_id <= id; ++m_latest_log_id)
@@ -137,15 +127,6 @@ void CombatLogManager::Clear() {
     m_latest_log_id = -1;
 }
 
-boost::optional<std::vector<int>> CombatLogManager::IncompleteLogIDs() const {
-    if (m_incomplete_logs.empty())
-        return boost::none;
-
-    // Set the log ids in reverse order so that if the server only has time to
-    // send one log it is the most recent combat log, which is the one most
-    // likely of interest to the player.
-    return std::vector<int>{m_incomplete_logs.begin(), m_incomplete_logs.end()};
-}
 
 
 ///////////////////////////////////////////////////////////

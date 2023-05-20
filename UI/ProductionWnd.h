@@ -10,29 +10,28 @@
 class ResourceInfoPanel;
 class BuildDesignatorWnd;
 class ProductionQueueWnd;
+struct ScriptingContext;
 
 //! Contains a BuildDesignatorWnd, some stats on the empire-wide production queue, and the queue itself.
 class ProductionWnd : public GG::Wnd {
 public:
     ProductionWnd(GG::X w, GG::Y h);
-
-    virtual ~ProductionWnd();
     void CompleteConstruction() override;
 
     int SelectedPlanetID() const;
-    int ShownEmpireID() const;
+    int ShownEmpireID() const { return m_empire_shown_id; }
 
-    bool InWindow(const GG::Pt& pt) const override;
-    bool InClient(const GG::Pt& pt) const override;
-    void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
+    bool InWindow(GG::Pt pt) const override;
+    bool InClient(GG::Pt pt) const override;
+    void SizeMove(GG::Pt ul, GG::Pt lr) override;
 
     void Render() override;
 
-    void SetEmpireShown(int empire_id);
+    void SetEmpireShown(int empire_id, const ScriptingContext& context);
 
-    void Refresh();
-    void Reset();
-    void Update();
+    void Refresh(const ScriptingContext& context);
+    void Reset(const ScriptingContext& context);
+    void Update(const ScriptingContext& context);
 
     //! Shows \a building_type in production encyclopedia window
     void ShowBuildingTypeInEncyclopedia(const std::string& building_type);
@@ -84,13 +83,13 @@ public:
 
     //! Programatically sets this Wnd's selected planet.
     //! Does not emit a PlanetSelectedSignal.
-    void SelectPlanet(int planet_id);
+    void SelectPlanet(int planet_id, const ScriptingContext& context);
 
     //! Attempts to find a planet to select, and if successful, selects that
     //! planet
-    void SelectDefaultPlanet();
+    void SelectDefaultPlanet(const ObjectMap& objects);
 
-    void Sanitize();
+    void Sanitize(const ObjectMap& objects);
 
     //! Enables, or disables if \a enable is false, issuing orders via this ProductionWnd.
     void EnableOrderIssuing(bool enable = true);
@@ -108,18 +107,18 @@ public:
 private:
     void DoLayout();
     void ProductionQueueChangedSlot();
-    void UpdateQueue();     ///< Clears and repopulates queue list with listitems corresponding to contents of empire's production queue
-    void UpdateInfoPanel(); ///< Updates production summary at top left of production screen, and signals that the empire's minerals resource pool has changed (propagates to the mapwnd to update indicator)
+    void UpdateQueue(const ScriptingContext& context);     ///< Clears and repopulates queue list with listitems corresponding to contents of empire's production queue
+    void UpdateInfoPanel(const ScriptingContext& context); ///< Updates production summary at top left of production screen, and signals that the empire's minerals resource pool has changed (propagates to the mapwnd to update indicator)
 
-    void AddBuildToQueueSlot(const ProductionQueue::ProductionItem& item, int number, int location, int pos);
+    void AddBuildToQueueSlot(ProductionQueue::ProductionItem item, int number, int location, int pos);
 
     void ChangeBuildQuantitySlot(int queue_idx, int quantity);
     void ChangeBuildQuantityBlockSlot(int queue_idx, int quantity, int blocksize);
 
-    void DeleteQueueItem(GG::ListBox::iterator it);
+    void DeleteQueueItem(GG::ListBox::iterator it, bool do_delete);
     void QueueItemMoved(const GG::ListBox::iterator& row_it, const GG::ListBox::iterator& original_position_it);
-    void QueueItemClickedSlot(GG::ListBox::iterator it, const GG::Pt& pt, const GG::Flags<GG::ModKey>& modkeys);
-    void QueueItemDoubleClickedSlot(GG::ListBox::iterator it, const GG::Pt& pt, const GG::Flags<GG::ModKey>& modkeys);
+    void QueueItemClickedSlot(GG::ListBox::iterator it, GG::Pt pt, GG::Flags<GG::ModKey> modkeys);
+    void QueueItemDoubleClickedSlot(GG::ListBox::iterator it, GG::Pt pt, GG::Flags<GG::ModKey> modkeys);
     void QueueItemRallied(GG::ListBox::iterator it, int object_id);
     void QueueItemPaused(GG::ListBox::iterator it, bool pause);
     void QueueItemDuped(GG::ListBox::iterator it);
@@ -129,10 +128,9 @@ private:
     std::shared_ptr<ResourceInfoPanel>  m_production_info_panel;
     std::shared_ptr<ProductionQueueWnd> m_queue_wnd;
     std::shared_ptr<BuildDesignatorWnd> m_build_designator_wnd;
-
-    bool                        m_order_issuing_enabled = false;
-    int                         m_empire_shown_id = ALL_EMPIRES;
-    boost::signals2::connection m_empire_connection;
+    boost::signals2::scoped_connection  m_empire_connection;
+    int                                 m_empire_shown_id = ALL_EMPIRES;
+    bool                                m_order_issuing_enabled = false;
 };
 
 

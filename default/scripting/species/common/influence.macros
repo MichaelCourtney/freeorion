@@ -16,13 +16,34 @@ BASE_INFLUENCE_COSTS
                         Planet
                         OwnedBy empire = Source.Owner
                         Species
+                        Not Species name = "SP_EXOBOT"
+                    ] +
+                    Statistic Count condition = And [
+                        Ship
+                        OwnedBy empire = Source.Owner
+                        (LocalCandidate.OrderedColonizePlanetID != -1)
+                    ] +
+                    Statistic Count condition = And [
+                        Building
+                        OwnedBy empire = Source.Owner
+                        Building name = [
+                            "BLD_COL_SUPER_TEST" "BLD_COL_ABADDONI" "BLD_COL_BANFORO" "BLD_COL_CHATO" "BLD_COL_CRAY"
+                            "BLD_COL_DERTHREAN" "BLD_COL_EAXAW" "BLD_COL_EGASSEM" "BLD_COL_ETTY" "BLD_COL_FULVER"
+                            "BLD_COL_FURTHEST" "BLD_COL_GEORGE" "BLD_COL_GYSACHE" "BLD_COL_HAPPY" "BLD_COL_HHHOH"
+                            "BLD_COL_HUMAN" "BLD_COL_KILANDOW" "BLD_COL_KOBUNTURA" "BLD_COL_LAENFA" "BLD_COL_MISIORLA"
+                            "BLD_COL_MUURSH" "BLD_COL_PHINNERT" "BLD_COL_SCYLIOR" "BLD_COL_SETINON" "BLD_COL_SILEXIAN"
+                            "BLD_COL_SLY" "BLD_COL_SSLITH" "BLD_COL_TAEGHIRUS" "BLD_COL_TRITH" "BLD_COL_REPLICON"
+                            "BLD_COL_UGMORS" ]
                     ] +
                     ((NamedReal name = "OUTPOST_RELATIVE_ADMIN_COUNT" value = 0.25) *
                         (Statistic Count condition = And [
                             Planet
                             OwnedBy empire = Source.Owner
-                            Not Species
-                        ])                
+                            Or [
+                                Not Species
+                                Species name = "SP_EXOBOT"
+                            ]
+                        ])
                     )
                 )^0.5)
 
@@ -43,6 +64,7 @@ BASE_INFLUENCE_COSTS
             activation = And [
                 Planet
                 Not Unowned
+                Not EmpireHasAdoptedPolicy empire = Source.Owner name = "PLC_CONFEDERATION"
                 Not ResourceSupplyConnected empire = LocalCandidate.Owner condition = And [
                     Planet
                     OwnedBy empire = Source.Owner
@@ -74,23 +96,24 @@ NO_INFLUENCE
 '''
 
 ARTISANS_INFLUENCE_STABILITY
-'''        EffectsGroup     // artistic species generate influence when artisans workshops policy adopted
+'''
+        EffectsGroup     // artistic species generate influence when artisans workshops policy adopted
             scope = Source
             activation = And [
                 HasTag name = "ARTISTIC"
-                Happiness low = 1
+                Happiness low = (NamedReal name = "ARTISANS_MIN_STABILITY_FOCUS" value = 1)
                 EmpireHasAdoptedPolicy empire = Source.Owner name = "PLC_ARTISAN_WORKSHOPS"
                 Focus type = "FOCUS_INFLUENCE"
             ]
             accountinglabel = "PLC_ARTISAN_WORKSHOPS"
             effects = SetTargetInfluence value = Value +
-                (NamedReal name = "ARTISANS_INFLUENCE_FLAT_FOCUS" value = 4.0)
+                (NamedReal name = "ARTISANS_INFLUENCE_FLAT_FOCUS" value = 2.0)
 
         EffectsGroup
             scope = Source
             activation = And [
                 HasTag name = "ARTISTIC"
-                Happiness low = 10
+                Happiness low = (NamedReal name = "ARTISANS_MIN_STABILITY_NO_FOCUS" value = 10)
                 EmpireHasAdoptedPolicy empire = Source.Owner name = "PLC_ARTISAN_WORKSHOPS"
                 Not Focus type = "FOCUS_INFLUENCE"
             ]
@@ -147,7 +170,7 @@ VERY_BAD_INFLUENCE
             ]
             accountinglabel = "VERY_BAD_INFLUENCE_LABEL"
             priority = [[TARGET_SCALING_PRIORITY]]
-            effects = SetTargetInfluence value = Value + ([[VERY_BAD_MULTIPLIER]]-1.0)*abs(Value)
+            effects = SetTargetInfluence value = Value + (2.0/3.0-1.0)*abs(Value)
 '''
 
 /*
@@ -178,7 +201,7 @@ BAD_INFLUENCE
             ]
             accountinglabel = "BAD_INFLUENCE_LABEL"
             priority = [[TARGET_SCALING_PRIORITY]]
-            effects = SetTargetInfluence value = Value + ([[BAD_MULTIPLIER]]-1.0)*abs(Value)
+            effects = SetTargetInfluence value = Value + (0.8-1.0)*abs(Value)
 '''
 
 AVERAGE_INFLUENCE
@@ -197,7 +220,7 @@ GOOD_INFLUENCE
             ]
             accountinglabel = "GOOD_INFLUENCE_LABEL"
             priority = [[TARGET_SCALING_PRIORITY]]
-            effects = SetTargetInfluence value = Value + ([[GOOD_MULTIPLIER]]-1.0)*abs(Value)
+            effects = SetTargetInfluence value = Value + (1.25-1.0)*abs(Value)
 '''
 
 GREAT_INFLUENCE
@@ -212,7 +235,7 @@ GREAT_INFLUENCE
             ]
             accountinglabel = "GREAT_INFLUENCE_LABEL"
             priority = [[TARGET_SCALING_PRIORITY]]
-            effects = SetTargetInfluence value = Value + ([[GREAT_MULTIPLIER]]-1.0)*abs(Value)
+            effects = SetTargetInfluence value = Value + (1.5-1.0)*abs(Value)
 '''
 
 ULTIMATE_INFLUENCE
@@ -227,7 +250,7 @@ ULTIMATE_INFLUENCE
             ]
             accountinglabel = "ULTIMATE_INFLUENCE_LABEL"
             priority = [[TARGET_SCALING_PRIORITY]]
-            effects = SetTargetInfluence value = Value + ([[ULTIMATE_MULTIPLIER]]-1.0)*abs(Value)
+            effects = SetTargetInfluence value = Value + (2.0-1.0)*abs(Value)
 '''
 
 #include "/scripting/common/misc.macros"

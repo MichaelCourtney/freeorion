@@ -27,13 +27,18 @@ If you don't sure which sub-modules should be chosen - consider creating a new o
 If your code adds new sub-modules dependency to existing sub-modules - consider creating a new one.
 """
 
-from turn_state._dry_dock_state import get_empire_drydocks
 from turn_state._empire_resources import (
+    computronium_candidates,
     have_asteroids,
     have_computronium,
     have_gas_giant,
+    have_honeycomb,
     have_nest,
     have_ruins,
+    have_worldtree,
+    honeycomb_candidates,
+    luxury_resources,
+    owned_asteroid_coatings,
     population_with_industry_focus,
     population_with_research_focus,
     set_have_asteroids,
@@ -55,6 +60,9 @@ from turn_state._planet_state import (
 )
 from turn_state._supply_state import (
     get_distance_to_enemy_supply,
+    get_supply_group,
+    get_supply_group_id,
     get_system_supply,
     get_systems_by_supply_tier,
+    supply_connected,
 )

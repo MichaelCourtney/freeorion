@@ -15,19 +15,19 @@ public:
     ~AccordionPanel();
 
     void CompleteConstruction() override;
-    GG::Pt ClientUpperLeft() const override;
-    GG::Pt ClientLowerRight() const override;
+    GG::Pt ClientUpperLeft() const noexcept override;
+    GG::Pt ClientLowerRight() const noexcept override;
 
     void Render() override;
-    void MouseWheel(const GG::Pt& pt, int move, GG::Flags<GG::ModKey> mod_keys) override;
-    void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
+    void MouseWheel(GG::Pt pt, int move, GG::Flags<GG::ModKey> mod_keys) override;
+    void SizeMove(GG::Pt ul, GG::Pt lr) override;
 
     /** Sets the interior color of the box. */
     void SetInteriorColor(GG::Clr c);
 
     /** Set the number of pixels between the expansion symbol and the
         client area. */
-    void SetBorderMargin(unsigned int margin);
+    void SetBorderMargin(int margin);
 
     typedef boost::signals2::signal<void ()> ExpandCollapseSignalType;
     mutable ExpandCollapseSignalType ExpandCollapseSignal;
@@ -43,7 +43,7 @@ protected:
     bool                        m_collapsed = true;
     bool                        m_is_left = false;  ///< Is expand button on the left?
     GG::Clr                     m_interior_color;
-    unsigned int                m_border_margin = 1;///< The number of pixels between the expansion button and the client area.
+    int                         m_border_margin = 1;///< The number of pixels between the expansion button and the client area.
 };
 
 #endif

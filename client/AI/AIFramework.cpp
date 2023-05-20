@@ -27,10 +27,19 @@
 namespace fs = boost::filesystem;
 namespace py = boost::python;
 
+namespace {
+    struct string_view_to_python_str {
+        static PyObject* convert(const std::string_view& s)
+        { return boost::python::incref(boost::python::object(s.data()).ptr()); }
+    };
+}
 
 BOOST_PYTHON_MODULE(freeOrionAIInterface)
 {
     py::docstring_options doc_options(true, true, false);
+
+    boost::python::to_python_converter<std::string_view, string_view_to_python_str>();
+
 
     ///////////////////
     //  Game client  //
@@ -72,8 +81,8 @@ BOOST_PYTHON_MODULE(freeOrionAIInterface)
         .def(py::map_indexing_suite<std::map<int, bool>>())
     ;
 
-    FreeOrionPython::SetWrapper<int>::Wrap("IntSet");
-    FreeOrionPython::SetWrapper<std::string>::Wrap("StringSet");
+    FreeOrionPython::SetWrapper<std::set<int>>::Wrap("IntSet");
+    FreeOrionPython::SetWrapper<std::set<std::string>>::Wrap("StringSet");
 }
 
 //////////////////////
@@ -110,12 +119,15 @@ auto PythonAI::InitModules() -> bool
         return false;
     }
     AddToSysPath(ai_path);
-
-    // import universe generator script file
-    m_python_module_ai = py::import("FreeOrionAI");
-
     DebugLogger() << "AI Python modules successfully initialized!";
     return true;
+}
+
+void PythonAI::Start()
+{
+    // import AI main file
+    m_python_module_ai = py::import("FreeOrionAI");
+    DebugLogger() << "AI Python modules started!";
 }
 
 void PythonAI::GenerateOrders()
@@ -129,7 +141,7 @@ void PythonAI::GenerateOrders()
         py::object generateOrdersPythonFunction = m_python_module_ai.attr("generateOrders");
         //DebugLogger() << "PythonAI::GenerateOrders : generating orders";
         generateOrdersPythonFunction();
-    } catch (const py::error_already_set& err) {
+    } catch (const py::error_already_set&) {
         HandleErrorAlreadySet();
         if (!IsPythonRunning() || GetOptionsDB().Get<bool>("testing"))
             throw;
@@ -170,7 +182,7 @@ void PythonAI::StartNewGame()
     FreeOrionPython::ClearStaticSaveStateString();
     // call Python function that sets up the AI to be able to generate orders for a new game
     py::object startNewGamePythonFunction = m_python_module_ai.attr("startNewGame");
-    startNewGamePythonFunction(m_aggression);
+    startNewGamePythonFunction();
 }
 
 void PythonAI::ResumeLoadedGame(const std::string& save_state_string)
@@ -191,6 +203,3 @@ auto PythonAI::GetSaveStateString() const -> const std::string&
     //DebugLogger() << "PythonAI::GetSaveStateString() returning: " << s_save_state_string;
     return FreeOrionPython::GetStaticSaveStateString();
 }
-
-void PythonAI::SetAggression(int aggr)
-{ m_aggression = aggr; }

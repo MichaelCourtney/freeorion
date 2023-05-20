@@ -34,14 +34,14 @@ public:
             type(slot_type), x(x_), y(y_)
         {}
 
-        bool operator==(const Slot& rhs) const
+        bool operator==(const Slot& rhs) const noexcept
         { return type == rhs.type && x == rhs.x && y == rhs.y; }
 
         ShipSlotType type = ShipSlotType::INVALID_SHIP_SLOT_TYPE;
         double x = 0.5, y = 0.5;
     };
 
-    ShipHull() = default;
+    ShipHull() = delete;
 
     ShipHull(float fuel, float speed, float stealth, float structure,
              bool default_fuel_effects, bool default_speed_effects,
@@ -58,106 +58,87 @@ public:
     { return !(*this == rhs); }
 
     //! Returns name of hull
-    auto Name() const -> const std::string&
-    { return m_name; }
+    [[nodiscard]] const auto& Name() const noexcept { return m_name; }
 
     //! Returns description, including a description of the stats and effects
     //! of this hull
-    auto Description() const -> const std::string&
-    { return m_description; }
+    [[nodiscard]] const auto& Description() const noexcept { return m_description; }
 
     //! Returns starlane speed of hull
-    auto Speed() const -> float;
+    [[nodiscard]] auto Speed() const -> float;
 
     //! Returns fuel capacity of hull
-    auto Fuel() const -> float
-    { return m_fuel; }
+    [[nodiscard]] auto Fuel() const noexcept { return m_fuel; }
 
     //! Returns stealth of hull
-    auto Stealth() const -> float
-    { return m_stealth; }
+    [[nodiscard]] auto Stealth() const noexcept { return m_stealth; }
 
     //! Returns structure of hull
-    auto Structure() const -> float;
+    [[nodiscard]] auto Structure() const -> float;
 
     //! Returns shields of hull
-    auto Shields() const -> float
-    { return 0.0f; }
+    [[nodiscard]] auto Shields() const noexcept { return 0.0f; }
 
     //! Returns colonist capacity of hull
-    auto ColonyCapacity() const -> float
-    { return 0.0f; }
+    [[nodiscard]] auto ColonyCapacity() const noexcept { return 0.0f; }
 
     //! Returns the troop capacity of hull
-    auto TroopCapacity() const -> float
-    { return 0.0f; }
+    [[nodiscard]] auto TroopCapacity() const noexcept { return 0.0f; }
 
     //! Returns detection ability of hull
-    auto Detection() const -> float
-    { return 0.0f; }
+    [[nodiscard]] auto Detection() const noexcept { return 0.0f; }
 
     //! Returns true if the production cost and time are invariant (does not
     //! depend on) the location
-    auto ProductionCostTimeLocationInvariant() const -> bool;
+    [[nodiscard]] auto ProductionCostTimeLocationInvariant() const -> bool;
 
     //! Returns the number of production points required to produce this hull
-    auto ProductionCost(int empire_id, int location_id, const ScriptingContext& parent_context = ScriptingContext{},
-                        int in_design_id = INVALID_DESIGN_ID) const -> float;
+    [[nodiscard]] auto ProductionCost(int empire_id, int location_id, const ScriptingContext& parent_context,
+                                      int in_design_id = INVALID_DESIGN_ID) const -> float;
 
     //! Returns the number of turns required to produce this hull
-    auto ProductionTime(int empire_id, int location_id, const ScriptingContext& parent_context = ScriptingContext{},
-                        int in_design_id = INVALID_DESIGN_ID) const -> int;
+    [[nodiscard]] auto ProductionTime(int empire_id, int location_id, const ScriptingContext& parent_context,
+                                      int in_design_id = INVALID_DESIGN_ID) const -> int;
 
     //! Returns whether this hull type is producible by players and appears on
     //! the design screen
-    auto Producible() const -> bool
-    { return m_producible; }
+    [[nodiscard]] auto Producible() const noexcept { return m_producible; }
 
-    auto ProductionMeterConsumption() const -> const ConsumptionMap<MeterType>&
-    { return m_production_meter_consumption; }
+    [[nodiscard]] const auto& ProductionMeterConsumption() const noexcept { return m_production_meter_consumption; }
 
-    auto ProductionSpecialConsumption() const -> const ConsumptionMap<std::string>&
-    { return m_production_special_consumption; }
+    [[nodiscard]] const auto& ProductionSpecialConsumption() const noexcept { return m_production_special_consumption; }
 
     //! Returns total number of of slots in hull
-    auto NumSlots() const -> unsigned int
-    { return m_slots.size(); }
+    [[nodiscard]] uint32_t NumSlots() const noexcept { return static_cast<uint32_t>(m_slots.size()); }
 
     //! Returns number of of slots of indicated type in hull
-    auto NumSlots(ShipSlotType slot_type) const -> unsigned int;
+    [[nodiscard]] uint32_t NumSlots(ShipSlotType slot_type) const noexcept;
 
     //! Returns vector of slots in hull
-    auto Slots() const -> const std::vector<Slot>&
-    { return m_slots; }
+    [[nodiscard]] const auto& Slots() const noexcept { return m_slots; }
 
-    auto Tags() const -> const std::set<std::string>&
-    { return m_tags; }
+    [[nodiscard]] const auto& Tags() const noexcept { return m_tags; }
 
-    auto HasTag(const std::string& tag) const -> bool
-    { return m_tags.count(tag) != 0; }
+    [[nodiscard]] bool HasTag(std::string_view tag) const
+    { return std::any_of(m_tags.begin(), m_tags.end(), [&tag](const auto& t) { return t == tag; }); }
 
     //! Returns the condition that determines the locations where ShipDesign
     //! containing hull can be produced
-    auto Location() const -> const Condition::Condition*
-    { return m_location.get(); }
+    [[nodiscard]] const auto* Location() const noexcept { return m_location.get(); }
 
     //! Returns the names of other content that cannot be used in the same
     //! ship design as this part
-    auto Exclusions() const -> const std::set<std::string>&
-    { return m_exclusions; }
+    [[nodiscard]] const auto& Exclusions() const noexcept { return m_exclusions; }
 
     //! Returns the EffectsGroups that encapsulate the effects this part hull
     //! has.
-    auto Effects() const -> const std::vector<std::shared_ptr<Effect::EffectsGroup>>&
-    { return m_effects; }
+    [[nodiscard]] const auto& Effects() const noexcept { return m_effects; }
 
     //! Returns the image that represents the hull on the design screen
-    auto Graphic() const -> const std::string&
-    { return m_graphic; }
+    [[nodiscard]] const auto& Graphic() const noexcept { return m_graphic; }
 
     //! Returns the small icon to represent hull
-    auto Icon() const -> const std::string&
-    { return m_icon; }
+    [[nodiscard]] const auto& Icon() const noexcept { return m_icon; }
 
     //! Returns a number, calculated from the contained data, which should be
     //! different for different contained data, and must be the same for
@@ -165,64 +146,61 @@ public:
     //! and executions of the program and the function. Useful to verify that
     //! the parsed content is consistent without sending it all between
     //! clients and server.
-    auto GetCheckSum() const -> unsigned int;
+    [[nodiscard]] auto GetCheckSum() const -> uint32_t;
 
 private:
-    void Init(std::vector<std::unique_ptr<Effect::EffectsGroup>>&& effects,
-              bool default_fuel_effects,
-              bool default_speed_effects,
-              bool default_stealth_effects,
-              bool default_structure_effects);
+    const std::string m_name;
+    const std::string m_description;
+    const float       m_speed = 1.0f;
+    const float       m_fuel = 0.0f;
+    const float       m_stealth = 0.0f;
+    const float       m_structure = 0.0f;
+    const bool        m_default_speed_effects = false;
+    const bool        m_default_structure_effects = false;
 
-    std::string m_name;
-    std::string m_description;
-    float       m_speed = 1.0f;
-    float       m_fuel = 0.0f;
-    float       m_stealth = 0.0f;
-    float       m_structure = 0.0f;
-
-    std::unique_ptr<ValueRef::ValueRef<double>>         m_production_cost;
-    std::unique_ptr<ValueRef::ValueRef<int>>            m_production_time;
-    bool                                                m_producible = false;
-    std::vector<Slot>                                   m_slots;
-    std::set<std::string>                               m_tags;
-    ConsumptionMap<MeterType>                           m_production_meter_consumption;
-    ConsumptionMap<std::string>                         m_production_special_consumption;
-    std::unique_ptr<Condition::Condition>               m_location;
-    std::set<std::string>                               m_exclusions;
-    std::vector<std::shared_ptr<Effect::EffectsGroup>>  m_effects;
-    std::string                                         m_graphic;
-    std::string                                         m_icon;
+    const bool                                              m_producible = false;
+    const std::unique_ptr<const ValueRef::ValueRef<double>> m_production_cost;
+    const std::unique_ptr<const ValueRef::ValueRef<int>>    m_production_time;
+    const std::vector<Slot>                                 m_slots;
+    const std::string                                       m_tags_concatenated;
+    const std::vector<std::string_view>                     m_tags;
+    const ConsumptionMap<MeterType>                         m_production_meter_consumption;
+    const ConsumptionMap<std::string>                       m_production_special_consumption;
+    const std::unique_ptr<const Condition::Condition>       m_location;
+    const std::vector<std::string>                          m_exclusions;
+    const std::vector<Effect::EffectsGroup>                 m_effects;
+    const std::string                                       m_graphic;
+    const std::string                                       m_icon;
 };
 
 
 namespace CheckSums {
-    FO_COMMON_API void CheckSumCombine(unsigned int& sum, const ShipHull::Slot& slot);
+    FO_COMMON_API void CheckSumCombine(uint32_t& sum, const ShipHull::Slot& slot);
 }
 
 
 //! Holds FreeOrion hull types
 class FO_COMMON_API ShipHullManager {
 public:
-    using container_type = std::map<std::string, std::unique_ptr<ShipHull>>;
+    using container_type = std::map<std::string, std::unique_ptr<ShipHull>, std::less<>>;
     using iterator = container_type::const_iterator;
 
     //! Returns the hull type with the name @a name; you should use the free
     //! function GetShipHull() instead
-    auto GetShipHull(const std::string& name) const -> const ShipHull*;
+    [[nodiscard]] auto GetShipHull(std::string_view name) const -> const ShipHull*;
 
     //! iterator to the first hull type
-    auto begin() const -> iterator;
+    [[nodiscard]] auto begin() const -> iterator;
 
     //! iterator to the last + 1th hull type
-    auto end() const -> iterator;
+    [[nodiscard]] auto end() const -> iterator;
 
     //! How many hulls are known?
-    auto size() const -> std::size_t;
+    [[nodiscard]] auto size() const -> std::size_t;
 
     //! Returns the instance of this singleton class; you should use the free
     //! function GetShipHullManager() instead
-    static auto GetShipHullManager() -> ShipHullManager&;
+    [[nodiscard]] static auto GetShipHullManager() -> ShipHullManager&;
 
     //! Returns a number, calculated from the contained data, which should be
     //! different for different contained data, and must be the same for
@@ -230,7 +208,7 @@ public:
     //! and executions of the program and the function. Useful to verify that
     //! the parsed content is consistent without sending it all between
     //! clients and server.
-    auto GetCheckSum() const -> unsigned int;
+    [[nodiscard]] auto GetCheckSum() const -> uint32_t;
 
     //! Sets hull types to the future value of \p pending_ship_hulls.
     FO_COMMON_API void SetShipHulls(Pending::Pending<container_type>&& pending_ship_hulls);
@@ -252,11 +230,10 @@ private:
 
 
 //! Returns the singleton hull type manager
-FO_COMMON_API auto GetShipHullManager() -> ShipHullManager&;
+[[nodiscard]] FO_COMMON_API auto GetShipHullManager() -> ShipHullManager&;
 
 //! Returns the ship ShipHull specification object with name @p name.  If no
 //! such ShipHull exists, nullptr is returned instead.
-FO_COMMON_API auto GetShipHull(const std::string& name) -> const ShipHull*;
-
+[[nodiscard]] FO_COMMON_API auto GetShipHull(std::string_view name) -> const ShipHull*;
 
 #endif

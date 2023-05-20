@@ -41,28 +41,17 @@ class Wnd;
 class GG_API ZList
 {
 public:
-    /** RenderOrderIterable can be iterated in back to front render order. */
-    struct RenderOrderIterable {
-        RenderOrderIterable(const std::list<std::shared_ptr<Wnd>>& list) :
-            m_list(list.rbegin(), list.rend())
-        {}
-
-        std::vector<std::shared_ptr<Wnd>>::const_iterator begin() const
-        { return m_list.begin(); }
-
-        std::vector<std::shared_ptr<Wnd>>::const_iterator end() const
-        { return m_list.end(); }
-
-        private:
-        const std::vector<std::shared_ptr<Wnd>> m_list;
-    };
+    using container_t = std::list<std::shared_ptr<Wnd>>;
+    using iterator = container_t::iterator;
 
     /** Return a RenderOrderIterable in back to front render order. */
-    RenderOrderIterable RenderOrder() const;
+    std::vector<std::shared_ptr<Wnd>> RenderOrder() const { return {m_list.crbegin(), m_list.crend()}; }
 
     /** Returns pointer to the window under the point pt; constrains pick to
         modal if nonzero, and ignores \a ignore if nonzero. */
-    std::shared_ptr<Wnd> Pick(const Pt& pt, const std::shared_ptr<Wnd>& modal, const std::set<Wnd*>* ignore = nullptr) const;
+    std::shared_ptr<Wnd> Pick(Pt pt, std::shared_ptr<Wnd> modal) const;
+    std::shared_ptr<Wnd> Pick(Pt pt, std::shared_ptr<Wnd> modal,
+                              const std::vector<const Wnd*>& ignore) const;
 
     /** Add() places \a wnd in front of the list. */
     void Add(std::shared_ptr<Wnd> wnd);
@@ -71,30 +60,21 @@ public:
     bool Remove(const std::shared_ptr<Wnd>& wnd);
     bool Remove(const Wnd* const wnd);
 
-    /** Moves \a wnd from its current position to the beginning of list;
-        updates wnd's z-value. */
+    /** Moves \a wnd from its current position to the beginning of list, or
+      * the clostes to the beginning if there are other OnTop Wnds.
+      * Updates wnd's z-value. */
     bool MoveUp(const std::shared_ptr<Wnd>& wnd);
     bool MoveUp(const Wnd* const wnd);
 
-    /** Moves \a wnd from its current position to the end of list; updates
-        wnd's z-value. */
+    /** Moves \a wnd from its current position to the end of list.
+    * * Updates wnd's z-value. */
     bool MoveDown(const std::shared_ptr<Wnd>& wnd);
     bool MoveDown(const Wnd* const wnd);
 
 private:
-    using iterator = std::list<std::shared_ptr<Wnd>>::iterator;
+    iterator FirstNonOnTop(); ///< iterator to first window in list that is non-on-top (returns end() if none found).
 
-    iterator FirstNonOnTop();              ///< Returns iterator to first window in list that is non-on-top (returns end() if none found).
-
-    template <typename T>
-    using FunctionOfWndReturningMaybeT = std::function<boost::optional<T> (const std::shared_ptr<Wnd>&)>;
-
-    /** Return the pair (iterator, T) for the first satisying wnd where \p predicate(wnd) !=
-        boost::none.  Remove any nullptr found before the first satisying wnd from the list. */
-    template <typename T>
-    boost::optional<std::pair<iterator, T>> Find(const FunctionOfWndReturningMaybeT<T>& predicate) const;
-
-    mutable std::list<std::shared_ptr<Wnd>> m_list;
+    container_t m_list;
 };
 
 }

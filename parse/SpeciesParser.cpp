@@ -1,5 +1,12 @@
 #include "Parse.h"
 
+#include "PythonParserImpl.h"
+#include "ValueRefPythonParser.h"
+#include "ConditionPythonParser.h"
+#include "EffectPythonParser.h"
+#include "EnumPythonParser.h"
+#include "SourcePythonParser.h"
+
 #include "ParseImpl.h"
 #include "EnumParser.h"
 #include "ValueRefParser.h"
@@ -13,8 +20,11 @@
 #include "../universe/Species.h"
 #include "../util/Directories.h"
 
-#include <boost/spirit/include/phoenix.hpp>
+#include <boost/phoenix.hpp>
 
+#include <boost/python/import.hpp>
+#include <boost/python/make_function.hpp>
+#include <boost/python/raw_function.hpp>
 
 #define DEBUG_PARSERS 0
 
@@ -94,7 +104,7 @@ namespace {
     };
 
     void insert_species(
-        SpeciesManager::SpeciesTypeMap& species,
+        std::map<std::string, Species>& species, // in/out
         SpeciesStrings& strings,
         boost::optional<std::map<PlanetType, PlanetEnvironment>>& planet_environments,
         boost::optional<parse::effects_group_payload>& effects,
@@ -103,26 +113,28 @@ namespace {
         SpeciesData& species_data,
         bool& pass)
     {
-        auto species_ptr = std::make_unique<Species>(
-            std::move(strings.name), std::move(strings.desc), std::move(strings.gameplay_desc),
-            (params.foci ? std::move(*params.foci) : std::vector<FocusType>{}),
-            (params.default_focus ? std::move(*params.default_focus) : std::string{}),
-            (planet_environments ? std::move(*planet_environments) : std::map<PlanetType, PlanetEnvironment>{}),
-            (effects ? OpenEnvelopes(*effects, pass) : std::vector<std::unique_ptr<Effect::EffectsGroup>>{}),
-            (combat_targets ? (*combat_targets).OpenEnvelope(pass) : nullptr),
-            params.playable,
-            params.native,
-            params.can_colonize,
-            params.can_produce_ships,
-            params.tags,    // intentionally not moved
-            std::move(params.likes),
-            std::move(params.dislikes),
-            std::move(species_data.graphic),
-            (species_data.spawn_rate ? *species_data.spawn_rate : 1.0),
-            (species_data.spawn_limit ? *species_data.spawn_limit : 9999));
+        auto species_name{strings.name};
 
-        auto& species_name{species_ptr->Name()};
-        species.emplace(species_name, std::move(species_ptr));
+        species.emplace(std::piecewise_construct,
+                        std::forward_as_tuple(std::move(species_name)),
+                        std::forward_as_tuple(
+                            std::move(strings.name), std::move(strings.desc), std::move(strings.gameplay_desc),
+                            (params.foci ? std::move(*params.foci) : std::vector<FocusType>{}),
+                            (params.default_focus ? std::move(*params.default_focus) : std::string{}),
+                            (planet_environments ? std::move(*planet_environments) : std::map<PlanetType, PlanetEnvironment>{}),
+                            (effects ? OpenEnvelopes(*effects, pass) : std::vector<std::unique_ptr<Effect::EffectsGroup>>{}),
+                            (combat_targets ? (*combat_targets).OpenEnvelope(pass) : nullptr),
+                            params.playable,
+                            params.native,
+                            params.can_colonize,
+                            params.can_produce_ships,
+                            params.tags,    // intentionally not moved
+                            std::move(params.likes),
+                            std::move(params.dislikes),
+                            std::move(species_data.graphic),
+                            (species_data.spawn_rate ? *species_data.spawn_rate : 1.0),
+                            (species_data.spawn_limit ? *species_data.spawn_limit : 9999)
+                        ));
     }
 
     BOOST_PHOENIX_ADAPT_FUNCTION(void, insert_species_, insert_species, 8)
@@ -162,8 +174,9 @@ namespace {
         parse::detail::single_or_repeated_string<std::set<std::string>> one_or_more_string_tokens;
     };
 
+    static_assert(std::is_same_v<SpeciesManager::SpeciesTypeMap, std::map<std::string, const Species, std::less<>>>);
     using start_rule_payload = std::pair<
-        SpeciesManager::SpeciesTypeMap, // species_by_name
+        std::map<std::string, Species>, // species_by_name
         std::vector<std::string> // census ordering
     >;
     using start_rule_signature = void(start_rule_payload::first_type&);
@@ -338,55 +351,146 @@ namespace {
         parse::detail::planet_environment_parser_rules             planet_environment_rules;
     };
 
-    using manifest_start_rule_signature = void (std::vector<std::string>&);
+    void insert_species_census_ordering_(const boost::python::list& tags, start_rule_payload::second_type& ordering) {
+        boost::python::stl_input_iterator<std::string> tags_begin(tags), tags_end;
+        for (auto it = tags_begin; it != tags_end; ++it)
+            ordering.push_back(*it);
+    }
 
-    struct manifest_grammar : public parse::detail::grammar<manifest_start_rule_signature> {
-        manifest_grammar(const parse::lexer& tok,
-                         const std::string& filename,
-                         const parse::text_iterator& first, const parse::text_iterator& last) :
-            manifest_grammar::base_type(start)
-        {
-            namespace phoenix = boost::phoenix;
-            namespace qi = boost::spirit::qi;
-
-            using phoenix::push_back;
-
-            qi::_1_type _1;
-            qi::_2_type _2;
-            qi::_3_type _3;
-            qi::_4_type _4;
-            qi::_r1_type _r1;
-            qi::omit_type omit_;
-
-            species_manifest
-                =    omit_[tok.SpeciesCensusOrdering_]
-                >    *(label(tok.tag_) > tok.string [ push_back(_r1, _1) ])
-                ;
-
-            start
-                =   +species_manifest(_r1)
-                ;
-
-            species_manifest.name("ParsedSpeciesCensusOrdering");
-
-#if DEBUG_PARSERS
-            debug(species_manifest);
-#endif
-
-            qi::on_error<qi::fail>(start, parse::report_error(filename, first, last, _1, _2, _3, _4));
+    boost::python::object py_insert_species_(start_rule_payload::first_type& species_, const boost::python::tuple& args,
+                                             const boost::python::dict& kw)
+    {
+        auto name = boost::python::extract<std::string>(kw["name"])();
+        auto description = boost::python::extract<std::string>(kw["description"])();
+        auto gameplay_description = boost::python::extract<std::string>(kw["gameplay_description"])();
+        boost::python::stl_input_iterator<FocusType> foci_begin(kw["foci"]), foci_end;
+        std::vector<FocusType> foci(foci_begin, foci_end);
+        auto defaultfocus = boost::python::extract<std::string>(kw["defaultfocus"])();
+        std::map<PlanetType, PlanetEnvironment> environments;
+        auto environments_args = boost::python::extract<boost::python::dict>(kw["environments"])();
+        boost::python::stl_input_iterator<enum_wrapper<PlanetType>> environments_begin(environments_args), environments_end;
+        for (auto it = environments_begin; it != environments_end; ++it) {
+            environments.emplace(it->value,
+                boost::python::extract<enum_wrapper<PlanetEnvironment>>(environments_args[*it])().value);
         }
 
-        using manifest_rule = parse::detail::rule<void (std::vector<std::string>&)>;
-        using start_rule = parse::detail::rule<manifest_start_rule_signature>;
+        std::vector<std::unique_ptr<Effect::EffectsGroup>> effectsgroups;
+        boost::python::stl_input_iterator<effect_group_wrapper> effectsgroups_begin(kw["effectsgroups"]), effectsgroups_end;
+        for (auto it = effectsgroups_begin; it != effectsgroups_end; ++it) {
+            const auto& effects_group = *it->effects_group;
+            effectsgroups.push_back(std::make_unique<Effect::EffectsGroup>(
+                ValueRef::CloneUnique(effects_group.Scope()),
+                ValueRef::CloneUnique(effects_group.Activation()),
+                ValueRef::CloneUnique(effects_group.Effects()),
+                effects_group.AccountingLabel(),
+                effects_group.StackingGroup(),
+                effects_group.Priority(),
+                effects_group.GetDescription(),
+                effects_group.TopLevelContent()
+            ));
+        }
+        bool playable = false;
+        if (kw.has_key("playable")) {
+            playable = boost::python::extract<bool>(kw["playable"])();
+        }
+        bool native = false;
+        if (kw.has_key("native")) {
+            native = boost::python::extract<bool>(kw["native"])();
+        }
+        bool can_colonize = false;
+        if (kw.has_key("can_colonize")) {
+            can_colonize = boost::python::extract<bool>(kw["can_colonize"])();
+        }
+        bool can_produce_ships = false;
+        if (kw.has_key("can_produce_ships")) {
+            can_produce_ships = boost::python::extract<bool>(kw["can_produce_ships"])();
+        }
+        boost::python::stl_input_iterator<std::string> tags_begin(kw["tags"]), it_end;
+        std::set<std::string> tags(tags_begin, it_end);
+        std::set<std::string> likes;
+        if (kw.has_key("likes")) {
+            boost::python::stl_input_iterator<std::string> likes_begin(kw["likes"]);
+            likes = std::move(std::set<std::string>(likes_begin, it_end));
+        }
+        std::set<std::string> dislikes;
+        if (kw.has_key("dislikes")) {
+            boost::python::stl_input_iterator<std::string> dislikes_begin(kw["dislikes"]);
+            dislikes = std::move(std::set<std::string>(dislikes_begin, it_end));
+        }
+        auto graphic = boost::python::extract<std::string>(kw["graphic"])();
+        double spawn_rate = 1.0;
+        if (kw.has_key("spawnrate")) {
+            spawn_rate = boost::python::extract<double>(kw["spawnrate"])();
+        }
+        int spawn_limit = 9999;
+        if (kw.has_key("spawnlimit")) {
+            spawn_limit = boost::python::extract<int>(kw["spawnlimit"])();
+        }
+        std::unique_ptr<Condition::Condition> combat_targets;
+        if (kw.has_key("combat_targets")) {
+            combat_targets = ValueRef::CloneUnique(boost::python::extract<condition_wrapper>(kw["combat_targets"])().condition);
+        }
 
-        parse::detail::Labeller label;
-        manifest_rule species_manifest;
-        start_rule start;
+        auto species_ptr = std::make_unique<Species>(
+            std::move(name), std::move(description), std::move(gameplay_description),
+            std::move(foci),
+            std::move(defaultfocus),
+            std::move(environments),
+            std::move(effectsgroups),
+            std::move(combat_targets),
+            playable,
+            native,
+            can_colonize,
+            can_produce_ships,
+            tags,    // intentionally not moved
+            std::move(likes),
+            std::move(dislikes),
+            std::move(graphic),
+            spawn_rate,
+            spawn_limit);
+
+        auto& species_name{species_ptr->Name()};
+        species_.emplace(species_name, std::move(*species_ptr));
+
+        return boost::python::object();
+    }
+
+    struct py_grammar {
+        boost::python::dict globals;
+
+        py_grammar(const PythonParser& parser, start_rule_payload::first_type& species_) :
+            globals(boost::python::import("builtins").attr("__dict__"))
+        {
+#if PY_VERSION_HEX < 0x03080000
+            globals["__builtins__"] = boost::python::import("builtins");
+#endif
+            RegisterGlobalsEffects(globals);
+            RegisterGlobalsConditions(globals);
+            RegisterGlobalsValueRefs(globals, parser);
+            RegisterGlobalsSources(globals);
+            RegisterGlobalsEnums(globals);
+
+            globals["Species"] = boost::python::raw_function(
+                [&species_](const boost::python::tuple& args, const boost::python::dict& kw)
+                { return py_insert_species_(species_, args, kw); });
+        }
+
+        boost::python::dict operator()() const { return globals; }
+    };
+
+    struct py_manifest_grammar {
+        boost::python::dict operator()(start_rule_payload::second_type& ordering) const {
+            boost::python::dict globals(boost::python::import("builtins").attr("__dict__"));
+            globals["SpeciesCensusOrdering"] = boost::python::make_function([&ordering](auto tags) { return insert_species_census_ordering_(tags, ordering); },
+                boost::python::default_call_policies(),
+                boost::mpl::vector<void, const boost::python::list&>());
+            return globals;
+        }
     };
 }
 
 namespace parse {
-    start_rule_payload species(const boost::filesystem::path& path) {
+    start_rule_payload species(const PythonParser& parser, const boost::filesystem::path& path) {
         start_rule_payload retval;
         auto& [species_, ordering] = retval;
 
@@ -394,19 +498,23 @@ namespace parse {
 
         ScopedTimer timer("Species Parsing");
 
-        for (const auto& file : ListDir(path, IsFOCScript)) {
-            if (file.filename() == "SpeciesCensusOrdering.focs.txt" ) {
+        for (const auto& file : ListDir(path, IsFOCScript))
+            detail::parse_file<grammar, start_rule_payload::first_type>(lexer::tok, file, species_);
+
+        py_grammar p = py_grammar(parser, species_);
+        for (const auto& file : ListDir(path, IsFOCPyScript)) {
+            if (file.filename() == "SpeciesCensusOrdering.focs.py" ) {
                 manifest_file = file;
                 continue;
             }
 
-            detail::parse_file<grammar, start_rule_payload::first_type>(lexer::tok, file, species_);
+            py_parse::detail::parse_file<py_grammar>(parser, file, p);
         }
 
         if (!manifest_file.empty()) {
             try {
-                detail::parse_file<manifest_grammar, start_rule_payload::second_type>(
-                    lexer::tok, manifest_file, ordering);
+                py_parse::detail::parse_file<py_manifest_grammar, start_rule_payload::second_type>(
+                    parser, manifest_file, py_manifest_grammar(), ordering);
 
             } catch (const std::runtime_error& e) {
                 ErrorLogger() << "Failed to species census manifest in " << manifest_file << " from " << path

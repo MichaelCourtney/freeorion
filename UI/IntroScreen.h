@@ -12,7 +12,7 @@ class CreditsWnd;
 /** This is the first screen the user sees in FreeOrion.  It will always be the
   * size of the Application main window.  It will display a splash screen with
   * a menu window on one side. */
-class IntroScreen : public GG::Wnd {
+class IntroScreen final : public GG::Wnd {
 public:
     IntroScreen();
     void CompleteConstruction() override;
@@ -25,7 +25,7 @@ public:
        the Continue and Load buttons when a player might have deleted the last
        savegame. */
     void PreRender() override;
-    void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
+    void SizeMove(GG::Pt ul, GG::Pt lr) override;
 
     void OnContinue();
     void OnSinglePlayer();  //!< called when single player is clicked

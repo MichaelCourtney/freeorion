@@ -130,10 +130,8 @@ namespace {
     }
 
     void InitMeterEstimatesAndDiscrepancies() {
-        Universe& universe = GetUniverse();
-        EmpireManager& empires = Empires();
-        ScriptingContext context{universe, empires, GetGalaxySetupData(), GetSpeciesManager(), GetSupplyManager()};
-        universe.InitMeterEstimatesAndDiscrepancies(context);
+        ScriptingContext context;
+        context.ContextUniverse().InitMeterEstimatesAndDiscrepancies(context);
     }
 
     /** @brief Set ::Universe ::Meter instances to their estimated values as
@@ -147,7 +145,10 @@ namespace {
     void UpdateMeterEstimates(bool pretend_to_own_unowned_planets) {
         std::vector<Planet*> unowned_planets;
         int player_id = -1;
-        Universe& universe = AIClientApp::GetApp()->GetUniverse();
+
+        ScriptingContext context;
+        Universe& universe = context.ContextUniverse();
+
         if (pretend_to_own_unowned_planets) {
             // Add this player ownership to all planets that the player can see
             // but which aren't currently colonized.  This way, any effects the
@@ -175,7 +176,6 @@ namespace {
         }
 
         // update meter estimates with temporary ownership
-        ScriptingContext context{universe, Empires(), GetGalaxySetupData(), GetSpeciesManager(), GetSupplyManager()};
         universe.UpdateMeterEstimates(context);
 
         if (pretend_to_own_unowned_planets) {
@@ -187,34 +187,35 @@ namespace {
     }
 
     void UpdateResourcePools() {
+        ScriptingContext context;
         int empire_id = AIClientApp::GetApp()->EmpireID();
-        Empire* empire = ::GetEmpire(empire_id);
+        auto empire = context.GetEmpire(empire_id);
         if (!empire) {
             ErrorLogger() << "UpdateResourcePools : couldn't get empire with id " << empire_id;
             return;
         }
-        ScriptingContext context;
         empire->UpdateResourcePools(context);
     }
 
     void UpdateResearchQueue() {
+        ScriptingContext context;
         int empire_id = AIClientApp::GetApp()->EmpireID();
-        Empire* empire = ::GetEmpire(empire_id);
+        auto empire = context.GetEmpire(empire_id);
         if (!empire) {
             ErrorLogger() << "UpdateResearchQueue : couldn't get empire with id " << empire_id;
             return;
         }
-        empire->UpdateResearchQueue(Objects());
+        empire->UpdateResearchQueue(context);
     }
 
     void UpdateProductionQueue() {
+        ScriptingContext context;
         int empire_id = AIClientApp::GetApp()->EmpireID();
-        Empire* empire = ::GetEmpire(empire_id);
+        auto empire = context.GetEmpire(empire_id);
         if (!empire) {
             ErrorLogger() << "UpdateProductionQueue : couldn't get empire with id " << empire_id;
             return;
         }
-        ScriptingContext context;
         empire->UpdateProductionQueue(context);
     }
 
@@ -250,7 +251,7 @@ namespace {
 
         if (!NewFleetOrder::Check(app->EmpireID(), fleet_name, ship_ids,
                                   FleetAggression::FLEET_OBSTRUCTIVE, context))
-        { return 0; } // TODO: why not return INVALID_OBJECT_ID ?
+        { return INVALID_OBJECT_ID; }
 
         auto order = std::make_shared<NewFleetOrder>(app->EmpireID(), fleet_name, ship_ids,
                                                      FleetAggression::FLEET_OBSTRUCTIVE, context);
@@ -393,21 +394,16 @@ namespace {
             return 0;
         }
 
-        if (!empire->ProducibleItem(BuildType::BT_BUILDING, item_name, location_id)) {
-            ErrorLogger() << "IssueEnqueueBuildingProductionOrder : specified item_name and location_id that don't indicate an item that can be built at that location";
-            return 0;
-        }
-
-        if (!empire->EnqueuableItem(BuildType::BT_BUILDING, item_name, location_id)) {
+        if (!empire->EnqueuableItem(BuildType::BT_BUILDING, item_name, location_id, context)) {
             ErrorLogger() << "IssueEnqueueBuildingProductionOrder : specified item_name and location_id that don't indicate an item that can be enqueued at that location";
             return 0;
         }
 
-        auto item = ProductionQueue::ProductionItem(BuildType::BT_BUILDING, item_name);
-
         AIClientApp::GetApp()->Orders().IssueOrder(
             std::make_shared<ProductionQueueOrder>(ProductionQueueOrder::ProdQueueOrderAction::PLACE_IN_QUEUE,
-                                                   empire_id, item, 1, location_id),
+                                                   empire_id,
+                                                   ProductionQueue::ProductionItem(BuildType::BT_BUILDING, item_name),
+                                                   1, location_id),
             context);
 
         return 1;
@@ -438,16 +434,16 @@ namespace {
             return 0;
         }
 
-        if (!empire->ProducibleItem(BuildType::BT_SHIP, design_id, location_id)) {
+        if (!empire->ProducibleItem(BuildType::BT_SHIP, design_id, location_id, context)) {
             ErrorLogger() << "IssueEnqueueShipProductionOrder : specified design_id and location_id that don't indicate a design that can be built at that location";
             return 0;
         }
 
-        auto item = ProductionQueue::ProductionItem(BuildType::BT_SHIP, design_id, universe);
-
         AIClientApp::GetApp()->Orders().IssueOrder(
             std::make_shared<ProductionQueueOrder>(ProductionQueueOrder::ProdQueueOrderAction::PLACE_IN_QUEUE,
-                                                   empire_id, item, 1, location_id),
+                                                   empire_id,
+                                                   ProductionQueue::ProductionItem(BuildType::BT_SHIP, design_id, universe),
+                                                   1, location_id),
             context);
 
         return 1;
@@ -478,9 +474,9 @@ namespace {
 
         if (queue_it != empire->GetProductionQueue().end())
             AIClientApp::GetApp()->Orders().IssueOrder(
-                std::make_shared<ProductionQueueOrder>(ProductionQueueOrder::ProdQueueOrderAction::SET_QUANTITY_AND_BLOCK_SIZE,
-                                                       empire_id, queue_it->uuid,
-                                                       new_quantity, new_blocksize),
+                std::make_shared<ProductionQueueOrder>(
+                    ProductionQueueOrder::ProdQueueOrderAction::SET_QUANTITY_AND_BLOCK_SIZE,
+                    empire_id, queue_it->uuid, new_quantity, new_blocksize),
                 context);
 
         return 1;
@@ -535,7 +531,7 @@ namespace {
     {
         ScriptingContext context;
 
-        int empire_id = AIClientApp::GetApp()->EmpireID();
+        const int empire_id = AIClientApp::GetApp()->EmpireID();
         auto empire = context.GetEmpire(empire_id);
         if (!empire) {
             ErrorLogger() << "IssueDequeueProductionOrder : couldn't get empire with id " << empire_id;
@@ -548,9 +544,9 @@ namespace {
             return 0;
         }
 
-        auto queue_it = empire->GetProductionQueue().find(queue_index);
+        auto queue_it = queue.find(queue_index);
 
-        if (queue_it != empire->GetProductionQueue().end())
+        if (queue_it != queue.end())
             AIClientApp::GetApp()->Orders().IssueOrder(
                 std::make_shared<ProductionQueueOrder>(
                     ProductionQueueOrder::ProdQueueOrderAction::REMOVE_FROM_QUEUE,
@@ -644,7 +640,7 @@ namespace {
                 std::invalid_argument(""), name, description, context.current_turn,
                 empire_id, hull, parts, icon, model, name_desc_in_stringtable, false, uuid);
             AIClientApp::GetApp()->Orders().IssueOrder(
-                std::make_shared<ShipDesignOrder>(empire_id, *design),
+                std::make_shared<ShipDesignOrder>(empire_id, *design, context),
                 context);
             return 1;
 
@@ -730,6 +726,10 @@ namespace FreeOrionPython {
                 +[](int empire_id) -> const Empire* { return AIClientApp::GetApp()->GetEmpire(empire_id); },
                 py::return_value_policy<py::reference_existing_object>(),
                 "Returns the empire object (Empire) with the specified empire ID (int)");
+
+        py::def("getDiplomaticStatus",
+                +[](int empire_id1, int empire_id2) -> const DiplomaticStatus { return AIClientApp::GetApp()->Empires().GetDiplomaticStatus(empire_id1, empire_id2); },
+                "Returns the diplomatic status between two empires");
 
         py::def("getUniverse",              GetUniverse,       py::return_value_policy<py::reference_existing_object>(), "Returns the universe object (Universe)");
 

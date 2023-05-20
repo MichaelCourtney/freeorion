@@ -52,7 +52,8 @@ bool PythonCommon::Initialize() {
 
     try {
         m_system_exit = py::import("builtins").attr("SystemExit");
-    } catch (const py::error_already_set& err) {
+        m_traceback_format_exception = py::import("traceback").attr("format_exception");
+    } catch (const py::error_already_set&) {
         HandleErrorAlreadySet();
         ErrorLogger() << "Unable to initialize FreeOrion Python SystemExit";
         return false;
@@ -93,8 +94,7 @@ void PythonCommon::HandleErrorAlreadySet() {
     py::object o_value(py::handle<>(py::borrowed(value)));
     py::object o_traceback = traceback != nullptr ? py::object(py::handle<>(py::borrowed(traceback))) : py::object();
 
-    py::object mod_traceback = py::import("traceback");
-    py::object lines = mod_traceback.attr("format_exception")(o_extype, o_value, o_traceback);
+    py::object lines = m_traceback_format_exception(o_extype, o_value, o_traceback);
     for (int i = 0; i < len(lines); ++i) {
         std::string line = py::extract<std::string>(lines[i])();
         boost::algorithm::trim_right(line);
@@ -108,8 +108,9 @@ void PythonCommon::Finalize() {
     if (Py_IsInitialized()) {
         // cleanup python objects before interpterer shutdown
         m_system_exit = py::object();
+        m_traceback_format_exception = py::object();
         try {
-            Py_Finalize();
+            // According to boost.python 1.69 docs python Py_Finalize must not be called
 #if defined(FREEORION_MACOSX) || defined(FREEORION_WIN32)
             if (m_home_dir != nullptr) {
                 PyMem_RawFree(m_home_dir);

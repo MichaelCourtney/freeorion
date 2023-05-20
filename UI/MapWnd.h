@@ -58,7 +58,7 @@ public:
     MapWnd();
     void CompleteConstruction() override;
 
-    GG::Pt ClientUpperLeft() const override;
+    GG::Pt ClientUpperLeft() const noexcept override;
 
     double ZoomFactor() const;
     int    SystemIconSize() const;
@@ -67,55 +67,57 @@ public:
 
     /** returns what size type (tiny, small, large) fleet buttons on this map
       * are shown at */
-    FleetButton::SizeType       FleetButtonSizeType() const;
+    FleetButton::SizeType FleetButtonSizeType() const;
 
     /** populates the relevant UI state that should be restored after a
       * save-and-load cycle */
-    void                        GetSaveGameUIData(SaveGameUIData& data) const;
+    void GetSaveGameUIData(SaveGameUIData& data) const;
 
     /** returns true if MapWnd is visible and usable behind a production window.
      * MapWnd interactions are restricted to those appropriate to the production window */
-    bool                        InProductionViewMode() const;
+    bool InProductionViewMode() const;
 
     /** returns true if MapWnd is visible and usable behind a research window.
      * MapWnd interactions are restricted to those appropriate to the research window.
      * Currently, there are no interactions with the MapWnd while the research window
      * is visible because although the MapWnd is visible the research window is opaque
      * and on top.*/
-    bool                        InResearchViewMode() const;
+    bool InResearchViewMode() const;
 
     /** returns true if MapWnd is visible and usable behind a design window.
      * MapWnd interactions are restricted to those appropriate to the design window
      * Currently, there are no interactions with the MapWnd while the design window
      * is visible because although the MapWnd is visible the design window is opaque
      * and on top.*/
-    bool                        InDesignViewMode() const;
+    bool InDesignViewMode() const;
 
     /** returns the currently set moderator action in this MapWnd's
       * ModeratorActionsWnd. */
     ModeratorActionSetting      GetModeratorActionSetting() const;
 
-    bool                        AutoEndTurnEnabled() const;
+    bool AutoEndTurnEnabled() const;
 
     /** returns the position on the screen that corresponds to the specified
       * universe X and Y coordinates. */
-    GG::Pt                      ScreenCoordsFromUniversePosition(double universe_x, double universe_y) const;
+    GG::Pt ScreenCoordsFromUniversePosition(double universe_x, double universe_y) const;
     /** returns the universe position (X and Y in pair) that corresponds to
       * the specified screen coordinates. */
     std::pair<double, double>   UniversePositionFromScreenCoords(GG::Pt screen_coords) const;
 
-    /** Returns the id of the currently-selected planet, or
-      * INVALID_OBJECT_ID if no planet is selected */
-    int                         SelectedPlanetID() const;
+    /** Returns the id of the currently-selected object or INVALID_OBJECT_ID if no planet is selected */
+    int SelectedSystemID() const;
+    int SelectedPlanetID() const;
+    int SelectedFleetID() const;
+    int SelectedShipID() const;
 
     void PreRender() override;
     void Render() override;
-    void LButtonDown(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
-    void LDrag(const GG::Pt& pt, const GG::Pt& move, GG::Flags<GG::ModKey> mod_keys) override;
-    void LButtonUp(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
-    void LClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
-    void RClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
-    void MouseWheel(const GG::Pt& pt, int move, GG::Flags<GG::ModKey> mod_keys) override;
+    void LButtonDown(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) override;
+    void LDrag(GG::Pt pt, GG::Pt move, GG::Flags<GG::ModKey> mod_keys) override;
+    void LButtonUp(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) override;
+    void LClick(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) override;
+    void RClick(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) override;
+    void MouseWheel(GG::Pt pt, int move, GG::Flags<GG::ModKey> mod_keys) override;
     void KeyPress(GG::Key key, std::uint32_t key_code_point, GG::Flags<GG::ModKey> mod_keys) override;
     void KeyRelease(GG::Key key, std::uint32_t key_code_point, GG::Flags<GG::ModKey> mod_keys) override;
     void TimerFiring(unsigned int ticks, GG::Timer* timer) override;
@@ -127,7 +129,7 @@ public:
 
     void EnableOrderIssuing(bool enable = true);                 //!< enables or disables order issuing and pressing the turn button.
 
-    void InitTurn();                                             //!< called at the start of each turn
+    void InitTurn(ScriptingContext& context);                    //!< called at the start of each turn
     void MidTurnUpdate();                                        //!< called after receiving updated Universe during turn processing, but not when the full turn update is received
 
     void RestoreFromSaveData(const SaveGameUIData& data);        //!< restores the UI state that was saved in an earlier call to GetSaveGameUIData().
@@ -165,16 +167,17 @@ public:
     void ShowFieldType(const std::string& field_type_name);      //!< brings up encyclopedia panel and displays info about the field type with name \a field_type_name
     void ShowEmpire(int empire_id);                              //!< brings up encyclopedia panel and displays info about the empire with id \a empire_id
     void ShowMeterTypeArticle(const std::string& meter_string);  //!< brings up encyclopedia panel and displays info about the MeterType @a meter_type
+    void ShowMeterTypeArticle(MeterType meter_type);             //!< brings up encyclopedia panel and displays info about the MeterType @a meter_type
     void ShowEncyclopediaEntry(const std::string& str);          //!< brings up encyclopedia panel and displays info about the specified string \a str
 
     void SelectSystem(int systemID); //!< programatically selects systems on map, sidepanel, and production screen.  catches signals from these when the user changes the selected system
     void ReselectLastSystem();       //!< re-selects the most recently selected system, if a valid one exists
+    void SelectPlanet(int planetID, const ScriptingContext& context); //!< programatically selects planets on sidepanels.  catches signals from production wnd or sidepanel for when the user changes the selected planet
     void SelectPlanet(int planetID); //!< programatically selects planets on sidepanels.  catches signals from production wnd or sidepanel for when the user changes the selected planet
     void SelectFleet(int fleetID);   //!< programatically selects fleets by ID
 
     /** Programatically selects fleets. */
-    void SelectFleet(std::shared_ptr<Fleet> fleet);
-
+    void SelectFleet(const std::shared_ptr<Fleet>& fleet);
     void ReselectLastFleet();                   //!< re-selects the most recent selected fleet, if a valid one exists
 
     void RemoveFleet(int fleet_id);             //!< removes specified fleet.
@@ -183,11 +186,11 @@ public:
     /* creates specially-coloured projected fleet movement line for specified
      * fleet following the specified route.  Move line originates from the
      * fleet's button location. */
-    void SetProjectedFleetMovementLine(int fleet_id, const std::list<int>& travel_route);
+    void SetProjectedFleetMovementLine(int fleet_id, const std::vector<int>& travel_route);
     /* creates specially-coloured projected fleet movement lines for specified
      * fleets following the specified route.  Move lines originates from the
      * fleets' button locations. */
-    void SetProjectedFleetMovementLines(const std::vector<int>& fleet_ids, const std::list<int>& travel_route);
+    void SetProjectedFleetMovementLines(const std::vector<int>& fleet_ids, const std::vector<int>& travel_route);
 
     void ClearProjectedFleetMovementLines();     //!< removes all projected fleet movement lines
 
@@ -226,28 +229,35 @@ private:
     struct MovementLineData {
         struct Vertex;  // apparent universe positions of move line points, derived from actual universe positions contained in MovePathNodes
         MovementLineData();
-        MovementLineData(const std::list<MovePathNode>& path_,
+        MovementLineData(const std::vector<MovePathNode>& path_,
                          const std::map<std::pair<int, int>, LaneEndpoints>& lane_end_points_map,
                          GG::Clr colour_ = GG::CLR_WHITE, int empireID = ALL_EMPIRES);
         ~MovementLineData();
 
-        std::list<MovePathNode> path;       // raw path data from which line rendering is determined
-        GG::Clr                 colour;     // colour of line
-        std::vector<Vertex>     vertices;   // cached apparent universe positions of starts and ends of line segments drawn to represent move path
+        std::vector<MovePathNode> path;       // raw path data from which line rendering is determined
+        GG::Clr                   colour;     // colour of line
+        std::vector<Vertex>       vertices;   // cached apparent universe positions of starts and ends of line segments drawn to represent move path
     };
+
+    void BufferAddMoveLineVertices(GG::GL2DVertexBuffer& dot_verts_buf,
+                                   GG::GLRGBAColorBuffer& dot_colours_buf,
+                                   GG::GLTexCoordBuffer& dot_star_texture_coords_buf,
+                                   float offset, float dot_size, int dot_spacing,
+                                   const MapWnd::MovementLineData& move_line,
+                                   GG::Clr colour_override = GG::CLR_ZERO) const;
 
     class MapScaleLine;
 
     void InitializeWindows();
 
     void Zoom(int delta);                            //!< changes the zoom level of the main map by zoom step size to the power of \a delta (adds delta to the current zoom exponent)
-    void Zoom(int delta, const GG::Pt& position);    //!< changes the zoom level of the main map by zoom step size to the power of \a delta (adds delta to the current zoom exponent) Keeps the screen position \a position in the same place after zooming
+    void Zoom(int delta, const GG::Pt position);     //!< changes the zoom level of the main map by zoom step size to the power of \a delta (adds delta to the current zoom exponent) Keeps the screen position \a position in the same place after zooming
     void SetZoom(double steps_in, bool update_slide);//!< sets zoom level of the main map to zoom step size to the power of \a steps_in and updates zoom slider position if \a update_slide is true
-    void SetZoom(double steps_in, bool update_slide, const GG::Pt& position);//!< sets zoom level of the main map to zoom step size to the power of \a steps_in and updates zoom slider position if \a update_slide is true. Keeps the screen position \a position in the same place after zooming
+    void SetZoom(double steps_in, bool update_slide, const GG::Pt position);//!< sets zoom level of the main map to zoom step size to the power of \a steps_in and updates zoom slider position if \a update_slide is true. Keeps the screen position \a position in the same place after zooming
 
-    void Pan(const GG::Pt& delta);                   //!< pans map
-    bool PanX(GG::X x = GG::X(50));
-    bool PanY(GG::Y y = GG::Y(50));
+    void Pan(const GG::Pt delta);
+    bool PanX(GG::X x);
+    bool PanY(GG::Y y);
 
     /** Mark all fleet buttons for a refresh. */
     void RefreshFleetButtons(bool recreate = true);
@@ -315,12 +325,6 @@ private:
     /* renders the dashed lines indicating where each fleet is going */
     void RenderFleetMovementLines();
 
-    /* renders a single fleet movement line. if \a clr is GG::CLR_ZERO, the lane
-     * is rendered with the .colour attribute of \a move_line. assumes that the
-     * move dot texture has already been bound. */
-    void RenderMovementLine(const MapWnd::MovementLineData& move_line, float dot_size, float dot_spacing, float dot_shift,
-                            GG::Clr clr = GG::CLR_ZERO);
-
     /* renders ETA indicators at end-of-turn positions for a single fleet movement
      * line.  if \a clr is GG::CLR_ZERO, the indicators are filled with the .colour
      * attribute of \a move_line */
@@ -358,11 +362,13 @@ private:
     void ShipRightClicked(int fleet_id);
     void ShipsRightClicked(const std::vector<int>& fleet_ids);
 
-    void UniverseObjectDeleted(std::shared_ptr<const UniverseObject> obj);
+    void UniverseObjectDeleted(const std::shared_ptr<const UniverseObject>& obj);
 
     void PushWndStack(std::shared_ptr<GG::Wnd> wnd);
     void RemoveFromWndStack(std::shared_ptr<GG::Wnd> wnd);
     bool ReturnToMap();
+
+    bool RevertOrders();
 
     bool EndTurn();
     void ToggleAutoEndTurn();
@@ -396,8 +402,8 @@ private:
     void HideSidePanelAndRememberIfItWasVisible();
     void RestoreSidePanel();
 
-    bool ToggleResearch();
-    void ShowResearch();
+    bool ToggleResearch(const ScriptingContext& context);
+    void ShowResearch(const ScriptingContext& context);
     void HideResearch();
 
     bool ToggleProduction();
@@ -494,27 +500,34 @@ private:
     std::unordered_map<int, std::shared_ptr<FleetButton>>
         m_fleet_buttons;                        //!< fleet icons, index by fleet
 
-    std::unordered_map<int, boost::signals2::connection>
+    std::unordered_map<int, boost::signals2::scoped_connection>
         m_fleet_state_change_signals;
-    std::unordered_map<int, std::vector<boost::signals2::connection>>
+    std::unordered_map<int, std::vector<boost::signals2::scoped_connection>>
         m_system_fleet_insert_remove_signals;
 
     std::map<int, MovementLineData> m_fleet_lines;                  //!< lines used for moving fleets in the main map
     std::map<int, MovementLineData> m_projected_fleet_lines;        //!< lines that show the projected path of the active fleet in the FleetWnd
 
-    std::pair<int, int>             m_line_between_systems = {INVALID_OBJECT_ID, INVALID_OBJECT_ID};//!< set when map should render line connecting 2 systems
-
     std::map<std::shared_ptr<GG::Texture>, GG::GL2DVertexBuffer> m_star_core_quad_vertices;
     std::map<std::shared_ptr<GG::Texture>, GG::GL2DVertexBuffer> m_star_halo_quad_vertices;
-    GG::GL2DVertexBuffer            m_galaxy_gas_quad_vertices;
-    GG::GLTexCoordBuffer            m_galaxy_gas_texture_coords;
-    GG::GLTexCoordBuffer            m_star_texture_coords;
-    GG::GL2DVertexBuffer            m_star_circle_vertices;
+    GG::GL2DVertexBuffer    m_galaxy_gas_quad_vertices;
+    GG::GLTexCoordBuffer    m_galaxy_gas_texture_coords;
+    GG::GLTexCoordBuffer    m_star_texture_coords;
+    GG::GL2DVertexBuffer    m_star_circle_vertices;
 
-    GG::GL2DVertexBuffer            m_starlane_vertices;
-    GG::GLRGBAColorBuffer           m_starlane_colors;
-    GG::GL2DVertexBuffer            m_RC_starlane_vertices;
-    GG::GLRGBAColorBuffer           m_RC_starlane_colors;
+    GG::GL2DVertexBuffer    m_starlane_vertices;
+    GG::GLRGBAColorBuffer   m_starlane_colors;
+    GG::GL2DVertexBuffer    m_RC_starlane_vertices;
+    GG::GLRGBAColorBuffer   m_RC_starlane_colors;
+
+    GG::GL2DVertexBuffer    m_fleet_move_dot_vertices;
+    GG::GLRGBAColorBuffer   m_fleet_move_dot_colours;
+    GG::GLTexCoordBuffer    m_fleet_move_dot_star_texture_coords;
+    std::size_t             m_projected_move_dots_start_index = 0;
+
+    GG::GL2DVertexBuffer    m_scanline_circle_vertices;
+    GG::GL2DVertexBuffer    m_system_circle_vertices;
+    GG::GLRGBAColorBuffer   m_system_circle_colours;
 
     /** First buffer is visible fields, second buffer is not visible (scanlined)
         fields for each texture. */
@@ -549,7 +562,7 @@ private:
     bool                            m_ready_turn = false;       //!< is turn orders are ready and sent to server?
     std::shared_ptr<GG::Label>      m_timeout_remain;           //!< label to show remaining time
     GG::Timer                       m_timeout_clock{1000};      //!< clock to update remaining time
-    std::list<std::weak_ptr<MapWndPopup>> m_popups;             //!< list of currently active popup windows
+    std::vector<std::weak_ptr<MapWndPopup>> m_popups;           //!< currently active popup windows
     bool                            m_menu_showing = false;     //!< set during ShowMenu() to prevent reentrency
     int                             m_current_owned_system = INVALID_OBJECT_ID;
     int                             m_current_fleet_id = INVALID_OBJECT_ID;
@@ -571,14 +584,16 @@ private:
     std::shared_ptr<MapScaleLine>       m_scale_line;   //!< indicates the on-screen distance that reprensents an in-universe distance
     std::shared_ptr<GG::Slider<double>> m_zoom_slider;  //!< allows user to set zoom level;
 
+    boost::signals2::scoped_connection  m_slider_show_connection;
+    boost::signals2::scoped_connection  m_obj_delete_connection;
+
     std::set<int>                   m_fleets_exploring;
 
     /// indicates that refresh fleet button work should be done before rendering.
     bool                            m_deferred_recreate_fleet_buttons = false;
     bool                            m_deferred_refresh_fleet_buttons = false;
 
-    std::chrono::time_point<std::chrono::high_resolution_clock>
-                                    m_timeout_time;
+    std::chrono::time_point<std::chrono::high_resolution_clock> m_timeout_time;
 
     friend struct IntroMenu;
     friend struct WaitingForGameStart;

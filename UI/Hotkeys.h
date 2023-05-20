@@ -24,7 +24,6 @@
 #include <boost/signals2/shared_connection_block.hpp>
 
 #include <functional>
-#include <initializer_list>
 
 
 class OptionsDB;
@@ -39,15 +38,12 @@ class Hotkey {
     static Hotkey& PrivateNamedHotkey(const std::string& name);
 
 public:
-    /// Internal name (code-like).
-    std::string m_name;
-
-    /// The human readable description of what this Hot does.
-    std::string m_description;
-
-    /// Returns the name of the user string containing the description
-    /// of the shortcut.
-    std::string GetDescription() const;
+    auto& GetName() const noexcept { return m_name; }
+    auto& GetDescription() const noexcept { return m_description; }
+    auto  GetKey() const noexcept { return m_key; }
+    auto  GetKeyDefault() const noexcept { return m_key_default; }
+    auto  GetModKeys() const noexcept { return m_mod_keys; }
+    auto  GetModKeysDefault() const noexcept { return m_mod_keys_default; }
 
     /// Registers a hotkey name (ie the one used for storing in the
     /// database) along with a description and a default value.
@@ -90,24 +86,24 @@ public:
     /// hotkey lists, which is probably why it should be called from
     /// main(), or something like that.
     static void AddOptions(OptionsDB& db);
-    /// 
     static void ReadFromOptions(OptionsDB& db);
 
     /// Pretty print, ie transform into something that may look
     /// reasonably nice for the user, but won't be parseable anymore.
-    static std::string PrettyPrint(GG::Key key, GG::Flags<GG::ModKey> mod);
     std::string PrettyPrint() const;
 
-    /// Whether or not the given key combination is safe to recognize while typing text
-    static bool IsTypingSafe(GG::Key key, GG::Flags<GG::ModKey> mod);
+    [[nodiscard]] bool IsTypingSafe() const noexcept;  /// Is the hotkey safe to recognize while typing text?
+    [[nodiscard]] bool IsDefault() const noexcept { return m_key == m_key_default && m_mod_keys == m_mod_keys_default; };
 
-    bool IsTypingSafe() const;  /// Is the hotkey safe to recognize while typing text?
-    bool IsDefault() const;     /// Is the hotkey set to its default value ?
-
+private:
+    std::string           m_name; /// Internal name (code-like).
+    std::string           m_description;  /// The human readable description of what this Hot does.
     GG::Key               m_key;
     GG::Key               m_key_default;
     GG::Flags<GG::ModKey> m_mod_keys;
     GG::Flags<GG::ModKey> m_mod_keys_default;
+
+    friend class HotkeyManager;
 };
 
 
@@ -123,23 +119,25 @@ public:
         target(tg)
     {}
 
-    bool operator()() const {
-        return target && target->Visible();
-    };
+    bool operator()() const { return target && target->Visible(); };
 
 private:
-    const GG::Wnd* target;
+    const GG::Wnd* target = nullptr;
 };
 
 /// On when the given windows are invisible
+template <std::size_t N>
 class InvisibleWindowCondition {
 public:
-    InvisibleWindowCondition(std::initializer_list<const GG::Wnd*> bl);
+    InvisibleWindowCondition(std::array<const GG::Wnd*, N> bl) :
+        m_blacklist(std::move(bl))
+    {}
 
-    bool operator()() const;
+    bool operator()() const
+    { return std::none_of(m_blacklist.begin(), m_blacklist.end(), [](auto* w) { return w->Visible(); }); }
 
 private:
-    std::list<const GG::Wnd*> m_blacklist;
+    std::array<const GG::Wnd*, N> m_blacklist;
 };
 
 /// On when the given window is visible
@@ -155,7 +153,7 @@ public:
     };
 
 private:
-    const GG::Wnd* target;
+    const GG::Wnd* target = nullptr;
 };
 
 template <typename W>
@@ -163,29 +161,61 @@ class FocusWindowIsA {
 public:
     bool operator()() const {
         const auto foc = GG::GUI::GetGUI()->FocusWnd();
-        return (nullptr != dynamic_cast<const W*>(foc.get()));
+        return dynamic_cast<const W*>(foc.get());
     };
 };
 
+template <std::size_t N>
 class OrCondition {
 public:
-    OrCondition(std::initializer_list<std::function<bool()>> conditions);
+    using BoolFunc = std::function<bool()>;
 
-    bool operator()() const;
+    OrCondition(std::array<BoolFunc, N> conditions) :
+        m_conditions(std::move(conditions))
+    {}
+
+    template <typename... Args>
+    OrCondition(Args&&... args) :
+        m_conditions{std::forward<Args>(args)...}
+    {}
+
+    bool operator()() const
+    { return std::any_of(m_conditions.begin(), m_conditions.end(), [](auto& cond) { return cond(); }); }
 
 private:
-    std::list<std::function<bool()>> m_conditions;
+    std::array<BoolFunc, N> m_conditions;
 };
 
+template<typename... Args>
+OrCondition(Args&&...) -> OrCondition<sizeof...(Args)>;
+
+
+template <std::size_t N>
 class AndCondition {
 public:
-    AndCondition(std::initializer_list<std::function<bool()>> conditions);
+    using BoolFunc = std::function<bool()>;
 
-    bool operator()() const;
+    AndCondition(std::array<BoolFunc, N> conditions) :
+        m_conditions(std::move(conditions))
+    {}
+
+    template <typename... Args>
+    AndCondition(Args&&... args) :
+        m_conditions{std::forward<Args>(args)...}
+    {}
+
+    bool operator()() const {
+        return std::all_of(m_conditions.begin(), m_conditions.end(),
+                           [](auto& cond) { return cond(); });
+    }
 
 private:
-    std::list<std::function<bool()>> m_conditions;
+    std::array<BoolFunc, N> m_conditions;
 };
+
+template<typename... Args>
+AndCondition(Args&&...) -> AndCondition<sizeof...(Args)>;
+
 
 class HotkeyManager {
 public:
@@ -214,17 +244,23 @@ private:
 
     /// Add the given conditional connection.
     void AddConditionalConnection(const std::string& name,
-                                  const boost::signals2::connection& conn,
+                                  boost::signals2::connection conn,
                                   std::function<bool()> cond);
 
-    struct ConditionalConnection;
-    typedef std::list<ConditionalConnection> ConditionalConnectionList;
-    typedef std::map<std::string, ConditionalConnectionList> Connections;
+    struct ConditionalConnection {
+        ConditionalConnection(boost::signals2::connection conn, std::function<bool()> cond);
 
-    /// A set of connected shortcuts.
+        void UpdateConnection(); ///< Block or unblocks the connection based on condition.
+        std::function<bool()> condition; ///< The condition. If null, always on.
+
+        boost::signals2::scoped_connection connection;
+        boost::signals2::shared_connection_block blocker;
+    };
+    using Connections = std::map<std::string, std::vector<ConditionalConnection>>;
+
     Connections                                             m_connections;
     std::map<std::string, GG::GUI::AcceleratorSignalType*>  m_signals;
-    std::set<boost::signals2::connection>                   m_internal_connections;
+    std::set<boost::signals2::scoped_connection>            m_internal_connections;
     static HotkeyManager*                                   s_singleton;
 };
 

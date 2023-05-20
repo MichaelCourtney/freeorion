@@ -3,7 +3,6 @@
 #include "ClientAppFixture.h"
 #include "Empire/Empire.h"
 #include "universe/Planet.h"
-#include "universe/UniverseObjectVisitors.h"
 #include "util/Directories.h"
 #include "util/Process.h"
 #include "util/SitRepEntry.h"
@@ -181,7 +180,7 @@ BOOST_AUTO_TEST_CASE(hostless_server) {
         BOOST_REQUIRE_EQUAL(m_ai_empires.size(), num_AIs);
 
         start_time = boost::posix_time::microsec_clock::local_time();
-        while (! m_ai_waiting.empty()) {
+        while (!m_ai_waiting.empty()) {
             BOOST_REQUIRE(ProcessMessages(start_time, MAX_WAITING_SEC));
         }
 
@@ -206,16 +205,19 @@ BOOST_AUTO_TEST_CASE(hostless_server) {
             // output sitreps
             const auto& my_empire = m_empires.GetEmpire(m_empire_id);
             BOOST_REQUIRE(my_empire != nullptr);
-            for (auto sitrep_it = my_empire->SitRepBegin(); sitrep_it != my_empire->SitRepEnd(); ++sitrep_it) {
-                if (sitrep_it->GetTurn() == m_current_turn) {
-                    BOOST_TEST_MESSAGE("Sitrep: " << sitrep_it->Dump());
+            for (const auto& sitrep : my_empire->SitReps()) {
+                if (sitrep.GetTurn() == m_current_turn) {
+                    BOOST_TEST_MESSAGE("Sitrep: " << sitrep.Dump());
                 }
             }
 
             if (m_current_turn == 2) {
                 // check home planet meters
                 bool found_planet = false;
-                for (const auto& planet : Objects().find<Planet>(OwnedVisitor(m_empire_id))) {
+
+                auto is_owned = [this](const UniverseObject* obj) { return obj->OwnedBy(m_empire_id); };
+
+                for (const auto* planet : Objects().findRaw<Planet>(is_owned)) {
                     BOOST_REQUIRE_LT(0.0, planet->GetMeter(MeterType::METER_POPULATION)->Current());
                     BOOST_TEST_MESSAGE("Population: " << planet->GetMeter(MeterType::METER_POPULATION)->Current());
                     BOOST_REQUIRE_LT(0.0, planet->GetMeter(MeterType::METER_INDUSTRY)->Current());
@@ -232,7 +234,7 @@ BOOST_AUTO_TEST_CASE(hostless_server) {
                 break;
             }
             bool have_winner = false;
-            for (auto empire : m_empires) {
+            for (auto& empire : m_empires) {
                 if (empire.second->Won()) {
                     have_winner = true;
                     break;
@@ -245,7 +247,7 @@ BOOST_AUTO_TEST_CASE(hostless_server) {
 
             BOOST_TEST_MESSAGE("Waiting AI for turns...");
             start_time = boost::posix_time::microsec_clock::local_time();
-            while (! m_ai_waiting.empty()) {
+            while (!m_ai_waiting.empty()) {
                 BOOST_REQUIRE(ProcessMessages(start_time, MAX_WAITING_SEC));
             }
         }

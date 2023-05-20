@@ -22,10 +22,6 @@ using namespace GG;
 ////////////////////////////////////////////////
 // GG::BrowseInfoWnd
 ////////////////////////////////////////////////
-BrowseInfoWnd::BrowseInfoWnd(X x, Y y, X w, Y h) :
-    Wnd(x, y, w, h)
-{}
-
 void BrowseInfoWnd::Update(std::size_t mode, const Wnd* target)
 {
     UpdateImpl(mode, target);
@@ -33,7 +29,7 @@ void BrowseInfoWnd::Update(std::size_t mode, const Wnd* target)
     if (PositionWnd) {
         new_pos = PositionWnd(m_cursor_pos, GUI::GetGUI()->GetCursor(), *this, *target);
     } else {
-        const Y MARGIN(2);
+        static constexpr Y MARGIN(2);
         new_pos = m_cursor_pos - Pt(Width() / 2, Height() + MARGIN);
     }
     MoveTo(new_pos);
@@ -49,19 +45,13 @@ void BrowseInfoWnd::Update(std::size_t mode, const Wnd* target)
     MoveTo(ul);
 }
 
-void BrowseInfoWnd::SetCursorPosition(const Pt& cursor_pos)
-{ m_cursor_pos = cursor_pos; }
-
-void BrowseInfoWnd::UpdateImpl(std::size_t mode, const Wnd* target)
-{}
-
 
 ////////////////////////////////////////////////
 // GG::TextBoxBrowseInfoWnd
 ////////////////////////////////////////////////
-TextBoxBrowseInfoWnd::TextBoxBrowseInfoWnd(X w, const std::shared_ptr<Font>& font, Clr color, Clr border_color, Clr text_color,
-                                           Flags<TextFormat> format/* = FORMAT_LEFT | FORMAT_WORDBREAK*/,
-                                           unsigned int border_width/* = 2*/, unsigned int text_margin/* = 4*/) :
+TextBoxBrowseInfoWnd::TextBoxBrowseInfoWnd(X w, const std::shared_ptr<Font>& font, Clr color,
+                                           Clr border_color, Clr text_color, Flags<TextFormat> format,
+                                           unsigned int border_width, unsigned int text_margin) :
     BrowseInfoWnd(X0, Y0, w, Y(100)),
     m_text_from_target(true),
     m_font(font),
@@ -88,31 +78,16 @@ bool TextBoxBrowseInfoWnd::WndHasBrowseInfo(const Wnd* wnd, std::size_t mode) co
     return !wnd->BrowseInfoText(mode).empty();
 }
 
-bool TextBoxBrowseInfoWnd::TextFromTarget() const
-{ return m_text_from_target; }
-
-const std::string& TextBoxBrowseInfoWnd::Text() const
+const std::string& TextBoxBrowseInfoWnd::Text() const noexcept
 { return m_text_control->Text(); }
 
-const std::shared_ptr<Font>& TextBoxBrowseInfoWnd::GetFont() const
-{ return m_font; }
-
-Clr TextBoxBrowseInfoWnd::Color() const
-{ return m_color; }
-
-Clr TextBoxBrowseInfoWnd::TextColor() const
+Clr TextBoxBrowseInfoWnd::TextColor() const noexcept
 { return m_text_control->TextColor(); }
 
-Flags<TextFormat> TextBoxBrowseInfoWnd::GetTextFormat() const
+Flags<TextFormat> TextBoxBrowseInfoWnd::GetTextFormat() const noexcept
 { return m_text_control->GetTextFormat(); }
 
-Clr TextBoxBrowseInfoWnd::BorderColor() const
-{ return m_border_color; }
-
-unsigned int TextBoxBrowseInfoWnd::BorderWidth() const
-{ return m_border_width; }
-
-unsigned int TextBoxBrowseInfoWnd::TextMargin() const
+unsigned int TextBoxBrowseInfoWnd::TextMargin() const noexcept
 { return GetLayout()->BorderMargin(); }
 
 void TextBoxBrowseInfoWnd::SetText(std::string str)
@@ -145,7 +120,7 @@ void TextBoxBrowseInfoWnd::InitBuffer()
     m_buffer.createServerBuffer();
 }
 
-void TextBoxBrowseInfoWnd::SizeMove(const Pt& ul, const Pt& lr)
+void TextBoxBrowseInfoWnd::SizeMove(Pt ul, Pt lr)
 {
     Pt sz = Size();
     BrowseInfoWnd::SizeMove(ul, lr);
@@ -180,8 +155,8 @@ void TextBoxBrowseInfoWnd::Render()
 void TextBoxBrowseInfoWnd::SetTextFromTarget(bool b)
 { m_text_from_target = b; }
 
-void TextBoxBrowseInfoWnd::SetFont(const std::shared_ptr<Font>& font)
-{ m_font = font; }
+void TextBoxBrowseInfoWnd::SetFont(std::shared_ptr<Font> font)
+{ m_font = std::move(font); }
 
 void TextBoxBrowseInfoWnd::SetColor(Clr color)
 { m_color = color; }

@@ -144,7 +144,7 @@ std::pair<parse::text_iterator, unsigned int> parse::report_error_::line_start_a
 {
     //DebugLogger() << "line_start_and_line_number start ... looking for: " << std::string(error_position, error_position + 20);
     if (error_position == begin)
-        return std::make_pair(begin, 1);
+        return std::pair(begin, 1);
 
     std::vector<parse::text_iterator> line_starts = LineStarts(begin, end);
 
@@ -153,13 +153,13 @@ std::pair<parse::text_iterator, unsigned int> parse::report_error_::line_start_a
     for (unsigned int index = 0; index < line_starts.size(); ++index) {
         if (std::distance(line_starts[index], error_position) < 0 && index > 0) {
             //DebugLogger() << "line_start_and_line_number early end";
-            return std::make_pair(line_starts[index-1], index); // return start of previous line, which contained the error_position text
+            return std::pair(line_starts[index-1], index); // return start of previous line, which contained the error_position text
         }
         //DebugLogger() << "line: " << index + 1 << " distance: " << std::distance(line_starts[index], error_position) << " : " << get_line(line_starts[index]);
     }
 
     //DebugLogger() << "line_start_and_line_number end";
-    return std::make_pair(begin, 1);
+    return std::pair(begin, 1);
 }
 
 std::string parse::report_error_::get_line(const parse::text_iterator& end, text_iterator line_start) const {
@@ -188,7 +188,7 @@ std::string parse::report_error_::get_lines_before(
     }
     //DebugLogger() << "get_lines_before line " << target_line;
 
-    constexpr unsigned int NUM_LINES = 5;
+    static constexpr unsigned int NUM_LINES = 5;
     unsigned int retval_first_line = 1;
     unsigned int retval_last_line = target_line - 1;
     if (retval_last_line > NUM_LINES)
@@ -204,8 +204,8 @@ std::string parse::report_error_::get_lines_after(
     //DebugLogger() << "get_lines_after start";
 
     std::vector<parse::text_iterator> all_line_starts = LineStarts(begin, end);
-    unsigned int target_line = 1;
-    for (unsigned int line_minus_one = 0; line_minus_one < all_line_starts.size(); ++line_minus_one) {
+    size_t target_line = 1;
+    for (size_t line_minus_one = 0u; line_minus_one < all_line_starts.size(); ++line_minus_one) {
         if (std::distance(all_line_starts[line_minus_one], line_start) < 0) {
             target_line = line_minus_one;   // want line before line that starts past the requested line_start
             break;
@@ -217,9 +217,9 @@ std::string parse::report_error_::get_lines_after(
     }
     //DebugLogger() << "get_lines_after line " << target_line;
 
-    constexpr unsigned int NUM_LINES = 5;
-    unsigned int retval_first_line = target_line + 1;
-    unsigned int retval_last_line = all_line_starts.size();
+    static constexpr size_t NUM_LINES = 5;
+    const size_t retval_first_line = target_line + 1;
+    size_t retval_last_line = all_line_starts.size();
     if (retval_first_line + NUM_LINES < all_line_starts.size())
         retval_last_line = retval_first_line + NUM_LINES - 1;
 

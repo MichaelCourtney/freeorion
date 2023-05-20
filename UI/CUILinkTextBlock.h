@@ -7,32 +7,25 @@
 
 class CUILinkTextMultiEdit;
 
-class CUILinkTextBlock : public GG::BlockControl {
+class CUILinkTextBlock final : public GG::BlockControl {
 public:
-    CUILinkTextBlock(const std::string& str,
-                     const std::shared_ptr<GG::Font>& font,
-                     GG::Flags<GG::TextFormat> format,
-                     const GG::Clr& color,
-                     GG::Flags< GG::WndFlag > flags);
+    CUILinkTextBlock(std::string str, GG::Flags<GG::TextFormat> format,
+                     GG::Clr color, GG::Flags<GG::WndFlag> flags);
 
     void CompleteConstruction() override;
     GG::Pt SetMaxWidth(GG::X width) override;
 
-    void Render() override
-    {}
+    void Render() override {}
 
-    CUILinkTextMultiEdit& Text();
+    const auto& Text() const noexcept { return *m_link_text; }
 
-    class Factory: public GG::RichText::IBlockControlFactory {
+    class Factory final : public GG::RichText::IBlockControlFactory {
     public:
         //! Creates a control from the tag (with unparsed parameters) and the content between the tags.
         //! You own the returned control.
-        std::shared_ptr<GG::BlockControl> CreateFromTag(const std::string& tag,
-                                                        const GG::RichText::TAG_PARAMS& params,
-                                                        const std::string& content,
-                                                        const std::shared_ptr<GG::Font>& font,
-                                                        const GG::Clr& color,
-                                                        GG::Flags<GG::TextFormat> format) override;
+        std::shared_ptr<GG::BlockControl> CreateFromTag(const GG::RichText::TAG_PARAMS&, std::string,
+                                                        std::shared_ptr<GG::Font>, GG::Clr,
+                                                        GG::Flags<GG::TextFormat>) override;
 
         ///< link clicked signals: first string is the link type, second string is the specific item clicked
         mutable boost::signals2::signal<void (const std::string&, const std::string&)> LinkClickedSignal;

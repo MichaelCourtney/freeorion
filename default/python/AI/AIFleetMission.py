@@ -188,9 +188,9 @@ class AIFleetMission:
             if fleet_mission.type != self.type or fleet_mission.target != self.target:
                 debug("Local candidate %s does not have same mission." % fleet_mission)
                 continue
-            FleetUtilsAI.merge_fleet_a_into_b(fid, fleet_id, context="Order %s of mission %s" % (context, self))
+            FleetUtilsAI.merge_fleet_a_into_b(fid, fleet_id, context=f"Order {context} of mission {self}")
 
-    def _is_valid_fleet_mission_target(self, mission_type: MissionType, target: Target):
+    def _is_valid_fleet_mission_target(self, mission_type: MissionType, target: Target):  # noqa: max-complexity
         if not target:
             return False
         if mission_type == MissionType.EXPLORATION:
@@ -241,7 +241,7 @@ class AIFleetMission:
             self.target = None
             self.type = None
 
-    def _check_abort_mission(self, fleet_order: AIFleetOrder):
+    def _check_abort_mission(self, fleet_order: AIFleetOrder):  # noqa: max-complexity
         """checks if current mission (targeting a planet) should be aborted"""
         planet_stealthed = False
         target_is_planet = fleet_order.target and isinstance(fleet_order.target, TargetPlanet)
@@ -260,6 +260,7 @@ class AIFleetMission:
                     debug("EspionageAI predicts we can no longer detect %s, will abort mission" % fleet_order.target)
                     planet_stealthed = True
         if target_is_planet and not planet_stealthed:
+            # TBD use fleet_order.is_valid or add fleet_order.should_abort
             if isinstance(fleet_order, OrderColonize):
                 if planet.initialMeterValue(fo.meterType.population) == 0 and (
                     planet.ownedBy(fo.empireID()) or planet.unowned
@@ -268,7 +269,19 @@ class AIFleetMission:
             elif isinstance(fleet_order, OrderOutpost):
                 if planet.unowned:
                     return False
-            elif isinstance(fleet_order, OrderInvade):  # TODO add substantive abort check
+            elif isinstance(fleet_order, OrderInvade):
+                if planet.owner == fo.getEmpire().empireID:
+                    debug(f"Abandoning invasion for {planet}, it already belongs to us")
+                    return True
+                if planet.currentMeterValue(fo.meterType.maxShield):
+                    military_support_fleets = MilitaryAI.get_military_fleets_with_target_system(planet.systemID)
+                    if not military_support_fleets:
+                        # Maybe try again later...
+                        debug(
+                            f"Abandoning Invasion mission for {planet} because target has nonzero max shields "
+                            f"and there is no military fleet assigned to secure the target system."
+                        )
+                        return True
                 return False
             else:
                 return False
@@ -276,12 +289,10 @@ class AIFleetMission:
         # canceling fleet orders
         debug("   %s" % fleet_order)
         debug("Fleet %d had a target planet that is no longer valid for this mission; aborting." % self.fleet.id)
-        self.clear_fleet_orders()
-        self.clear_target()
         FleetUtilsAI.split_fleet(self.fleet.id)
         return True
 
-    def _check_retarget_invasion(self):
+    def _check_retarget_invasion(self):  # noqa: max-complexity
         """checks if an invasion mission should be retargeted"""
         universe = fo.getUniverse()
         empire_id = fo.empireID()
@@ -333,8 +344,8 @@ class AIFleetMission:
         self.clear_target()  # TODO: clear from foAIstate
         self.clear_fleet_orders()
         troops_needed = max(0, target_troops - FleetUtilsAI.count_troops_in_fleet(fleet_id))
-        min_stats = {"rating": 0, "troopCapacity": troops_needed}
-        target_stats = {"rating": 10, "troopCapacity": troops_needed}
+        min_stats = {"troopCapacity": troops_needed}
+        target_stats = {"troopCapacity": troops_needed}
         found_fleets = []
         # TODO check if next statement does not mutate any global states and can be removed
 
@@ -382,7 +393,7 @@ class AIFleetMission:
         # before proceeding
         return False
 
-    def issue_fleet_orders(self):
+    def issue_fleet_orders(self):  # noqa: max-complexity
         """issues AIFleetOrders which can be issued in system and moves to next one if is possible"""
         # TODO: priority
         order_completed = True
@@ -398,11 +409,12 @@ class AIFleetMission:
             self._check_retarget_invasion()
         just_issued_move_order = False
         last_move_target_id = INVALID_ID
-        # Note: the following abort check somewhat assumes only one major mission type
         for fleet_order in self.orders:
             if isinstance(fleet_order, (OrderColonize, OrderOutpost, OrderInvade)) and self._check_abort_mission(
                 fleet_order
             ):
+                self.clear_fleet_orders()
+                self.clear_target()
                 return
         aistate = get_aistate()
         for fleet_order in self.orders:
@@ -500,15 +512,15 @@ class AIFleetMission:
                         return  # colonize order must not have completed yet
                 clear_all = True
                 last_sys_target = INVALID_ID
+                secure_targets = set(
+                    AIstate.colonyTargetedSystemIDs
+                    + AIstate.outpostTargetedSystemIDs
+                    + AIstate.invasionTargetedSystemIDs
+                )
                 if last_order and isinstance(last_order, OrderMilitary):
                     last_sys_target = last_order.target.id
                     # not doing this until decide a way to release from a SECURE mission
                     # if (MissionType.SECURE == self.type) or
-                    secure_targets = set(
-                        AIstate.colonyTargetedSystemIDs
-                        + AIstate.outpostTargetedSystemIDs
-                        + AIstate.invasionTargetedSystemIDs
-                    )
                     if last_sys_target in secure_targets:  # consider a secure mission
                         if last_sys_target in AIstate.colonyTargetedSystemIDs:
                             secure_type = "Colony"
@@ -532,6 +544,11 @@ class AIFleetMission:
                     clear_all = False
                     last_sys_target = self.target.id
                     debug("Check if PROTECT_REGION mission with target %d is finished.", last_sys_target)
+
+                # for SECURE missions, only release fleet if no settle or invade mission is ongoing
+                if self.type == MissionType.SECURE and self.target.id in secure_targets:
+                    debug(f"Secure mission for {self.target} not yet finished")
+                    return
 
                 fleet_id = self.fleet.id
                 if clear_all:
@@ -596,8 +613,9 @@ class AIFleetMission:
                             )
                             allowance = CombatRatingsAI.rating_needed(fleet_remaining_rating, fleet_min_rating)
                             debug("May release ships with total rating of %.1f", allowance)
-                            ship_ids = list(self.fleet.get_object().shipIDs)
-                            for ship_id in ship_ids:
+                            for ship_id in self.fleet.get_object().shipIDs:
+                                if len(self.fleet.get_object().shipIDs) == 1:
+                                    break
                                 ship_rating = CombatRatingsAI.get_ship_rating(ship_id)
                                 debug("Considering to release ship %d with rating %.1f", ship_id, ship_rating)
                                 if ship_rating > allowance:
@@ -605,7 +623,7 @@ class AIFleetMission:
                                     continue
                                 debug("Splitting from fleet.")
                                 new_fleet_id = FleetUtilsAI.split_ship_from_fleet(fleet_id, ship_id)
-                                if assertion_fails(new_fleet_id and new_fleet_id != INVALID_ID):
+                                if assertion_fails(new_fleet_id != INVALID_ID):
                                     break
                                 new_fleets.append(new_fleet_id)
                                 fleet_remaining_rating = CombatRatingsAI.rating_difference(

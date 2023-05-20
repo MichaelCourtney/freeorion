@@ -1,5 +1,6 @@
-from freeorion_tools import get_ai_tag_grade
 from pytest import mark
+
+from freeorion_tools import get_ai_tag_grade
 
 
 @mark.parametrize(
@@ -21,6 +22,10 @@ def test_tags_search_by_tag_type_with_underscore_returns_first_grade():
 
 def test_tags_search_by_not_matching_tag_type_returns_empty_string():
     assert "" == get_ai_tag_grade(["GOOD_HULL"], "WEAPONS")
+
+
+def test_very_bad_tag_parsing_find_correct_modifier():
+    assert "VERY_BAD" == get_ai_tag_grade(["VERY_BAD_WEAPONS"], "WEAPONS")
 
 
 @mark.parametrize(

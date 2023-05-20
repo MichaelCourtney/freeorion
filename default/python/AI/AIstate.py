@@ -4,7 +4,7 @@ from collections import Counter
 from collections import OrderedDict as odict
 from logging import debug, error, info, warning
 from operator import itemgetter
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import AIFleetMission
 import ColonisationAI
@@ -17,6 +17,7 @@ from AIDependencies import INVALID_ID, TECH_NATIVE_SPECIALS
 from character.character_module import Aggression, create_character
 from CombatRatingsAI import ShipCombatStats
 from common.print_utils import Number, Table, Text
+from DiplomaticCorp import get_diplomatic_status
 from EnumsAI import MissionType, ShipRoleType
 from freeorion_tools import combine_ratings, get_partial_visibility_turn
 
@@ -305,7 +306,7 @@ class AIstate:
                 sys_status.get("jump2_threat", 0.0),
                 sys_status.get("jump3_threat", 0.0),
             )
-        threat_table.print_table(info)
+        info(threat_table)
 
     def __report_system_defenses(self):
         """Print a table with system defenses to the logfile."""
@@ -335,7 +336,7 @@ class AIstate:
                 sys_status.get("my_jump2_rating", 0.0),
                 sys_status.get("my_jump3_rating", 0.0),
             )
-        defense_table.print_table(info)
+        info(defense_table)
 
     def assess_planet_threat(self, pid, sighting_age=0):
         if sighting_age > 5:
@@ -367,7 +368,7 @@ class AIstate:
         defense = min(max_defense, init_defense + sighting_age * defense_regen)
         return {"overall": defense * (defense + shields), "attack": defense, "health": (defense + shields)}
 
-    def assess_enemy_supply(self) -> Tuple[Dict[int, List[int]], Dict[int, List[int]]]:
+    def assess_enemy_supply(self) -> tuple[dict[int, list[int]], dict[int, list[int]]]:
         """
         Assesses where enemy empires have Supply
         :return: a tuple of 2 dicts, each of which is keyed by system id, and each of which is a list of empire ids
@@ -427,7 +428,7 @@ class AIstate:
         self.__empire_standard_enemy = max(e_f_dict, key=e_f_dict.get)
         self.empire_standard_enemy_rating = self.get_standard_enemy().get_rating()
 
-    def __update_system_status(self):
+    def __update_system_status(self):  # noqa: max-complexity
         debug("=== Updating System Threats ===")
         universe = fo.getUniverse()
         empire = fo.getEmpire()
@@ -480,6 +481,9 @@ class AIstate:
             if get_partial_visibility_turn(fleet_id) < (current_turn - 1):
                 continue
 
+            if get_diplomatic_status(fleet.owner) != fo.diplomaticStatus.war:
+                continue
+
             sys_status = self.systemStatus.setdefault(this_system_id, {})
             sys_status["enemy_ship_count"] = sys_status.get("enemy_ship_count", 0) + len(fleet.shipIDs)
             enemies_by_system.setdefault(this_system_id, []).append(fleet_id)
@@ -521,11 +525,11 @@ class AIstate:
                 if fleet.speed == 0:
                     monster_ratings.append(fleet_rating)
                     if verbose:
-                        debug("\t immobile enemy fleet %s has rating %.1f" % (fleet, fleet_rating))
+                        debug(f"\t immobile enemy fleet {fleet} has rating {fleet_rating:.1f}")
                     continue
 
                 if verbose:
-                    debug("\t mobile enemy fleet %s has rating %.1f" % (fleet, fleet_rating))
+                    debug(f"\t mobile enemy fleet {fleet} has rating {fleet_rating:.1f}")
                 mobile_fleets.append(fid)
                 if fleet.unowned:
                     mob_ratings.append(fleet_rating)
@@ -655,7 +659,7 @@ class AIstate:
                     combine_ratings(sys_status.get("planetThreat", 0), (min_hidden_attack * min_hidden_health)),
                 )
             if verbose and sys_status["fleetThreat"] > 0:
-                debug("%s intermediate status: %s" % (system, sys_status))
+                debug(f"{system} intermediate status: {sys_status}")
 
         enemy_supply, enemy_near_supply = self.assess_enemy_supply()  # TODO: assess change in enemy supply over time
         # assess secondary threats (threats of surrounding systems) and update my fleet rating
@@ -935,10 +939,8 @@ class AIstate:
             elif this_sys:
                 fleet_status["sysID"] = this_sys.id
             else:
-                error("Fleet %s has no valid system." % fleet)
-        fleet_table.print_table(info)
-        # Next string used in charts. Don't modify it!
-        debug("Empire Ship Count: %s" % self.shipCount)
+                warning("Fleet %s has no valid system." % fleet)
+        info(fleet_table)
         debug("Empire standard fighter summary: %s", CombatRatingsAI.get_empire_standard_military_ship_stats())
         debug("------------------------")
 
@@ -986,7 +988,7 @@ class AIstate:
                     FleetUtilsAI.count_troops_in_fleet(fleet_id),
                     mission.target or "-",
                 )
-        mission_table.print_table(info)
+        info(mission_table)
 
     def __split_new_fleets(self):
         """Split any new fleets.

@@ -45,17 +45,17 @@ void AccordionPanel::InitBuffer() {
     m_border_buffer.createServerBuffer();
 }
 
-GG::Pt AccordionPanel::ClientUpperLeft() const
+GG::Pt AccordionPanel::ClientUpperLeft() const noexcept
 { return UpperLeft() + GG::Pt((m_is_left ? GG::X(EXPAND_BUTTON_SIZE + m_border_margin) : GG::X0), GG::Y0); }
 
-GG::Pt AccordionPanel::ClientLowerRight() const
+GG::Pt AccordionPanel::ClientLowerRight() const noexcept
 { return LowerRight() - GG::Pt((m_is_left ? GG::X0 : GG::X(EXPAND_BUTTON_SIZE + m_border_margin)), GG::Y0); }
 
 void AccordionPanel::SetInteriorColor(GG::Clr c)
 { m_interior_color = c; }
 
-void AccordionPanel::SetBorderMargin(unsigned int margin)
-{ m_border_margin = margin; }
+void AccordionPanel::SetBorderMargin(int margin)
+{ m_border_margin = std::max<int>(0, margin); }
 
 void AccordionPanel::Render() {
     if (Height() < 1 || Width() < 1)
@@ -81,10 +81,10 @@ void AccordionPanel::Render() {
     glDisableClientState(GL_VERTEX_ARRAY);
 }
 
-void AccordionPanel::MouseWheel(const GG::Pt& pt, int move, GG::Flags<GG::ModKey> mod_keys)
+void AccordionPanel::MouseWheel(GG::Pt pt, int move, GG::Flags<GG::ModKey> mod_keys)
 { ForwardEventToParent(); }
 
-void AccordionPanel::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
+void AccordionPanel::SizeMove(GG::Pt ul, GG::Pt lr) {
     GG::Pt old_size = GG::Wnd::Size();
 
     GG::Wnd::SizeMove(ul, lr);
@@ -115,9 +115,8 @@ void AccordionPanel::SetCollapsed(bool collapsed) {
     ExpandCollapseSignal();
 }
 
-bool AccordionPanel::IsCollapsed() const {
-    return m_collapsed;
-}
+bool AccordionPanel::IsCollapsed() const
+{ return m_collapsed; }
 
 void AccordionPanel::DoLayout() {
     GG::Pt expand_button_ul(m_is_left ? GG::X(-(EXPAND_BUTTON_SIZE + m_border_margin))

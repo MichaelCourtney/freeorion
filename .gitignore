@@ -60,7 +60,9 @@ DerivedData
 
 # FreeOrion specific
 *.zip
+libpython.py
 /util/Version.cpp
+/cmake/FreeOrionVersion.cmake
 /packaging/windows_installer.nsi
 /packaging/Info.plist
 /doc/apidoc-commit-message
@@ -79,6 +81,8 @@ DerivedData
 *.exp
 *.opensdf
 *.res
+/msvc*/*/release/
+/msvc*/*/debug/
 
 # Incremental build files
 *.ipdb
@@ -99,6 +103,9 @@ DerivedData
 # Visual Studio
 .vs/
 .vscode/
+
+# CMake
+build/
 
 # linters temp files
 .mypy_cache

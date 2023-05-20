@@ -3,7 +3,9 @@
 
 #include <string>
 #include <bitset>
+#include <cstdint>
 
+#include "../util/Enum.h"
 #include "../util/Export.h"
 
 namespace Networking {
@@ -16,17 +18,17 @@ namespace Networking {
     FO_COMMON_API int DiscoveryPort();
     FO_COMMON_API int MessagePort();
 
-    enum class ClientType : int {
-        INVALID_CLIENT_TYPE = -1,
-        CLIENT_TYPE_AI_PLAYER,
-        CLIENT_TYPE_HUMAN_PLAYER,
-        CLIENT_TYPE_HUMAN_OBSERVER,
-        CLIENT_TYPE_HUMAN_MODERATOR,
-        NUM_CLIENT_TYPES
-    };
-    FO_COMMON_API std::ostream& operator<<(std::ostream& os, ClientType client_type);
+    FO_ENUM(
+        (ClientType),
+        ((INVALID_CLIENT_TYPE, -1))
+        ((CLIENT_TYPE_AI_PLAYER))
+        ((CLIENT_TYPE_HUMAN_PLAYER))
+        ((CLIENT_TYPE_HUMAN_OBSERVER))
+        ((CLIENT_TYPE_HUMAN_MODERATOR))
+        ((NUM_CLIENT_TYPES))
+    )
 
-    enum class RoleType : size_t {  // index in bitset so not enum class
+    enum class RoleType : uint8_t {
         ROLE_HOST = 0,              ///< allows save and load games, edit other player settings, stop server
         ROLE_CLIENT_TYPE_MODERATOR, ///< allows have a client type Moderator
         ROLE_CLIENT_TYPE_PLAYER,    ///< allows have a client type Player
@@ -38,17 +40,19 @@ namespace Networking {
 
     class FO_COMMON_API AuthRoles {
     public:
-        AuthRoles() = default;
+        constexpr AuthRoles() = default;
+        explicit AuthRoles(std::initializer_list<RoleType> roles) {
+            for (RoleType r : roles)
+                m_roles.set(std::size_t(r), true);
+        }
 
-        explicit AuthRoles(const std::initializer_list<RoleType>& roles);
+        void SetRole(RoleType role, bool value = true) { m_roles.set(std::size_t(role), value); }
+        void Clear() noexcept { m_roles.reset(); }
 
-        void SetRole(RoleType role, bool value = true);
-        void Clear();
+        [[nodiscard]] bool HasRole(RoleType role) const { return m_roles.test(std::size_t(role)); }
+        [[nodiscard]] std::string Text() const { return m_roles.to_string(); }
+        void SetText(const std::string& text) { m_roles = std::bitset<std::size_t(RoleType::Roles_Count)>(text); }
 
-        bool HasRole(RoleType role) const;
-
-        [[nodiscard]] std::string Text() const;
-        void SetText(const std::string& text);
     private:
         std::bitset<int(RoleType::Roles_Count)> m_roles;
     };

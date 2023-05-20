@@ -4,9 +4,10 @@ various technologies to help the AI decide which technologies should be
 researched next.
 """
 import freeOrionAIInterface as fo
+from collections.abc import Iterator
 from itertools import zip_longest
 from logging import debug, warning
-from typing import Iterator, List, Union
+from typing import Union
 
 import AIDependencies as Dep
 
@@ -46,7 +47,7 @@ class TechGroup:
         self._errors = []  # exceptions that occured when trying to pop from already empty lists
 
     @staticmethod
-    def _iterate_over_remaining_techs(list_of_tech_lists: List[List[str]]) -> Iterator[str]:
+    def _iterate_over_remaining_techs(list_of_tech_lists: list[list[str]]) -> Iterator[str]:
         """
         Iterate over items in a stable way.
 
@@ -64,7 +65,7 @@ class TechGroup:
             if tech not in self._tech_queue:
                 self._tech_queue.append(tech)
 
-    def get_techs(self) -> List:
+    def get_techs(self) -> list:
         """Get the ordered list of techs defining research order.
 
         :return: Research order
@@ -72,7 +73,7 @@ class TechGroup:
         self._add_remaining()
         return list(self._tech_queue)
 
-    def enqueue(self, *tech_lists: Union[List[str], str]):
+    def enqueue(self, *tech_lists: Union[list[str], str]):
         """
         Pop first entry in the list or take entry if it is string and add it to research orders.
 
@@ -93,12 +94,12 @@ class TechGroup:
                     self._errors.append(msg)
                     continue
             if tech_name in self._tech_queue:
-                msg = "[step %s]: Tech is already in queue: %s" % (step, tech_name)
+                msg = f"[step {step}]: Tech is already in queue: {tech_name}"
                 self._errors.append(msg)
             else:
                 self._tech_queue.append(tech_name)
 
-    def get_errors(self) -> List[Exception]:
+    def get_errors(self) -> list[Exception]:
         """
         Return a list of occured exceptions.
         """
@@ -109,13 +110,13 @@ class TechGroup:
 
 class TechGroup1(TechGroup):
     def __init__(self):
-        super(TechGroup1, self).__init__()
+        super().__init__()
         self.economy.extend(
             [
                 "LRN_PHYS_BRAIN",
                 "GRO_PLANET_ECOL",
-                "LRN_ALGO_ELEGANCE",
                 "GRO_SUBTER_HAB",
+                "LRN_ALGO_ELEGANCE",
                 Dep.LRN_ARTIF_MINDS_1,
                 "PRO_ROBOTIC_PROD",
             ]
@@ -156,7 +157,7 @@ class TechGroup1(TechGroup):
 
 class TechGroup1a(TechGroup1):
     def __init__(self):
-        super(TechGroup1a, self).__init__()
+        super().__init__()
         self.enqueue(
             self.weapon,
             self.weapon,
@@ -164,12 +165,13 @@ class TechGroup1a(TechGroup1):
             self.weapon,
             self.economy,
             self.hull,
+            "CON_ARCH_PSYCH",
         )
 
 
 class TechGroup1b(TechGroup1):
     def __init__(self):
-        super(TechGroup1b, self).__init__()
+        super().__init__()
         self.enqueue(
             self.weapon,
             self.hull,
@@ -177,12 +179,13 @@ class TechGroup1b(TechGroup1):
             self.weapon,
             self.weapon,
             self.weapon,
+            "CON_ARCH_PSYCH",
         )
 
 
 class TechGroup1SparseA(TechGroup1):
     def __init__(self):
-        super(TechGroup1SparseA, self).__init__()
+        super().__init__()
         self.enqueue(
             self.economy,
             self.hull,
@@ -191,12 +194,13 @@ class TechGroup1SparseA(TechGroup1):
             self.weapon,
             "SHP_SPACE_FLUX_DRIVE",
             self.weapon,
+            "CON_ARCH_PSYCH",
         )
 
 
 class TechGroup1SparseB(TechGroup1):
     def __init__(self):
-        super(TechGroup1SparseB, self).__init__()
+        super().__init__()
         self.enqueue(
             self.economy,
             self.weapon,
@@ -205,6 +209,8 @@ class TechGroup1SparseB(TechGroup1):
             self.weapon,
             "PRO_NANOTECH_PROD",
             Dep.PRO_AUTO_1,
+            "CON_ARCH_PSYCH",
+            "CON_ASYMP_MATS",
             "PRO_EXOBOTS",
             "CON_ORBITAL_CON",  # not a economy tech in the strictest sense but bonus supply often equals more planets
             "GRO_GENETIC_MED",
@@ -228,7 +234,7 @@ class TechGroup1SparseB(TechGroup1):
 
 class TechGroup1SparseC(TechGroup1):
     def __init__(self):
-        super(TechGroup1SparseC, self).__init__()
+        super().__init__()
         self.enqueue(
             self.economy,
             "SHP_ORG_HULL",
@@ -236,6 +242,8 @@ class TechGroup1SparseC(TechGroup1):
             "PRO_NANOTECH_PROD",
             Dep.PRO_AUTO_1,
             self.weapon,
+            "CON_ARCH_PSYCH",
+            "CON_ASYMP_MATS",
             "CON_ORBITAL_CON",  # not a economy tech in the strictest sense but bonus supply often equals more planets
             "GRO_GENETIC_MED",
             "GRO_SYMBIOTIC_BIO",
@@ -259,7 +267,7 @@ class TechGroup1SparseC(TechGroup1):
 
 class TechGroup2(TechGroup):
     def __init__(self):
-        super(TechGroup2, self).__init__()
+        super().__init__()
         self.economy.extend(
             [
                 "PRO_FUSION_GEN",
@@ -297,7 +305,7 @@ class TechGroup2(TechGroup):
 
 class TechGroup2A(TechGroup2):
     def __init__(self):
-        super(TechGroup2A, self).__init__()
+        super().__init__()
         self.defense.extend(
             [
                 "SPY_DETECT_2",
@@ -327,7 +335,7 @@ class TechGroup2A(TechGroup2):
 
 class TechGroup2B(TechGroup2):
     def __init__(self):
-        super(TechGroup2B, self).__init__()
+        super().__init__()
         self.defense.extend(
             [
                 "LRN_FORCE_FIELD",
@@ -357,7 +365,7 @@ class TechGroup2B(TechGroup2):
 
 class TechGroup2SparseA(TechGroup2):
     def __init__(self):
-        super(TechGroup2SparseA, self).__init__()
+        super().__init__()
         self.enqueue(
             self.armor,
             self.hull,
@@ -378,7 +386,7 @@ class TechGroup2SparseA(TechGroup2):
 
 class TechGroup2SparseB(TechGroup2):
     def __init__(self):
-        super(TechGroup2SparseB, self).__init__()
+        super().__init__()
         self.enqueue(
             self.armor,
             self.hull,
@@ -399,7 +407,7 @@ class TechGroup2SparseB(TechGroup2):
 
 class TechGroup3(TechGroup):
     def __init__(self):
-        super(TechGroup3, self).__init__()
+        super().__init__()
         self.hull.extend(
             [
                 "SHP_ASTEROID_REFORM",
@@ -469,7 +477,7 @@ class TechGroup3(TechGroup):
 
 class TechGroup3A(TechGroup3):
     def __init__(self):
-        super(TechGroup3A, self).__init__()
+        super().__init__()
         self.enqueue(
             self.hull,
             self.economy,
@@ -517,7 +525,7 @@ class TechGroup3A(TechGroup3):
 
 class TechGroup3B(TechGroup3):
     def __init__(self):
-        super(TechGroup3B, self).__init__()
+        super().__init__()
         self.enqueue(
             self.hull,
             self.economy,
@@ -565,7 +573,7 @@ class TechGroup3B(TechGroup3):
 
 class TechGroup3Sparse(TechGroup3):
     def __init__(self):
-        super(TechGroup3Sparse, self).__init__()
+        super().__init__()
         self.enqueue(
             self.hull,
             self.misc,
@@ -613,7 +621,7 @@ class TechGroup3Sparse(TechGroup3):
 
 class TechGroup4(TechGroup):
     def __init__(self):
-        super(TechGroup4, self).__init__()
+        super().__init__()
         self.hull.extend(
             [
                 "SHP_FRC_ENRG_COMP",
@@ -630,7 +638,7 @@ class TechGroup4(TechGroup):
 
 class TechGroup5(TechGroup):
     def __init__(self):
-        super(TechGroup5, self).__init__()
+        super().__init__()
         self._tech_queue.extend(
             [
                 "DEF_GARRISON_4",
@@ -645,7 +653,6 @@ class TechGroup5(TechGroup):
                 "SPY_DETECT_4",
                 "SHP_CONT_SYMB",
                 "SHP_MONOCELL_EXP",
-                "GRO_CYBORG",
                 "GRO_TERRAFORM",
                 "GRO_ENERGY_META",
                 "LRN_DISTRIB_THOUGHT",
@@ -710,7 +717,7 @@ def test_tech_integrity():
         techs = this_group.get_techs()
         for tech in techs:
             if not fo.getTech(tech):
-                warning("In %s: Tech %s seems not to exist!" % (group.__name__, tech))
+                warning(f"In {group.__name__}: Tech {tech} seems not to exist!")
                 error_occured = True
         for err in this_group.get_errors():
             warning(err)
@@ -722,7 +729,7 @@ def test_tech_integrity():
 def sparse_galaxy_techs(index):
     # return primary_meta_techs()
     result = []
-    debug("Choosing Research Techlist Index %d" % index)
+    debug("Choosing Sparse Research Techlist Index %d" % index)
     if index == 0:
         result = TechGroup1a().get_techs()  # early org_hull
         result += TechGroup2A().get_techs()  # prioritizes growth & defense over weapons
@@ -835,7 +842,6 @@ def primary_meta_techs(index=0):
 # "DEF_SYST_DEF_MINE_3",
 # "GRO_ADV_ECOMAN",
 # "GRO_BIOTERROR",
-# "GRO_CYBORG",
 # "GRO_ENERGY_META",
 # "GRO_GAIA_TRANS",
 # "GRO_GENETIC_ENG",

@@ -40,6 +40,7 @@ Hull
             stackinggroup = "GAME_START_MOD_STACK"
             effects = AddSpecial name = "KRAKEN_NEST_SPECIAL"
 
+        [[GAS_GIANT_STEALTH_BONUS]]
         [[MONSTER_MOVE_ALWAYS]]
         [[INFINITE_FUEL]]
         [[ADD_HULL_FUEL_TO_MAX_FUEL_METER]]
@@ -74,7 +75,7 @@ Hull
                 ])
             ]
             effects = [
-                CreateShip designname = "SM_KRAKEN_2" empire = Source.Owner
+                CreateShip designname = "SM_KRAKEN_2" empire = Source.Owner name = Source.Name
                 Destroy
                 GenerateSitRepMessage
                     message = "EFFECT_TAME_MONSTER_MATURED"

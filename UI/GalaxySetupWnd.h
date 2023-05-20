@@ -15,7 +15,7 @@ struct GalaxySetupData;
 class CUIEdit;
 
 /** Displays game rules options */
-class GameRulesPanel : public GG::Control {
+class GameRulesPanel final : public GG::Control {
 public:
     GameRulesPanel(GG::X w = GG::X1, GG::Y h = GG::Y1);
     void CompleteConstruction() override;
@@ -24,7 +24,7 @@ public:
 
     mutable boost::signals2::signal<void ()> SettingsChangedSignal;
 
-    void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
+    void SizeMove(GG::Pt ul, GG::Pt lr) override;
     void Render() override;
     void Disable(bool b = true) override;
 
@@ -55,7 +55,7 @@ private:
 
 /** Encapsulates the galaxy setup options so that they may be reused in the
   * GalaxySetupWnd and the MultiPlayerLobbyWnd. */
-class GalaxySetupPanel : public GG::Control {
+class GalaxySetupPanel final : public GG::Control {
 public:
     static const GG::X DefaultWidth();
 
@@ -66,12 +66,12 @@ public:
     const std::string&              GetSeed() const;                //!< Returns string version of seed. This value is converted to a number or (if that fails) hashed to get the actual seed value.
     int                             Systems() const;                //!< Returns the number of star systems to use in generating the galaxy
     Shape                           GetShape() const;               //!< Returns the shape of the galaxy
-    GalaxySetupOption               GetAge() const;                 //!< Returns the age of the galaxy
-    GalaxySetupOption               GetStarlaneFrequency() const;   //!< Returns the frequency of starlanes in the galaxy
-    GalaxySetupOption               GetPlanetDensity() const;       //!< Returns the density of planets within systems
-    GalaxySetupOption               GetSpecialsFrequency() const;   //!< Returns the rarity of planetary and system specials
-    GalaxySetupOption               GetMonsterFrequency() const;    //!< Returns the frequency of space monsters
-    GalaxySetupOption               GetNativeFrequency() const;     //!< Returns the frequency of natives
+    GalaxySetupOptionGeneric        GetAge() const;                 //!< Returns the age of the galaxy
+    GalaxySetupOptionGeneric        GetStarlaneFrequency() const;   //!< Returns the frequency of starlanes in the galaxy
+    GalaxySetupOptionGeneric        GetPlanetDensity() const;       //!< Returns the density of planets within systems
+    GalaxySetupOptionGeneric        GetSpecialsFrequency() const;   //!< Returns the rarity of planetary and system specials
+    GalaxySetupOptionMonsterFreq    GetMonsterFrequency() const;    //!< Returns the frequency of space monsters
+    GalaxySetupOptionGeneric        GetNativeFrequency() const;     //!< Returns the frequency of natives
     Aggression                      GetAIAggression() const;        //!< Returns the  maximum AI aggression level
 
     /** Returns the current preview image texture. */
@@ -83,7 +83,7 @@ public:
     /** the image changed signal object for this GalaxySetupPanel */
     mutable boost::signals2::signal<void (std::shared_ptr<GG::Texture>)> ImageChangedSignal;
 
-    void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
+    void SizeMove(GG::Pt ul, GG::Pt lr) override;
     void Render() override {}
     void Disable(bool b = true) override;
     void SetFromSetupData(const GalaxySetupData& setup_data); ///< sets the controls from a GalaxySetupData
@@ -125,13 +125,13 @@ private:
 
 //! This class is the Galaxy Setup window.  It is a modal window
 //! that allows the user to choose a galaxy style, size, etc.
-class GalaxySetupWnd : public CUIWnd {
+class GalaxySetupWnd final : public CUIWnd {
 public:
     GalaxySetupWnd();
     void CompleteConstruction() override;
 
     /** returns true iff the dialog is finished running and it was closed with the "OK" button */
-    bool                    EndedWithOk() const {return m_done && m_ended_with_ok;}
+    bool                    EndedWithOk() const noexcept {return m_modal_done.load() && m_ended_with_ok;}
 
     /** returns the panel containing all the user-chosen options. */
     const std::string&      EmpireName() const;
@@ -143,7 +143,7 @@ public:
 
     void Render() override;
     void KeyPress(GG::Key key, std::uint32_t key_code_point, GG::Flags<GG::ModKey> mod_keys) override;
-    void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
+    void SizeMove(GG::Pt ul, GG::Pt lr) override;
 
 protected:
     GG::Rect CalculatePosition() const override;
@@ -161,9 +161,9 @@ private:
     std::shared_ptr<GalaxySetupPanel>       m_galaxy_setup_panel;    //!< The GalaxySetupPanel that does most of the work of the dialog
     std::shared_ptr<GameRulesPanel>         m_game_rules_panel;
     std::shared_ptr<GG::Label>              m_player_name_label;
-    std::shared_ptr<GG::Edit>               m_player_name_edit;
+    std::shared_ptr<CUIEdit>                m_player_name_edit;
     std::shared_ptr<GG::Label>              m_empire_name_label;
-    std::shared_ptr<GG::Edit>               m_empire_name_edit;
+    std::shared_ptr<CUIEdit>                m_empire_name_edit;
     std::shared_ptr<GG::Label>              m_empire_color_label;
     std::shared_ptr<EmpireColorSelector>    m_empire_color_selector;
     std::shared_ptr<SpeciesSelector>        m_starting_secies_selector;

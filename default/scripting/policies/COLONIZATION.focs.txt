@@ -4,9 +4,12 @@ Policy
     short_description = "PLC_COLONIZATION_SHORT_DESC"
     category = "SOCIAL_CATEGORY"
     adoptioncost = floor(2.0 * [[POPULATION_OWNED_BY_EMPIRE]]^0.5)
-    exclusions = [ "PLC_EXPLORATION" "PLC_CENTRALIZATION" ]
+    exclusions = [ "PLC_CENTRALIZATION" "PLC_EXPLORATION" "PLC_METROPOLES" ]
     effectsgroups = [
         [[SPECIES_LIKES_OR_DISLIKES_POLICY_STABILITY_EFFECTS]]
+
+        // Makes colony buildings and colony/outpost ship parts cheaper
+        // See COLONIZATION_POLICY_MULTIPLIER macro in ../common/upkeep.macros
 
         EffectsGroup
             scope = And [
@@ -23,7 +26,7 @@ Policy
             priority = [[TARGET_AFTER_SCALING_PRIORITY]]
             effects = SetMaxFuel value = Value + 1
     ]
-    graphic = "icons/policies/colonization.png"
+    graphic = "icons/policies/social_colonization.png"
 
 #include "/scripting/common/priorities.macros"
 #include "/scripting/policies/policies.macros"

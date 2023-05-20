@@ -3,27 +3,24 @@
 
 #include "ValueRefPythonParser.h"
 
-struct source_wrapper {
-    value_ref_wrapper<int> owner() const;
-    operator condition_wrapper() const;
-};
+struct variable_wrapper {
+    variable_wrapper(ValueRef::ReferenceType reference_type)
+        : m_reference_type(reference_type)
+    {}
 
-struct target_wrapper {
-    value_ref_wrapper<double> habitable_size() const;
-    value_ref_wrapper<double> max_shield() const;
-    value_ref_wrapper<double> max_defense() const;
-    value_ref_wrapper<double> max_troops() const;
+    template<typename S>
+    variable_wrapper(ValueRef::ReferenceType reference_type, S&& container)
+        : m_reference_type(reference_type)
+        , m_container(std::move(container))
+    {}
 
-    value_ref_wrapper<int> id() const;
-    value_ref_wrapper<int> owner() const;
-    value_ref_wrapper<int> system_id() const;
-    value_ref_wrapper<int> design_id() const;
-};
+    value_ref_wrapper<int> get_int_property(const char *property) const;
+    value_ref_wrapper<double> get_double_property(const char *property) const;
+    value_ref_wrapper<std::string> get_string_property(const char *property) const;
+    variable_wrapper get_variable_property(const char *property) const;
 
-struct local_candidate_wrapper {
-    value_ref_wrapper<int> last_turn_attacked_by_ship() const;
-    value_ref_wrapper<int> last_turn_conquered() const;
-    value_ref_wrapper<int> last_turn_colonized() const;
+    const ValueRef::ReferenceType m_reference_type;
+    const std::vector<std::string> m_container;
 };
 
 void RegisterGlobalsSources(boost::python::dict& globals);

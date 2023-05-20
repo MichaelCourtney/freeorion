@@ -25,7 +25,7 @@
 #include <boost/serialization/vector.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/iostreams/filter/zlib.hpp>
-#include <boost/iostreams/filtering_streambuf.hpp>
+#include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/copy.hpp>
 #include <boost/iostreams/device/back_inserter.hpp>
 #include <boost/iostreams/stream.hpp>
@@ -44,7 +44,7 @@ namespace {
     {
         // First compile the non-player related data
         preview.current_turn = server_save_game_data.current_turn;
-        preview.number_of_empires = empire_save_game_data.size();
+        preview.number_of_empires = static_cast<decltype(preview.number_of_empires)>(empire_save_game_data.size());
         preview.save_time = boost::posix_time::to_iso_extended_string(boost::posix_time::second_clock::local_time());
 
         DebugLogger() << "CompileSaveGamePreviewData(...) player_save_game_data size: " << player_save_game_data.size();
@@ -55,15 +55,15 @@ namespace {
 
         } else {
             // Consider the first player the main player
-            const PlayerSaveGameData* player = &(*player_save_game_data.begin());
+            const PlayerSaveGameData* player = &player_save_game_data.front();
 
             // If there are human players, the first of them should be the main player
-            short humans = 0;
+            int16_t humans = 0;
             for (const PlayerSaveGameData& psgd : player_save_game_data) {
                 if (psgd.client_type == Networking::ClientType::CLIENT_TYPE_HUMAN_PLAYER) {
                     if (player->client_type != Networking::ClientType::CLIENT_TYPE_HUMAN_PLAYER &&
-                       player->client_type != Networking::ClientType::CLIENT_TYPE_HUMAN_OBSERVER &&
-                       player->client_type != Networking::ClientType::CLIENT_TYPE_HUMAN_MODERATOR)
+                        player->client_type != Networking::ClientType::CLIENT_TYPE_HUMAN_OBSERVER &&
+                        player->client_type != Networking::ClientType::CLIENT_TYPE_HUMAN_MODERATOR)
                     {
                         player = &psgd;
                     }
@@ -91,16 +91,21 @@ namespace {
     const std::string BINARY_MARKER("binary");
 }
 
-std::map<int, SaveGameEmpireData> CompileSaveGameEmpireData() {
+std::map<int, SaveGameEmpireData> CompileSaveGameEmpireData(const EmpireManager& empires) {
     std::map<int, SaveGameEmpireData> retval;
-    for (const auto& entry : Empires())
-        retval[entry.first] = SaveGameEmpireData{entry.first, entry.second->Name(), entry.second->PlayerName(), entry.second->Color(), entry.second->IsAuthenticated(), entry.second->Eliminated(), entry.second->Won()};
+    for (const auto& [empire_id, empire] : empires) {
+        retval.emplace(std::piecewise_construct,
+                       std::forward_as_tuple(empire_id),
+                       std::forward_as_tuple(empire_id, empire->Name(), empire->PlayerName(),
+                                             empire->Color(), empire->IsAuthenticated(),
+                                             empire->Eliminated(), empire->Won()));
+    }
     return retval;
 }
 
 namespace {
-    constexpr size_t Pow(size_t base, size_t exp) {
-        size_t retval = 1;
+    constexpr std::size_t Pow(std::size_t base, std::size_t exp) noexcept {
+        std::size_t retval = 1;
         while (exp--)
             retval *= base;
         return retval;
@@ -127,7 +132,7 @@ int SaveGame(const std::string& filename, const ServerSaveGameData& server_save_
 
     DebugLogger() << "Compiling save empire and preview data";
     timer.EnterSection("compiling data");
-    std::map<int, SaveGameEmpireData> empire_save_game_data = CompileSaveGameEmpireData();
+    auto empire_save_game_data = CompileSaveGameEmpireData(empire_manager);
     SaveGamePreviewData save_preview_data;
     CompileSaveGamePreviewData(server_save_game_data, player_save_game_data,
                                empire_save_game_data, save_preview_data);
@@ -215,7 +220,7 @@ int SaveGame(const std::string& filename, const ServerSaveGameData& server_save_
                     InsertDevice serial_inserter(serial_str);
                     boost::iostreams::stream<InsertDevice> s_sink(serial_inserter);
 
-                    timer.EnterSection("");
+                    timer.EnterSection("universe to xml");
                     {
                         // create archive with (preallocated) buffer...
                         freeorion_xml_oarchive xoa(s_sink);
@@ -423,20 +428,14 @@ void LoadGame(const std::string& filename, ServerSaveGameData& server_save_game_
 
             } else {
                 // assume compressed XML
-                if (BOOST_VERSION >= 106600 && ignored_save_preview_data.save_format_marker == XML_COMPRESSED_MARKER)
+                if (ignored_save_preview_data.save_format_marker == XML_COMPRESSED_MARKER)
                     throw std::invalid_argument("Save Format Not Compatible with Boost Version " BOOST_LIB_VERSION);
 
                 timer.EnterSection("decompression");
-                // allocate buffers for compressed and deceompressed serialized gamestate
-                DebugLogger() << "Allocating buffers for XML deserialization...";
-                std::string serial_str, compressed_str;
+                // allocate buffer for compressed serialized gamestate
+                DebugLogger() << "Allocating buffer for XML deserialization...";
+                std::string compressed_str;
                 try {
-                    if (ignored_save_preview_data.uncompressed_text_size > 0) {
-                        DebugLogger() << "Based on header info for uncompressed state string, attempting to reserve: " << ignored_save_preview_data.uncompressed_text_size << " bytes";
-                        serial_str.reserve(ignored_save_preview_data.uncompressed_text_size);
-                    } else {
-                        serial_str.reserve(std::pow(2.0, 29.0));
-                    }
                     if (ignored_save_preview_data.compressed_text_size > 0) {
                         DebugLogger() << "Based on header info for compressed state string, attempting to reserve: " << ignored_save_preview_data.compressed_text_size << " bytes";
                         compressed_str.reserve(ignored_save_preview_data.compressed_text_size);
@@ -450,32 +449,16 @@ void LoadGame(const std::string& filename, ServerSaveGameData& server_save_game_
                 // extract compressed gamestate info
                 xia >> BOOST_SERIALIZATION_NVP(compressed_str);
 
-                // wrap compressed string in iostream::stream to extract compressed data
-                typedef boost::iostreams::basic_array_source<char> SourceDevice;
-                SourceDevice compressed_source(compressed_str.data(), compressed_str.size());
-                boost::iostreams::stream<SourceDevice> c_source(compressed_source);
-
-                // wrap uncompressed buffer string in iostream::stream to receive decompressed string
-                typedef boost::iostreams::back_insert_device<std::string> InsertDevice;
-                InsertDevice serial_inserter(serial_str);
-                boost::iostreams::stream<InsertDevice> s_sink(serial_inserter);
-
-                // set up filter to decompress data
-                boost::iostreams::filtering_istreambuf i;
-                i.push(boost::iostreams::zlib_decompressor());
+                boost::iostreams::filtering_istream zis;
+                zis.push(boost::iostreams::zlib_decompressor());
                 if (ignored_save_preview_data.save_format_marker == XML_COMPRESSED_BASE64_MARKER)
-                    i.push(boost::iostreams::base64_decoder());
-                i.push(c_source);
-                boost::iostreams::copy(i, s_sink);
-                // The following line has been commented out because it caused an assertion in boost iostreams to fail
-                // s_sink.flush();
+                    zis.push(boost::iostreams::base64_decoder());
+                std::istringstream is(compressed_str);
+                zis.push(is);
 
-                // wrap uncompressed buffer string in iostream::stream to extract decompressed string
-                SourceDevice serial_source(serial_str.data(), serial_str.size());
-                boost::iostreams::stream<SourceDevice> s_source(serial_source);
+                // create archive with from decompressed stream
+                freeorion_xml_iarchive xia2(zis);
 
-                // create archive with (preallocated) buffer...
-                freeorion_xml_iarchive xia2(s_source);
                 // deserialize main gamestate info
                 timer.EnterSection("xml player data");
                 xia2 >> BOOST_SERIALIZATION_NVP(player_save_game_data);
@@ -489,6 +472,9 @@ void LoadGame(const std::string& filename, ServerSaveGameData& server_save_game_
                 Deserialize(xia2, universe);
             }
         }
+
+        for (auto& entry : empire_manager)
+            entry.second->CheckObsoleteGameContent();
 
     } catch (const std::exception& err) {
         ErrorLogger() << "LoadGame(...) failed!  Error: " << err.what();

@@ -35,7 +35,10 @@ namespace {
     }
 
     /// Adds color tags to name_o according to the empires in owner_empire_ids
-    std::string ColorNameByOwners(const std::string& name_o, std::set<int>& owner_empire_ids, const EmpireManager& empires) {
+    std::string ColorNameByOwners(const std::string& name_o,
+                                  std::set<int>& owner_empire_ids,
+                                  const EmpireManager& empires)
+    {
         if (owner_empire_ids.size() < 1) {
             return name_o;
 
@@ -107,12 +110,12 @@ OwnerColoredSystemName::OwnerColoredSystemName(int system_id, int font_size,
         return;
 
     const auto& known_destroyed_object_ids = universe.EmpireKnownDestroyedObjectIDs(client_empire_id);
-    if (known_destroyed_object_ids.count(system_id))
+    if (known_destroyed_object_ids.contains(system_id))
         return;
 
 
     // get system name
-    const std::string& system_name = system->ApparentName(
+    std::string system_name = system->ApparentName(
         client_empire_id, universe, blank_unexplored_and_none);
 
     // loop through planets in system, checking if any are a homeworld, capital
@@ -126,7 +129,7 @@ OwnerColoredSystemName::OwnerColoredSystemName(int system_id, int font_size,
     for (auto& planet : system_planets) {
         int planet_id = planet->ID();
 
-        if (known_destroyed_object_ids.count(planet_id))
+        if (known_destroyed_object_ids.contains(planet_id))
             continue;
 
         // is planet a capital?
@@ -143,7 +146,7 @@ OwnerColoredSystemName::OwnerColoredSystemName(int system_id, int font_size,
         if (!homeworld) {
             for (const auto& entry : species_manager.GetSpeciesHomeworldsMap()) {
                 const auto& homeworld_ids = entry.second;
-                if (homeworld_ids.count(planet_id)) {
+                if (homeworld_ids.contains(planet_id)) {
                     homeworld = true;
                     break;
                 }
@@ -155,7 +158,7 @@ OwnerColoredSystemName::OwnerColoredSystemName(int system_id, int font_size,
             for (auto& building : objects.find<const Building>(planet->BuildingIDs())) {
                 int building_id = building->ID();
 
-                if (known_destroyed_object_ids.count(building_id))
+                if (known_destroyed_object_ids.contains(building_id))
                     continue;
 
                 if (building->HasTag(TAG_SHIPYARD, context)) {
@@ -230,7 +233,7 @@ void OwnerColoredSystemName::CompleteConstruction() {
 void OwnerColoredSystemName::Render()
 {}
 
-void OwnerColoredSystemName::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
+void OwnerColoredSystemName::SizeMove(GG::Pt ul, GG::Pt lr) {
     GG::Control::SizeMove(ul, lr);
 
     // Center text
@@ -433,7 +436,7 @@ GG::Pt SystemIcon::NthFleetButtonUpperLeft(unsigned int button_number, bool movi
 int SystemIcon::EnclosingCircleDiameter() const
 { return static_cast<const int>(Value(Width()) * GetOptionsDB().Get<double>("ui.map.system.circle.size")) + 1; }
 
-void SystemIcon::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
+void SystemIcon::SizeMove(GG::Pt ul, GG::Pt lr) {
     Wnd::SizeMove(ul, lr);
 
     const bool USE_TINY_GRAPHICS = Value(Width()) < GetOptionsDB().Get<int>("ui.map.system.icon.tiny.threshold");
@@ -556,19 +559,19 @@ void SystemIcon::RenderOverlay(double zoom_factor) {
     m_overlay_texture->OrthoBlit(overlay_ul, overlay_lr);
 }
 
-void SystemIcon::LClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys)
+void SystemIcon::LClick(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys)
 { if (!Disabled()) LeftClickedSignal(m_system_id); }
 
-void SystemIcon::RClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys)
+void SystemIcon::RClick(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys)
 { if (!Disabled()) RightClickedSignal(m_system_id, mod_keys); }
 
-void SystemIcon::LDoubleClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys)
+void SystemIcon::LDoubleClick(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys)
 { if (!Disabled()) LeftDoubleClickedSignal(m_system_id); }
 
-void SystemIcon::RDoubleClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys)
+void SystemIcon::RDoubleClick(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys)
 { if (!Disabled()) RightDoubleClickedSignal(m_system_id); }
 
-void SystemIcon::MouseEnter(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) {
+void SystemIcon::MouseEnter(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) {
     const bool USE_TINY_MOUSEOVER_INDICATOR = m_tiny_mouseover_indicator &&
                                               (Value(Width()) < m_tiny_mouseover_indicator->Width());
     // indicate mouseover
@@ -631,7 +634,7 @@ void SystemIcon::MouseLeave() {
     MouseLeavingSignal(m_system_id);
 }
 
-void SystemIcon::MouseWheel(const GG::Pt& pt, int move, GG::Flags<GG::ModKey> mod_keys)
+void SystemIcon::MouseWheel(GG::Pt pt, int move, GG::Flags<GG::ModKey> mod_keys)
 { ForwardEventToParent(); }
 
 void SystemIcon::SetSelected(bool selected) {
@@ -720,7 +723,7 @@ void SystemIcon::PositionSystemName(int pts) {
     name.second->MoveTo(GG::Pt(name_left, name_top));
 }
 
-bool SystemIcon::InWindow(const GG::Pt& pt) const {
+bool SystemIcon::InWindow(GG::Pt pt) const {
     // find if cursor is within required distance of centre of icon
     const int RADIUS = EnclosingCircleDiameter() / 2;
     const int RADIUS2 = RADIUS*RADIUS;

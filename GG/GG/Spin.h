@@ -80,14 +80,14 @@ public:
     X       ButtonWidth() const;        ///< returns the width used for the up and down buttons
 
     Clr     TextColor() const;          ///< returns the text color
-    Clr     InteriorColor() const;      ///< returns the the interior color of the control
+    Clr     InteriorColor() const;      ///< returns the interior color of the control
     Clr     HiliteColor() const;        ///< returns the color used to render hiliting around selected text
     Clr     SelectedTextColor() const;  ///< returns the color used to render selected text
 
     mutable ValueChangedSignalType ValueChangedSignal; ///< the value changed signal object for this Spin
 
     void Render() override;
-    void SizeMove(const Pt& ul, const Pt& lr) override;
+    void SizeMove(Pt ul, Pt lr) override;
     void Disable(bool b = true) override;
     void SetColor(Clr c) override;
     void Incr();  ///< increments the value of the control's text by StepSize(), up to at most MaxValue()
@@ -117,7 +117,7 @@ protected:
     Edit*   GetEdit() const;    ///< returns a pointer to the Edit control used to render this control's text and accept keyboard input
 
     void KeyPress(Key key, std::uint32_t key_code_point, Flags<ModKey> mod_keys) override;
-    void MouseWheel(const Pt& pt, int move, Flags<ModKey> mod_keys) override;
+    void MouseWheel(Pt pt, int move, Flags<ModKey> mod_keys) override;
     bool EventFilter(Wnd* w, const WndEvent& event) override;
     virtual void SetEditTextFromValue();
 
@@ -148,7 +148,7 @@ private:
 
 template <typename T>
 Spin<T>::Spin(T value, T step, T min, T max, bool edits, const std::shared_ptr<Font>& font, Clr color,
-              Clr text_color/* = CLR_BLACK*/) :
+              Clr text_color) :
     Control(X0, Y0, X1, font->Height() + 2 * PIXEL_MARGIN, INTERACTIVE),
     m_value(value),
     m_step_size(step),
@@ -241,7 +241,7 @@ void Spin<T>::Render()
 }
 
 template <typename T>
-void Spin<T>::SizeMove(const Pt& ul, const Pt& lr)
+void Spin<T>::SizeMove(Pt ul, Pt lr)
 {
     Wnd::SizeMove(ul, lr);
     const X BUTTON_X_POS = Width() - m_button_width - BORDER_THICK;
@@ -254,7 +254,7 @@ void Spin<T>::SizeMove(const Pt& ul, const Pt& lr)
 }
 
 template <typename T>
-void Spin<T>::Disable(bool b/* = true*/)
+void Spin<T>::Disable(bool b)
 {
     Control::Disable(b);
     m_edit->Disable(b);
@@ -375,7 +375,7 @@ void Spin<T>::KeyPress(Key key, std::uint32_t key_code_point, Flags<ModKey> mod_
 }
 
 template <typename T>
-void Spin<T>::MouseWheel(const Pt& pt, int move, Flags<ModKey> mod_keys)
+void Spin<T>::MouseWheel(Pt pt, int move, Flags<ModKey> mod_keys)
 {
     if (Disabled()) {
         Control::MouseWheel(pt, move, mod_keys);
@@ -412,9 +412,9 @@ void Spin<T>::SetEditTextFromValue()
 template <typename T>
 void Spin<T>::ConnectSignals()
 {
-    m_edit->FocusUpdateSignal.connect(boost::bind(&Spin::ValueUpdated, this, boost::placeholders::_1));
-    m_up_button->LeftClickedSignal.connect(boost::bind(&Spin::IncrImpl, this, true));
-    m_down_button->LeftClickedSignal.connect(boost::bind(&Spin::DecrImpl, this, true));
+    m_edit->FocusUpdateSignal.connect([this](const std::string& value_text) { ValueUpdated(value_text); });
+    m_up_button->LeftClickedSignal.connect([this]() { IncrImpl(true); });
+    m_down_button->LeftClickedSignal.connect([this]() { DecrImpl(true); });
 }
 
 template <typename T>

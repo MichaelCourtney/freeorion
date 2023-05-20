@@ -1,8 +1,9 @@
 import pytest
+
 import savegame_codec
 
 
-class DummyTestClass(object):
+class DummyTestClass:
     def __init__(self):
         self.some_int = 812
         self.some_negative_int = -712
@@ -39,12 +40,12 @@ class Success(Exception):
     pass
 
 
-class GetStateTester(object):
+class GetStateTester:
     def __getstate__(self):
         raise Success
 
 
-class SetStateTester(object):
+class SetStateTester:
     def __setstate__(self, state):
         raise Success
 
@@ -53,7 +54,7 @@ class SetStateTester(object):
     params=[
         int(),
         float(),
-        str(),
+        "",
         bool(),
         1,
         1.2,

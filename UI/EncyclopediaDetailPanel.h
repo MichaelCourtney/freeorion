@@ -25,7 +25,7 @@ class GraphControl;
 //! UI class that displays in-game encyclopedic information about game content.
 //!
 //! Tech, ShipPart, ShipHull, BuildingType, ShipDesign, etc.
-class EncyclopediaDetailPanel : public CUIWnd {
+class EncyclopediaDetailPanel final : public CUIWnd {
 public:
     EncyclopediaDetailPanel(GG::Flags<GG::WndFlag> flags = GG::ONTOP | GG::INTERACTIVE | GG::DRAGABLE |
                                                            GG::RESIZABLE | CLOSABLE | PINABLE,
@@ -33,14 +33,14 @@ public:
     void CompleteConstruction() override;
     ~EncyclopediaDetailPanel() = default;
 
-    void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
+    void SizeMove(GG::Pt ul, GG::Pt lr) override;
     void KeyPress(GG::Key key, std::uint32_t key_code_point, GG::Flags<GG::ModKey> mod_keys) override;
     void PreRender() override;
     void Render() override;
 
     /** Need to redefine this so that icons and name can be put at the top of
       * the Wnd, rather than being restricted to the client area of a CUIWnd */
-    GG::Pt ClientUpperLeft() const override;
+    GG::Pt ClientUpperLeft() const noexcept override { return GG::Wnd::UpperLeft(); }
 
     void AddItem(std::string_view type, std::string name); // adds a new item to m_items
     void PopItem();
@@ -48,38 +48,39 @@ public:
     int GetItemsSize() { return m_items.size(); }
 
     void SetPlanet(int planet_id);
-    void SetItem(std::shared_ptr<const Planet> planet);
-    void SetTech(const std::string& tech_name);
+    void SetItem(const std::shared_ptr<const Planet>& planet);
+    void SetTech(std::string tech_name);
     void SetItem(const Tech* tech);
-    void SetPolicy(const std::string& policy_name);
+    void SetPolicy(std::string policy_name);
     void SetItem(const Policy* policy);
-    void SetShipPart(const std::string& part_name);
+    void SetShipPart(std::string part_name);
     void SetItem(const ShipPart* part);
-    void SetShipHull(const std::string& hull_name);
+    void SetShipHull(std::string hull_name);
     void SetItem(const ShipHull* ship_hull);
-    void SetBuildingType(const std::string& building_name);
+    void SetBuildingType(std::string building_name);
     void SetItem(const BuildingType* building_type);
-    void SetSpecial(const std::string& special_name);
+    void SetSpecial(std::string special_name);
     void SetItem(const Special* special);
-    void SetSpecies(const std::string& species_name);
+    void SetSpecies(std::string species_name);
     void SetItem(const Species* species);
-    void SetFieldType(const std::string& field_type_name);
+    void SetFieldType(std::string field_type_name);
     void SetItem(const FieldType* field_type);
     void SetObject(int object_id);
-    void SetObject(const std::string& object_id);
-    void SetItem(std::shared_ptr<const UniverseObject> obj);
+    void SetObject(std::string object_id);
+    void SetItem(const std::shared_ptr<const UniverseObject>& obj);
     void SetEmpire(int empire_id);
-    void SetEmpire(const std::string& empire_id);
+    void SetEmpire(std::string empire_id);
     void SetItem(const Empire* empire);
     void SetDesign(int design_id);
-    void SetDesign(const std::string& design_id);
+    void SetDesign(std::string design_id);
     void SetItem(const ShipDesign* design);
     void SetIncompleteDesign(std::weak_ptr<const ShipDesign> incomplete_design);
     void SetMeterType(std::string meter_string);
-    void SetItem(const MeterType& meter_type);
-    void SetGraph(const std::string& graph_id);
+    void SetMeterType(MeterType meter_type);
+    void SetItem(MeterType meter_type);
+    void SetGraph(std::string graph_id);
     void SetIndex();
-    void SetEncyclopediaArticle(const std::string& name);
+    void SetEncyclopediaArticle(std::string name);
 
     void Refresh();
     void OnIndex();

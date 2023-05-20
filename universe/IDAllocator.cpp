@@ -30,6 +30,7 @@ IDAllocator::IDAllocator(const int server_id,
     m_random_generator()
 {
     TraceLogger(IDallocator) << "IDAllocator() server id = " << server_id << " invalid id = " << invalid_id
+                             << " temp_id = " << m_temp_id
                              << " zero = " << m_zero
                              << " warn threshold =  " << m_warn_threshold << " num clients = " << client_ids.size();
 
@@ -50,13 +51,13 @@ IDAllocator::IDAllocator(const int server_id,
     }
 }
 
-int IDAllocator::NewID() {
+int IDAllocator::NewID(const Universe& universe) {
     // increment next id for this client until next id is not an already-used id
-    IncrementNextAssignedId(m_empire_id, Objects().HighestObjectID());
-    IncrementNextAssignedId(m_empire_id, GetUniverse().HighestDestroyedObjectID());
+    IncrementNextAssignedId(m_empire_id, universe.Objects().HighestObjectID());
+    IncrementNextAssignedId(m_empire_id, universe.HighestDestroyedObjectID());
 
     // Find the next id for this client in the table.
-    auto&& it = m_empire_id_to_next_assigned_object_id.find(m_empire_id);
+    auto it = m_empire_id_to_next_assigned_object_id.find(m_empire_id);
     if (it == m_empire_id_to_next_assigned_object_id.end()) {
         ErrorLogger() << "m_empire_id " << m_empire_id << " not in id manager table.";
         return m_invalid_id;
@@ -88,19 +89,22 @@ int IDAllocator::NewID() {
     return retval;
 }
 
-std::pair<bool, bool> IDAllocator::IsIDValidAndUnused(const ID_t checked_id, const int checked_empire_id) {
-    constexpr std::pair<bool, bool> hard_fail = {false, false};
-    constexpr std::pair<bool, bool> complete_success = {true, true};
+std::pair<bool, bool> IDAllocator::IsIDValidAndUnused(const ID_t checked_id,
+                                                      const int checked_empire_id)
+{
+    static constexpr std::pair<bool, bool> hard_fail = {false, false};
+    static constexpr std::pair<bool, bool> complete_success = {true, true};
     // allow legacy loading and order processing
-    constexpr std::pair<bool, bool> legacy_success = {true, false};
+    static constexpr std::pair<bool, bool> legacy_success = {true, false};
 
     if (checked_id == m_invalid_id) {
         ErrorLogger() << m_invalid_id << " is an invalid id.";
         return hard_fail;
     }
 
-    if (checked_id == m_temp_id)
+    if (checked_id == m_temp_id) {
         return complete_success;
+    }
 
     if (checked_id >= m_exhausted_threshold) {
         ErrorLogger() << " invalid id = " << checked_id << " is greater then the maximum id " << m_exhausted_threshold;

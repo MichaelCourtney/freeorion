@@ -4,7 +4,7 @@ Policy
     short_description = "PLC_DIVERSITY_SHORT_DESC"
     category = "SOCIAL_CATEGORY"
     adoptioncost = floor(2.0 * [[POPULATION_OWNED_BY_EMPIRE]]^0.5)
-    exclusions = [ "PLC_RACIAL_PURITY" ]
+    exclusions = [ "PLC_CONFORMANCE" "PLC_INDOCTRINATION" "PLC_RACIAL_PURITY" "PLC_THE_HUNT" ]
     unlock = Item type = Policy name = "PLC_ARTISAN_WORKSHOPS"
     effectsgroups = [
         [[SPECIES_LIKES_OR_DISLIKES_POLICY_STABILITY_EFFECTS]]
@@ -18,13 +18,8 @@ Policy
                 Happiness low = (NamedReal name = "PLC_DIVERSITY_MIN_STABILITY" value = 8)
             ]
             effects = [
-                SetTargetResearch value = Value - 2 + (NamedReal name = "PLC_DIVERSITY_SCALING" value = 0.5) * Statistic CountUnique
-                    value = LocalCandidate.Species
-                    condition = And [
-                        Planet
-                        OwnedBy empire = Source.Owner
-                        Population low = 0.001
-                    ]
+                SetTargetResearch value = Value + (NamedReal name = "PLC_DIVERSITY_SCALING" value = 0.5) *
+                                                  ([[NUM_SPECIES]] - (NamedInteger name = "PLC_DIVERSITY_THRESHOLD" value = 4))
             ]
         
         // happiness bonus for more species in empire, penalty when less than 4 species
@@ -35,13 +30,8 @@ Policy
                 Population low = 0.001
             ]
             effects = [
-                SetTargetHappiness value = Value - 2 + NamedRealLookup name = "PLC_DIVERSITY_SCALING" * Statistic CountUnique
-                    value = LocalCandidate.Species
-                    condition = And [
-                        Planet
-                        OwnedBy empire = Source.Owner
-                        Population low = 0.001
-                    ]
+                SetTargetHappiness value = Value + NamedRealLookup name = "PLC_DIVERSITY_SCALING" *
+                                                   ([[NUM_SPECIES]] - (NamedIntegerLookup name = "PLC_DIVERSITY_THRESHOLD"))
             ]
 
         // influence bonus on capital for more species, penalty when less than 4 species
@@ -51,15 +41,21 @@ Policy
                 OwnedBy empire = Source.Owner
             ]
             effects = [
-                SetTargetInfluence value = Value - 2 + NamedRealLookup name = "PLC_DIVERSITY_SCALING" * Statistic CountUnique
-                    value = LocalCandidate.Species
-                    condition = And [
-                        Planet
-                        OwnedBy empire = Source.Owner
-                        Population low = 0.001
-                    ]
+                SetTargetInfluence value = Value + NamedRealLookup name = "PLC_DIVERSITY_SCALING" *
+                                                   ([[NUM_SPECIES]] - (NamedIntegerLookup name = "PLC_DIVERSITY_THRESHOLD"))
             ]
     ]
-    graphic = "icons/policies/diversity.png"
+    graphic = "icons/policies/social_diversity.png"
+
+NUM_SPECIES
+'''
+Statistic CountUnique
+    value = LocalCandidate.Species
+    condition = And [
+        Planet
+        OwnedBy empire = Source.Owner
+        Population low = 0.001
+    ]
+'''
 
 #include "/scripting/policies/policies.macros"

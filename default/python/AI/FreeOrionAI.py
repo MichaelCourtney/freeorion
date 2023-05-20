@@ -12,7 +12,7 @@ import freeOrionAIInterface as fo
 import random
 import sys
 
-from common.option_tools import check_bool, get_option_dict, parse_config
+from common.option_tools import parse_config
 
 parse_config(fo.getOptionsDBOptionStr("ai-config"), fo.getUserConfigDir())
 
@@ -28,6 +28,7 @@ import FleetUtilsAI
 import InvasionAI
 import MilitaryAI
 import PlanetUtilsAI
+import PolicyAI
 import PriorityAI
 import ProductionAI
 import ResearchAI
@@ -43,7 +44,21 @@ from character.character_strings_module import (
 )
 from common.handlers import init_handlers
 from common.listeners import listener
+from empire.survey_universe import survey_universe
+from expansion_plans.expansion_plans_implementation import initialise_expansion_plans
+from freeorion_tools import chat_human
 from freeorion_tools.timers import AITimer
+from generate_orders import (
+    empire_is_ok,
+    greet_on_first_turn,
+    print_existing_rules,
+    print_starting_intro,
+    replay_turn_after_load,
+    set_game_turn_seed,
+    update_resource_pool,
+)
+
+initialise_expansion_plans()
 
 turn_timer = AITimer("full turn")
 
@@ -70,10 +85,11 @@ def error_handler(func):
     return _error_handler
 
 
-def _pre_game_start(empire_id, aistate):
+def _pre_game_start(empire_id):
     """
     Configuration that should be done before AI start operating.
     """
+    aistate = get_aistate()
     aggression_trait = aistate.character.get_trait(Aggression)
     diplomatic_corp_configs = {
         fo.aggression.beginner: DiplomaticCorp.BeginnerDiplomaticCorp,
@@ -85,8 +101,25 @@ def _pre_game_start(empire_id, aistate):
     configure_debug_chat(empire_id)
 
 
+def _choose_aggression():
+    galaxy_setup_data = fo.getGalaxySetupData()
+    aggression = int(galaxy_setup_data.maxAIAggression)
+
+    if aggression > 0:
+        rng = random.Random()
+        galaxy_seed = hash(galaxy_setup_data.seed)
+        empire_seed = 3 * hash(fo.getEmpire().name)
+        rng.seed(galaxy_seed * empire_seed)
+
+        random_number = rng.randint(0, 99)
+        if random_number > 74:
+            aggression -= 1
+
+    return fo.aggression(aggression)
+
+
 @error_handler
-def startNewGame(aggression_input=fo.aggression.aggressive):  # pylint: disable=invalid-name
+def startNewGame():  # pylint: disable=invalid-name
     """Called by client when a new game is started (but not when a game is loaded).
     Should clear any pre-existing state and set up whatever is needed for AI to generate orders."""
     empire = fo.getEmpire()
@@ -99,8 +132,7 @@ def startNewGame(aggression_input=fo.aggression.aggressive):  # pylint: disable=
         return
     # initialize AIstate
     debug("Initializing AI state...")
-    create_new_aistate(aggression_input)
-    aistate = get_aistate()
+    aistate = create_new_aistate(_choose_aggression())
     aggression_trait = aistate.character.get_trait(Aggression)
     debug(
         "New game started, AI Aggression level %d (%s)"
@@ -111,18 +143,28 @@ def startNewGame(aggression_input=fo.aggression.aggressive):  # pylint: disable=
     debug("Trying to rename our homeworld...")
     planet_id = PlanetUtilsAI.get_capital()
     universe = fo.getUniverse()
-    if planet_id is not None and planet_id != INVALID_ID:
+    if planet_id != INVALID_ID:
         planet = universe.getPlanet(planet_id)
         new_name = " ".join([random.choice(possible_capitals(aistate.character)).strip(), planet.name])
         debug("    Renaming to %s..." % new_name)
         res = fo.issueRenameOrder(planet_id, new_name)
         debug("    Result: %d; Planet is now named %s" % (res, planet.name))
-    _pre_game_start(empire.empireID, aistate)
+    _pre_game_start(empire.empireID)
 
 
 @error_handler
 def resumeLoadedGame(saved_state_string):  # pylint: disable=invalid-name
     """Called by client to when resume a loaded game."""
+    debug("Resuming loaded game")
+
+    if saved_state_string == "NO_STATE_YET" and fo.currentTurn() == 1:
+        info("AI given uninitialized state-string to resume from on turn 1.")
+        info(
+            "Assuming post-universe-generation autosave before any orders were sent "
+            "and behaving as if a new game was started."
+        )
+        return startNewGame()
+
     if fo.getEmpire() is None:
         fatal("This client has no empire. Doing nothing to resume loaded game.")
         return
@@ -130,30 +172,32 @@ def resumeLoadedGame(saved_state_string):  # pylint: disable=invalid-name
     if fo.getEmpire().eliminated:
         info("This empire has been eliminated. Ignoring resume loaded game.")
         return
-    debug("Resuming loaded game")
-    if not saved_state_string:
+
+    aistate = None
+    if saved_state_string == "NOT_SET_BY_CLIENT_TYPE":
+        info("AI assigned to empire previously run by human.")
+        chat_human("We have been assigned an empire previously run by a human player. We can manage this.")
+    elif saved_state_string == "":
         error(
-            "AI given empty state-string to resume from; this is expected if the AI is assigned to an empire "
-            "previously run by a human, but is otherwise an error. AI will be set to Aggressive."
+            "AI given empty state-string to resume from. "
+            "AI can continue but behaviour may be different from the previous session."
         )
-        aistate = create_new_aistate(fo.aggression.aggressive)
-        aistate.session_start_cleanup()
     else:
         try:
             # loading saved state
             aistate = load_aistate(saved_state_string)
         except Exception as e:
-            # assigning new state
-            aistate = create_new_aistate(fo.aggression.aggressive)
-            aistate.session_start_cleanup()
             error(
-                "Failed to load the AIstate from the savegame. The AI will"
-                " play with a fresh AIstate instance with aggression level set"
-                " to 'aggressive'. The behaviour of the AI may be different"
-                " than in the original session. The error raised was: %s" % e,
+                "Failed to load the AIstate from the savegame: %s"
+                " AI can continue but behaviour may be different from the previous session.",
+                e,
                 exc_info=True,
             )
-    _pre_game_start(fo.getEmpire().empireID, aistate)
+    if aistate is None:
+        info("Creating new ai state due to failed load.")
+        aistate = create_new_aistate(_choose_aggression())
+    aistate.session_start_cleanup()
+    _pre_game_start(fo.getEmpire().empireID)
 
 
 @error_handler
@@ -248,101 +292,36 @@ def generateOrders():  # pylint: disable=invalid-name
     and its orders will be sent to the server.
     """
     turn_timer.start("AI planning")
-    generate_order_timer.start("Check AI state")
-    try:
-        rules = fo.getGameRules()
-        debug("Defined game rules:")
-        for rule_name, rule_value in rules.getRulesAsStrings().items():
-            debug("%s: %s", rule_name, rule_value)
-        debug("Rule RULE_NUM_COMBAT_ROUNDS value: " + str(rules.getInt("RULE_NUM_COMBAT_ROUNDS")))
-    except Exception as e:
-        error("Exception %s when trying to get game rules" % e, exc_info=True)
+    print_existing_rules()
 
-    # If nothing can be ordered anyway, exit early.
-    # Note that there is no need to update meters etc. in this case.
-    empire = fo.getEmpire()
-    if empire is None:
-        fatal("This client has no empire. Aborting order generation.")
+    if not empire_is_ok():
         return
 
-    if empire.eliminated:
-        info("This empire has been eliminated. Aborting order generation.")
-        return
+    DiplomaticCorp.check_gang_up()
+
+    set_game_turn_seed()
 
     generate_order_timer.start("Update states on server")
     # This code block is required for correct AI work.
-    info("Meter / Resource Pool updating...")
-    fo.initMeterEstimatesDiscrepancies()
-    fo.updateMeterEstimates(False)
-    fo.updateResourcePools()
+    update_resource_pool()
 
     generate_order_timer.start("Prepare each turn data")
-    turn = fo.currentTurn()
+    # results of this function are needed in many places...
+
+    greet_on_first_turn(diplomatic_corp)
+
+    if replay_turn_after_load():
+        return
+
+    survey_universe()
+
+    print_starting_intro()
+
     aistate = get_aistate()
-    debug("\n\n\n" + "=" * 20)
-    debug(f"Starting turn {turn}")
-    debug("=" * 20 + "\n")
-
-    # set the random seed (based on galaxy seed, empire name and current turn)
-    # for game-reload consistency.
-    random_seed = str(fo.getGalaxySetupData().seed) + "%05d%s" % (turn, fo.getEmpire().name)
-    random.seed(random_seed)
-    empire = fo.getEmpire()
-    aggression_name = get_trait_name_aggression(aistate.character)
-    debug("***************************************************************************")
-    debug("*******  Log info for AI progress chart script. Do not modify.   **********")
-    debug("Generating Orders")
-
-    name_parts = (
-        empire.name,
-        empire.empireID,
-        "pid",
-        fo.playerID(),
-        fo.playerName(),
-        "RIdx",
-        ResearchAI.get_research_index(),
-        aggression_name.capitalize(),
-    )
-    empire_name = "_".join(str(part) for part in name_parts)
-
-    debug(f"EmpireID: {empire.empireID} Name: {empire_name} Turn: {turn}")
-
-    debug(f"EmpireColors: {empire.colour}")
-    planet_id = PlanetUtilsAI.get_capital()
-    if planet_id:
-        planet = fo.getUniverse().getPlanet(planet_id)
-        debug("CapitalID: " + str(planet_id) + " Name: " + planet.name + " Species: " + planet.speciesName)
-    else:
-        debug("CapitalID: None Currently Name: None Species: None ")
-    debug("***************************************************************************")
-    debug("***************************************************************************")
-
-    # When loading a savegame, the AI will already have issued orders for this turn.
-    # To avoid duplicate orders, generally try not to replay turns. However, for debugging
-    # purposes it is often useful to replay the turn and observe varying results after
-    # code changes. Set the replay_after_load flag in the AI config to let the AI issue
-    # new orders after a game load. Note that the orders from the original savegame are
-    # still being issued and the AIstate was saved after those orders were issued.
-    # TODO: Consider adding an option to clear AI orders after load (must save AIstate at turn start then)
-    if fo.currentTurn() == aistate.last_turn_played:
-        info("The AIstate indicates that this turn was already played.")
-        if not check_bool(get_option_dict().get("replay_turn_after_load", "False")):
-            info("Aborting new order generation. Orders from savegame will still be issued.")
-            return
-        info("Issuing new orders anyway.")
-
-    if turn == 1:
-        human_player = fo.empirePlayerID(1)
-        greet = diplomatic_corp.get_first_turn_greet_message()
-        fo.sendChatMessage(
-            human_player, "%s (%s): [[%s]]" % (empire.name, get_trait_name_aggression(aistate.character), greet)
-        )
-
     aistate.prepare_for_new_turn()
     debug("Calling AI Modules")
     # call AI modules
     action_list = [
-        ColonisationAI.survey_universe,
         ShipDesignAI.Cache.update_for_new_turn,
         PriorityAI.calculate_priorities,
         ExplorationAI.assign_scouts_to_explore_systems,
@@ -354,6 +333,7 @@ def generateOrders():  # pylint: disable=invalid-name
         ResearchAI.generate_research_orders,
         ProductionAI.generate_production_orders,
         ResourcesAI.generate_resources_orders,
+        PolicyAI.generate_policy_orders,
     ]
 
     for action in action_list:
@@ -362,7 +342,7 @@ def generateOrders():  # pylint: disable=invalid-name
             action()
             generate_order_timer.stop()
         except Exception as e:
-            error("Exception %s while trying to %s" % (e, action.__name__), exc_info=True)
+            error(f"Exception {e} while trying to {action.__name__}", exc_info=True)
 
     aistate.last_turn_played = fo.currentTurn()
     generate_order_timer.stop_print_and_clear()

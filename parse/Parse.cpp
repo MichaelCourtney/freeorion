@@ -14,7 +14,7 @@
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/filesystem/operations.hpp>
 #include <boost/filesystem/fstream.hpp>
-#include <boost/spirit/include/phoenix.hpp>
+#include <boost/phoenix.hpp>
 #include <boost/algorithm/string/find_iterator.hpp>
 
 #define DEBUG_PARSERS 0
@@ -35,7 +35,7 @@ namespace parse {
 
     void parse_and_erase_macro_definitions(std::string& text, std::map<std::string, std::string>& macros) {
         try {
-            std::string::iterator text_it = text.begin();
+            auto text_it = text.begin();
             while (true) {
                 // find next macro definition
                 smatch match;
@@ -55,7 +55,7 @@ namespace parse {
                 //DebugLogger() << "text:\n" << macro_text;
 
                 // store macro
-                if (!macros.count(macro_key)) {
+                if (!macros.contains(macro_key)) {
                     macros[macro_key] = macro_text;
                 } else {
                     ErrorLogger() << "Duplicate macro key foud: " << macro_key << ".  Ignoring duplicate.";
@@ -98,7 +98,7 @@ namespace parse {
         std::set<std::string> macros_directly_referenced_in_input_text = macros_directly_referenced_in_text(text);
         if (macros_directly_referenced_in_input_text.empty())
             return false;
-        if (macros_directly_referenced_in_input_text.count(macro_to_find))
+        if (macros_directly_referenced_in_input_text.contains(macro_to_find))
             return true;
         // check if macros referenced in text reference macro_to_find
         for (const std::string& direct_referenced_macro_key : macros_directly_referenced_in_input_text) {
@@ -148,8 +148,8 @@ namespace parse {
                         std::string macro_params = match[2]; // arg1,arg2,arg3,etc.
                         if (!macro_params.empty()) { // found macro parameters
                             int replace_number = 1;
-                            for (boost::split_iterator<std::string::iterator> it =
-                                    boost::make_split_iterator(macro_params, boost::first_finder(",", boost::is_iequal()));
+                            for (auto it = boost::make_split_iterator(
+                                macro_params, boost::first_finder(",", boost::is_iequal()));
                                 it != boost::split_iterator<std::string::iterator>();
                                 ++it, ++replace_number)
                             {
@@ -399,13 +399,9 @@ namespace parse {
 #endif
     }
 
-    typedef std::array<unsigned char, 4> ColorType;
+    typedef std::array<uint8_t, 4> ColorType;
 
-    inline std::array<unsigned char, 4> construct_color(
-        unsigned char r,
-        unsigned char g,
-        unsigned char b,
-        unsigned char a)
+    inline std::array<uint8_t, 4> construct_color(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
     { return {{r, g, b, a}}; }
 
     BOOST_PHOENIX_ADAPT_FUNCTION(ColorType, construct_color_, construct_color, 4)

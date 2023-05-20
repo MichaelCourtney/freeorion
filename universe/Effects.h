@@ -8,7 +8,7 @@
 
 
 namespace Condition {
-    typedef std::vector<std::shared_ptr<const UniverseObject>> ObjectSet;
+    using ObjectSet = std::vector<const UniverseObject*>;
 }
 
 namespace ValueRef {
@@ -24,9 +24,9 @@ public:
     NoOp() = default;
 
     void                       Execute(ScriptingContext& context) const override;
-    [[nodiscard]] std::string  Dump(unsigned short ntabs = 0) const override;
+    [[nodiscard]] std::string  Dump(uint8_t ntabs = 0) const override;
     void                       SetTopLevelContent(const std::string& content_name) override {}
-    [[nodiscard]] unsigned int GetCheckSum() const override;
+    [[nodiscard]] uint32_t     GetCheckSum() const override;
 
     [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 };
@@ -56,14 +56,14 @@ public:
                  bool include_empire_meter_effects = false,
                  bool only_generate_sitrep_effects = false) const override;
 
-    std::string         Dump(unsigned short ntabs = 0) const override;
-    bool                IsMeterEffect() const override { return true; }
-    void                SetTopLevelContent(const std::string& content_name) override;
-    MeterType           GetMeterType() const { return m_meter; };
-    const std::string&  AccountingLabel() const { return m_accounting_label; }
-    unsigned int        GetCheckSum() const override;
+    [[nodiscard]] std::string        Dump(uint8_t ntabs = 0) const override;
+    [[nodiscard]] bool               IsMeterEffect() const noexcept override { return true; }
+    void                             SetTopLevelContent(const std::string& content_name) override;
+    [[nodiscard]] MeterType          GetMeterType() const noexcept { return m_meter; };
+    [[nodiscard]] const std::string& AccountingLabel() const noexcept { return m_accounting_label; }
+    [[nodiscard]] uint32_t           GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     MeterType m_meter;
@@ -98,14 +98,14 @@ public:
                  bool include_empire_meter_effects = false,
                  bool only_generate_sitrep_effects = false) const override;
 
-    std::string     Dump(unsigned short ntabs = 0) const override;
-    bool            IsMeterEffect() const override { return true; }
-    void            SetTopLevelContent(const std::string& content_name) override;
-    const           ValueRef::ValueRef<std::string>* GetPartName() const { return m_part_name.get(); }
-    MeterType       GetMeterType() const { return m_meter; }
-    unsigned int    GetCheckSum() const override;
+    [[nodiscard]] std::string  Dump(uint8_t ntabs = 0) const override;
+    [[nodiscard]] bool         IsMeterEffect() const noexcept override { return true; }
+    void                       SetTopLevelContent(const std::string& content_name) override;
+    [[nodiscard]] const ValueRef::ValueRef<std::string>* GetPartName() const noexcept { return m_part_name.get(); }
+    [[nodiscard]] MeterType    GetMeterType() const noexcept { return m_meter; }
+    [[nodiscard]] uint32_t     GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<std::string>>    m_part_name;
@@ -136,13 +136,13 @@ public:
                  bool include_empire_meter_effects = false,
                  bool only_generate_sitrep_effects = false) const override;
 
-    std::string     Dump(unsigned short ntabs = 0) const override;
-    bool            IsMeterEffect() const override { return true; }
-    bool            IsEmpireMeterEffect() const override { return true; }
-    void            SetTopLevelContent(const std::string& content_name) override;
-    unsigned int    GetCheckSum() const override;
+    [[nodiscard]] std::string  Dump(uint8_t ntabs = 0) const override;
+    [[nodiscard]] bool         IsMeterEffect() const noexcept override { return true; }
+    [[nodiscard]] bool         IsEmpireMeterEffect() const noexcept override { return true; }
+    void                       SetTopLevelContent(const std::string& content_name) override;
+    [[nodiscard]] uint32_t     GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<int>>    m_empire_id;
@@ -163,11 +163,11 @@ public:
     bool operator==(const Effect& rhs) const override;
 
     void Execute(ScriptingContext& context) const override;
-    std::string Dump(unsigned short ntabs = 0) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
     void SetTopLevelContent(const std::string& content_name) override;
-    unsigned int GetCheckSum() const override;
+    [[nodiscard]] uint32_t GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<int>>    m_empire_id;
@@ -185,12 +185,12 @@ public:
 
     bool operator==(const Effect& rhs) const override;
 
-    void            Execute(ScriptingContext& context) const override;
-    std::string     Dump(unsigned short ntabs = 0) const override;
-    void            SetTopLevelContent(const std::string& content_name) override;
-    unsigned int    GetCheckSum() const override;
+    void        Execute(ScriptingContext& context) const override;
+    std::string Dump(uint8_t ntabs = 0) const override;
+    void        SetTopLevelContent(const std::string& content_name) override;
+    uint32_t    GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<int>> m_empire_id;
@@ -205,11 +205,30 @@ public:
     explicit SetPlanetType(std::unique_ptr<ValueRef::ValueRef<PlanetType>>&& type);
 
     void Execute(ScriptingContext& context) const override;
-    std::string Dump(unsigned short ntabs = 0) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
     void SetTopLevelContent(const std::string& content_name) override;
-    unsigned int GetCheckSum() const override;
+    [[nodiscard]] uint32_t GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
+
+private:
+    std::unique_ptr<ValueRef::ValueRef<PlanetType>> m_type;
+};
+
+/** Sets the original planet type of the target to \a type.  This has no effect on non-Planet targets.
+    This does not change the planet itself, it only affects game effects that compare the current type
+    to the original type. Typically effects that trigger during universe creation will set both
+    current and original type, while later effect will only modify the current type. */
+class FO_COMMON_API SetOriginalType final : public Effect {
+public:
+    explicit SetOriginalType(std::unique_ptr<ValueRef::ValueRef<PlanetType>>&& type);
+
+    void Execute(ScriptingContext& context) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
+    void SetTopLevelContent(const std::string& content_name) override;
+    [[nodiscard]] uint32_t GetCheckSum() const override;
+
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<PlanetType>> m_type;
@@ -225,11 +244,11 @@ public:
     explicit SetPlanetSize(std::unique_ptr<ValueRef::ValueRef<PlanetSize>>&& size);
 
     void Execute(ScriptingContext& context) const override;
-    std::string Dump(unsigned short ntabs = 0) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
     void SetTopLevelContent(const std::string& content_name) override;
-    unsigned int GetCheckSum() const override;
+    [[nodiscard]] uint32_t GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<PlanetSize>> m_size;
@@ -242,11 +261,11 @@ public:
     explicit SetSpecies(std::unique_ptr<ValueRef::ValueRef<std::string>>&& species);
 
     void Execute(ScriptingContext& context) const override;
-    std::string Dump(unsigned short ntabs = 0) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
     void SetTopLevelContent(const std::string& content_name) override;
-    unsigned int GetCheckSum() const override;
+    [[nodiscard]] uint32_t GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<std::string>> m_species_name;
@@ -259,11 +278,11 @@ public:
     explicit SetOwner(std::unique_ptr<ValueRef::ValueRef<int>>&& empire_id);
 
     void Execute(ScriptingContext& context) const override;
-    std::string Dump(unsigned short ntabs = 0) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
     void SetTopLevelContent(const std::string& content_name) override;
-    unsigned int GetCheckSum() const override;
+    [[nodiscard]] uint32_t GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<int>> m_empire_id;
@@ -278,11 +297,11 @@ public:
                             std::unique_ptr<ValueRef::ValueRef<double>>&& opinion);
 
     void Execute(ScriptingContext& context) const override;
-    std::string Dump(unsigned short ntabs = 0) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
     void SetTopLevelContent(const std::string& content_name) override;
-    unsigned int GetCheckSum() const override;
+    [[nodiscard]] uint32_t GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<std::string>>    m_species_name;
@@ -299,11 +318,11 @@ public:
                              std::unique_ptr<ValueRef::ValueRef<double>>&& opinion);
 
     void Execute(ScriptingContext& context) const override;
-    std::string Dump(unsigned short ntabs = 0) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
     void SetTopLevelContent(const std::string& content_name) override;
-    unsigned int GetCheckSum() const override;
+    [[nodiscard]] uint32_t GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<std::string>>    m_opinionated_species_name;
@@ -321,11 +340,11 @@ public:
                  std::vector<std::unique_ptr<Effect>>&& effects_to_apply_after);
 
     void Execute(ScriptingContext& context) const override;
-    std::string Dump(unsigned short ntabs = 0) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
     void SetTopLevelContent(const std::string& content_name) override;
-    unsigned int GetCheckSum() const override;
+    [[nodiscard]] uint32_t GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<PlanetType>>     m_type;
@@ -342,11 +361,11 @@ public:
                    std::vector<std::unique_ptr<Effect>>&& effects_to_apply_after);
 
     void Execute(ScriptingContext& context) const override;
-    std::string Dump(unsigned short ntabs = 0) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
     void SetTopLevelContent(const std::string& content_name) override;
-    unsigned int GetCheckSum() const override;
+    [[nodiscard]] uint32_t GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<std::string>>    m_building_type_name;
@@ -372,11 +391,11 @@ public:
                std::vector<std::unique_ptr<Effect>>&& effects_to_apply_after);
 
     void Execute(ScriptingContext& context) const override;
-    std::string Dump(unsigned short ntabs = 0) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
     void SetTopLevelContent(const std::string& content_name) override;
-    unsigned int GetCheckSum() const override;
+    [[nodiscard]] uint32_t GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<std::string>>    m_design_name;
@@ -404,11 +423,11 @@ public:
                 std::vector<std::unique_ptr<Effect>>&& effects_to_apply_after);
 
     void Execute(ScriptingContext& context) const override;
-    std::string Dump(unsigned short ntabs = 0) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
     void SetTopLevelContent(const std::string& content_name) override;
-    unsigned int GetCheckSum() const override;
+    [[nodiscard]] uint32_t GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<std::string>>    m_field_type_name;
@@ -435,11 +454,11 @@ public:
                  std::vector<std::unique_ptr<Effect>>&& effects_to_apply_after);
 
     void Execute(ScriptingContext& context) const override;
-    std::string Dump(unsigned short ntabs = 0) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
     void SetTopLevelContent(const std::string& content_name) override;
-    unsigned int GetCheckSum() const override;
+    [[nodiscard]] uint32_t GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef< ::StarType>>    m_type;
@@ -459,11 +478,11 @@ public:
     Destroy() = default;
 
     void Execute(ScriptingContext& context) const override;
-    std::string Dump(unsigned short ntabs = 0) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
     void SetTopLevelContent(const std::string& content_name) override {}
-    unsigned int GetCheckSum() const override;
+    [[nodiscard]] uint32_t GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 };
 
 /** Adds the Special with the name \a name to the target object. */
@@ -475,12 +494,12 @@ public:
 
     void Execute(ScriptingContext& context) const override;
 
-    std::string Dump(unsigned short ntabs = 0) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
     void SetTopLevelContent(const std::string& content_name) override;
     const ValueRef::ValueRef<std::string>* GetSpecialName() const { return m_name.get(); }
-    unsigned int GetCheckSum() const override;
+    [[nodiscard]] uint32_t GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<std::string>> m_name;
@@ -495,11 +514,11 @@ public:
     explicit RemoveSpecial(std::unique_ptr<ValueRef::ValueRef<std::string>>&& name);
 
     void Execute(ScriptingContext& context) const override;
-    std::string Dump(unsigned short ntabs = 0) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
     void SetTopLevelContent(const std::string& content_name) override;
-    unsigned int GetCheckSum() const override;
+    [[nodiscard]] uint32_t GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<std::string>> m_name;
@@ -512,11 +531,11 @@ public:
     explicit AddStarlanes(std::unique_ptr<Condition::Condition>&& other_lane_endpoint_condition);
 
     void Execute(ScriptingContext& context) const override;
-    std::string Dump(unsigned short ntabs = 0) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
     void SetTopLevelContent(const std::string& content_name) override;
-    unsigned int GetCheckSum() const override;
+    [[nodiscard]] uint32_t GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<Condition::Condition> m_other_lane_endpoint_condition;
@@ -528,12 +547,12 @@ class FO_COMMON_API RemoveStarlanes final : public Effect {
 public:
     explicit RemoveStarlanes(std::unique_ptr<Condition::Condition>&& other_lane_endpoint_condition);
 
-    void            Execute(ScriptingContext& context) const override;
-    std::string     Dump(unsigned short ntabs = 0) const override;
-    void            SetTopLevelContent(const std::string& content_name) override;
-    unsigned int    GetCheckSum() const override;
+    void                      Execute(ScriptingContext& context) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
+    void                      SetTopLevelContent(const std::string& content_name) override;
+    [[nodiscard]] uint32_t    GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<Condition::Condition> m_other_lane_endpoint_condition;
@@ -545,12 +564,12 @@ class FO_COMMON_API SetStarType final : public Effect {
 public:
     explicit SetStarType(std::unique_ptr<ValueRef::ValueRef<StarType>>&& type);
 
-    void            Execute(ScriptingContext& context) const override;
-    std::string     Dump(unsigned short ntabs = 0) const override;
-    void            SetTopLevelContent(const std::string& content_name) override;
-    unsigned int    GetCheckSum() const override;
+    void                       Execute(ScriptingContext& context) const override;
+    [[nodiscard]] std::string  Dump(uint8_t ntabs = 0) const override;
+    void                       SetTopLevelContent(const std::string& content_name) override;
+    [[nodiscard]] uint32_t     GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<StarType>> m_type;
@@ -564,12 +583,12 @@ class FO_COMMON_API MoveTo final : public Effect {
 public:
     explicit MoveTo(std::unique_ptr<Condition::Condition>&& location_condition);
 
-    void            Execute(ScriptingContext& context) const override;
-    std::string     Dump(unsigned short ntabs = 0) const override;
-    void            SetTopLevelContent(const std::string& content_name) override;
-    unsigned int    GetCheckSum() const override;
+    void                      Execute(ScriptingContext& context) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
+    void                      SetTopLevelContent(const std::string& content_name) override;
+    [[nodiscard]] uint32_t    GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<Condition::Condition> m_location_condition;
@@ -586,12 +605,12 @@ public:
                 std::unique_ptr<ValueRef::ValueRef<double>>&& focus_x = nullptr,
                 std::unique_ptr<ValueRef::ValueRef<double>>&& focus_y = nullptr);
 
-    void            Execute(ScriptingContext& context) const override;
-    std::string     Dump(unsigned short ntabs = 0) const override;
-    void            SetTopLevelContent(const std::string& content_name) override;
-    unsigned int    GetCheckSum() const override;
+    void                      Execute(ScriptingContext& context) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
+    void                      SetTopLevelContent(const std::string& content_name) override;
+    [[nodiscard]] uint32_t    GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<double>> m_speed;
@@ -610,12 +629,12 @@ public:
                 std::unique_ptr<ValueRef::ValueRef<double>>&& dest_x = nullptr,
                 std::unique_ptr<ValueRef::ValueRef<double>>&& dest_y = nullptr);
 
-    void            Execute(ScriptingContext& context) const override;
-    std::string     Dump(unsigned short ntabs = 0) const override;
-    void            SetTopLevelContent(const std::string& content_name) override;
-    unsigned int    GetCheckSum() const override;
+    void                      Execute(ScriptingContext& context) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
+    void                      SetTopLevelContent(const std::string& content_name) override;
+    [[nodiscard]] uint32_t    GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<double>> m_speed;
@@ -632,12 +651,12 @@ class FO_COMMON_API SetDestination final : public Effect {
 public:
     explicit SetDestination(std::unique_ptr<Condition::Condition>&& location_condition);
 
-    void            Execute(ScriptingContext& context) const override;
-    std::string     Dump(unsigned short ntabs = 0) const override;
-    void            SetTopLevelContent(const std::string& content_name) override;
-    unsigned int    GetCheckSum() const override;
+    void                      Execute(ScriptingContext& context) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
+    void                      SetTopLevelContent(const std::string& content_name) override;
+    [[nodiscard]] uint32_t    GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<Condition::Condition> m_location_condition;
@@ -648,12 +667,12 @@ class FO_COMMON_API SetAggression final : public Effect {
 public:
     explicit SetAggression(FleetAggression aggression);
 
-    void            Execute(ScriptingContext& context) const override;
-    std::string     Dump(unsigned short ntabs = 0) const override;
-    void            SetTopLevelContent(const std::string& content_name) override {}
-    unsigned int    GetCheckSum() const override;
+    void                      Execute(ScriptingContext& context) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
+    void                      SetTopLevelContent(const std::string& content_name) override {}
+    [[nodiscard]] uint32_t    GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     FleetAggression m_aggression;
@@ -663,14 +682,14 @@ private:
   * target object has multiple owners, nothing is done. */
 class FO_COMMON_API Victory final : public Effect {
 public:
-    explicit Victory(std::string& reason_string); // TODO: Make this a ValueRef<std::string>*
+    explicit Victory(std::string reason_string); // TODO: Make this a ValueRef<std::string>*
 
-    void            Execute(ScriptingContext& context) const override;
-    std::string     Dump(unsigned short ntabs = 0) const override;
-    void            SetTopLevelContent(const std::string& content_name) override {}
-    unsigned int    GetCheckSum() const override;
+    void                      Execute(ScriptingContext& context) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
+    void                      SetTopLevelContent(const std::string& content_name) override {}
+    [[nodiscard]] uint32_t    GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::string m_reason_string;
@@ -684,12 +703,12 @@ public:
                           std::unique_ptr<ValueRef::ValueRef<double>>&& research_progress,
                           std::unique_ptr<ValueRef::ValueRef<int>>&& empire_id = nullptr);
 
-    void            Execute(ScriptingContext& context) const override;
-    std::string     Dump(unsigned short ntabs = 0) const override;
-    void            SetTopLevelContent(const std::string& content_name) override;
-    unsigned int    GetCheckSum() const override;
+    void                      Execute(ScriptingContext& context) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
+    void                      SetTopLevelContent(const std::string& content_name) override;
+    [[nodiscard]] uint32_t    GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<std::string>>    m_tech_name;
@@ -703,12 +722,12 @@ public:
                                UnlockableItemType unlock_type,
                                std::unique_ptr<ValueRef::ValueRef<int>>&& empire_id = nullptr);
 
-    void            Execute(ScriptingContext& context) const override;
-    std::string     Dump(unsigned short ntabs = 0) const override;
-    void            SetTopLevelContent(const std::string& content_name) override;
-    unsigned int    GetCheckSum() const override;
+    void                      Execute(ScriptingContext& context) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
+    void                      SetTopLevelContent(const std::string& content_name) override;
+    [[nodiscard]] uint32_t    GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<std::string>> m_content_name;
@@ -727,39 +746,39 @@ public:
     using MessageParams =  std::vector<std::pair<
         std::string, std::unique_ptr<ValueRef::ValueRef<std::string>>>>;
 
-    GenerateSitRepMessage(std::string& message_string, std::string& icon,
+    GenerateSitRepMessage(std::string message_string, std::string icon,
                           MessageParams&& message_parameters,
                           std::unique_ptr<ValueRef::ValueRef<int>>&& recipient_empire_id,
                           EmpireAffiliationType affiliation,
                           std::string label = "",
                           bool stringtable_lookup = true);
-    GenerateSitRepMessage(std::string& message_string, std::string& icon,
+    GenerateSitRepMessage(std::string message_string, std::string icon,
                           MessageParams&& message_parameters,
                           EmpireAffiliationType affiliation,
                           std::unique_ptr<Condition::Condition>&& condition,
                           std::string label = "",
                           bool stringtable_lookup = true);
-    GenerateSitRepMessage(std::string& message_string, std::string& icon,
+    GenerateSitRepMessage(std::string message_string, std::string icon,
                           MessageParams&& message_parameters,
                           EmpireAffiliationType affiliation,
                           std::string label = "",
                           bool stringtable_lookup = true);
 
-    void                Execute(ScriptingContext& context) const override;
-    bool                IsSitrepEffect() const override     { return true; }
-    std::string         Dump(unsigned short ntabs = 0) const override;
-    void                SetTopLevelContent(const std::string& content_name) override;
-    const std::string&  MessageString() const               { return m_message_string; }
-    const std::string&  Icon() const                        { return m_icon; }
+    void                      Execute(ScriptingContext& context) const override;
+    [[nodiscard]] bool        IsSitrepEffect() const noexcept override { return true; }
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
+    void                      SetTopLevelContent(const std::string& content_name) override;
+    [[nodiscard]] const std::string& MessageString() const noexcept { return m_message_string; }
+    [[nodiscard]] const std::string& Icon() const noexcept          { return m_icon; }
 
     std::vector<std::pair<std::string, const ValueRef::ValueRef<std::string>*>> MessageParameters() const;
 
-    ValueRef::ValueRef<int>* RecipientID() const  { return m_recipient_empire_id.get(); }
-    Condition::Condition*    GetCondition() const { return m_condition.get(); }
-    EmpireAffiliationType    Affiliation() const  { return m_affiliation; }
-    unsigned int             GetCheckSum() const override;
+    [[nodiscard]] ValueRef::ValueRef<int>* RecipientID() const noexcept  { return m_recipient_empire_id.get(); }
+    [[nodiscard]] Condition::Condition*    GetCondition() const noexcept { return m_condition.get(); }
+    [[nodiscard]] EmpireAffiliationType    Affiliation() const noexcept  { return m_affiliation; }
+    [[nodiscard]] uint32_t                 GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::string                              m_message_string;
@@ -780,12 +799,12 @@ public:
     SetOverlayTexture(std::string& texture, ValueRef::ValueRef<double>* size);
 
     void Execute(ScriptingContext& context) const override;
-    std::string Dump(unsigned short ntabs = 0) const override;
-    bool IsAppearanceEffect() const override { return true; }
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
+    [[nodiscard]] bool IsAppearanceEffect() const noexcept override { return true; }
     void SetTopLevelContent(const std::string& content_name) override;
-    unsigned int GetCheckSum() const override;
+    [[nodiscard]] uint32_t GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::string m_texture;
@@ -799,12 +818,12 @@ public:
 
     void Execute(ScriptingContext& context) const override;
 
-    std::string Dump(unsigned short ntabs = 0) const override;
-    bool IsAppearanceEffect() const override { return true; }
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
+    [[nodiscard]] bool IsAppearanceEffect() const noexcept override { return true; }
     void SetTopLevelContent(const std::string& content_name) override {}
-    unsigned int GetCheckSum() const override;
+    [[nodiscard]] uint32_t GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::string m_texture;
@@ -820,24 +839,16 @@ public:
                   std::unique_ptr<Condition::Condition>&& of_objects = nullptr);    // if not specified, acts on target. if specified, acts on all matching objects
 
     void Execute(ScriptingContext& context) const override;
-    std::string Dump(unsigned short ntabs = 0) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
     void SetTopLevelContent(const std::string& content_name) override;
 
-    ValueRef::ValueRef<Visibility>* GetVisibility() const
-    { return m_vis.get(); }
+    [[nodiscard]] ValueRef::ValueRef<Visibility>* GetVisibility() const noexcept { return m_vis.get(); }
+    [[nodiscard]] ValueRef::ValueRef<int>* EmpireID() const noexcept { return m_empire_id.get(); }
+    [[nodiscard]] EmpireAffiliationType Affiliation() const noexcept { return m_affiliation; }
+    [[nodiscard]] Condition::Condition* OfObjectsCondition() const noexcept  { return m_condition.get(); }
+    [[nodiscard]] uint32_t GetCheckSum() const override;
 
-    ValueRef::ValueRef<int>* EmpireID() const
-    { return m_empire_id.get(); }
-
-    EmpireAffiliationType Affiliation() const
-    { return m_affiliation; }
-
-    Condition::Condition* OfObjectsCondition() const
-    { return m_condition.get(); }
-
-    unsigned int GetCheckSum() const override;
-
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<ValueRef::ValueRef<Visibility>> m_vis;
@@ -869,18 +880,18 @@ public:
                  bool include_empire_meter_effects = false,
                  bool only_generate_sitrep_effects = false) const override;
 
-    std::string Dump(unsigned short ntabs = 0) const override;
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override;
 
-    bool IsMeterEffect() const override;
-    bool IsAppearanceEffect() const override;
-    bool IsSitrepEffect() const override;
-    bool IsConditionalEffect() const override { return true; }
+    [[nodiscard]] bool IsMeterEffect() const noexcept override;
+    [[nodiscard]] bool IsAppearanceEffect() const noexcept override;
+    [[nodiscard]] bool IsSitrepEffect() const noexcept override;
+    [[nodiscard]] bool IsConditionalEffect() const noexcept override { return true; }
 
     void SetTopLevelContent(const std::string& content_name) override;
 
-    unsigned int GetCheckSum() const override;
+    [[nodiscard]] uint32_t GetCheckSum() const override;
 
-    std::unique_ptr<Effect> Clone() const override;
+    [[nodiscard]] std::unique_ptr<Effect> Clone() const override;
 
 private:
     std::unique_ptr<Condition::Condition> m_target_condition; // condition to apply to each target object to determine which effects to execute

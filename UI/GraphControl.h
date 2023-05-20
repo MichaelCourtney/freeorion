@@ -6,12 +6,12 @@
 #include <GG/Control.h>
 #include <GG/GLClientAndServerBuffer.h>
 
-class GraphControl : public GG::Control {
+class GraphControl final : public GG::Control {
 public:
     GraphControl();
 
-    void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
-    void RClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
+    void SizeMove(GG::Pt ul, GG::Pt lr) override;
+    void RClick(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) override;
 
     void Render() override;
 

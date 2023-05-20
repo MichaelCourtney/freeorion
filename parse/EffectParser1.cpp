@@ -4,7 +4,7 @@
 #include "../universe/ValueRef.h"
 #include "../universe/Enums.h"
 
-#include <boost/spirit/include/phoenix.hpp>
+#include <boost/phoenix.hpp>
 #include <boost/phoenix/function/adapt_function.hpp>
 
 namespace qi = boost::spirit::qi;
@@ -186,8 +186,8 @@ namespace parse { namespace detail {
                     >   label(tok.condition_)       >   condition_parser
                     [ _val = construct_GenerateSitRepMessage2_(_a, _b, _c, EmpireAffiliationType::AFFIL_CAN_SEE, _1, _e, _f, _pass) ]
                 )
-                |   (   // condition specified, with an affiliation type of CanSee:
-                    // used to specify CanSee affiliation
+                |   (   // condition specified, with an affiliation type of Human:
+                    // used to specify Human affiliation
                     (   label(tok.affiliation_)     >>  tok.Human_)
                     >   label(tok.condition_)       >   condition_parser
                     [ _val = construct_GenerateSitRepMessage2_(_a, _b, _c, EmpireAffiliationType::AFFIL_HUMAN, _1, _e, _f, _pass) ]

@@ -17,12 +17,13 @@ Requirements
 ------------
 
 FreeOrion requires an *OpenGL 2.1* capable graphic card and a display with a
-minimum resolution of at least *800x600*.
+suggested minimum resolution of at least *1280x800*.
 
-FreeOrion requires at least *Windows XP* with *Service Pack 2* or later,
-*Mac OSX 10.9* or later or any reasonably recent Linux distribution on x86
-compatible processors.  Other operating systems and architectures have reported
-to be working by users, but are not actively supported by the FreeOrion project.
+Recent releases of FreeOrion require at least *Windows 8.1* or later,
+*macOS 10.12* or later or any reasonably recent Linux distribution on x86
+compatible processors, such as *Ubuntu 20.04 or 22.10*.  Other operating
+systems and architectures have reported to be working by users, but are not
+actively supported by the FreeOrion project.
 
 
 Download
@@ -44,13 +45,13 @@ from Sourceforge.
 Install
 -------
 
-For Windows execute the native installer binary and follow the on-screen
+For Windows, execute the native installer binary and follow the on-screen
 instructions of the installer to install FreeOrion.
 
 For Mac OSX, open the downloaded DMG file and copy the contained FreeOrion
 application to your system Applications folder by Drag and Drop.
 
-For Linux or other from-source installations in general please refer to the
+For Linux or other from-source installations, refer to the
 [Build Instructions](BUILD.md).
 
 Various Linux distributions provide the stable release of FreeOrion in
@@ -63,7 +64,7 @@ packages via the command line.
   * [Fedora package] stable release: `# dnf install freeorion`
   * [Gentoo package] stable release: `# emerge games-strategy/freeorion`
   * [Void package] stable release: `# xbps-install freeorion`
-  * [ArchLinux package] stable release
+  * [ArchLinux package] stable release: `# pacman -S freeorion`
   * [openSUSE package] stable release: `# zypper in freeorion`
 
 To install FreeOrion from Flathub, follow the instructions to [install Flatpak
@@ -147,6 +148,6 @@ accompanying license file.
 [Gentoo package]: https://packages.gentoo.org/packages/games-strategy/freeorion
 [openSUSE Package]: https://build.opensuse.org/package/show/games/freeorion
 [Void package]: https://github.com/voidlinux/void-packages/tree/master/srcpkgs/freeorion
-[ArchLinux Package]: https://aur.archlinux.org/packages/freeorion/
+[ArchLinux Package]: https://archlinux.org/packages/community/x86_64/freeorion/
 [GPL v2]: https://www.gnu.org/licenses/gpl-2.0.txt
 [CC-BY-SA-3.0]: https://creativecommons.org/licenses/by-sa/3.0/legalcode

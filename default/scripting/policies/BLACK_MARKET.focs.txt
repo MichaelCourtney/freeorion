@@ -4,12 +4,12 @@ Policy
     short_description = "PLC_BLACK_MARKET_SHORT_DESC"
     category = "ECONOMIC_CATEGORY"
     adoptioncost = floor(1.0 * [[POPULATION_OWNED_BY_EMPIRE]]^0.5)
-    exclusions = [ "PLC_MARTIAL_LAW" "PLC_CHECKPOINTS" ]
+    exclusions = [ "PLC_CHECKPOINTS" "PLC_MARTIAL_LAW" ]
     effectsgroups = [
         [[SPECIES_LIKES_OR_DISLIKES_POLICY_STABILITY_EFFECTS]]
     
     ]
-    graphic = "icons/policies/black_market.png"
+    graphic = "icons/policies/economic_black_market.png"
 
 #include "/scripting/common/base_prod.macros"
 #include "/scripting/common/priorities.macros"

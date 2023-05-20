@@ -12,14 +12,14 @@
 
 class MessageWndEdit;
 
-class MessageWnd : public CUIWnd {
+class MessageWnd final : public CUIWnd {
 public:
     MessageWnd(GG::Flags<GG::WndFlag> flags, std::string_view config_name = "");
     void CompleteConstruction() override;
 
     std::string GetText() const;
 
-    void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
+    void SizeMove(GG::Pt ul, GG::Pt lr) override;
 
     void PreRender() override;
 
@@ -44,8 +44,8 @@ public:
 
 private:
     void CloseClicked() override;
-    void LClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
-    void LDrag(const GG::Pt& pt, const GG::Pt& move, GG::Flags<GG::ModKey> mod_keys) override;
+    void LClick(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) override;
+    void LDrag(GG::Pt pt, GG::Pt move, GG::Flags<GG::ModKey> mod_keys) override;
 
     void DoLayout();
     void HandleTextCommand(const std::string& text);
@@ -53,11 +53,12 @@ private:
     void MessageHistoryUpRequested();
     void MessageHistoryDownRequested();
 
-    std::shared_ptr<GG::MultiEdit>  m_display;
-    std::shared_ptr<MessageWndEdit> m_edit;
-    int                             m_display_show_time = 0;
-    std::deque<std::string>         m_history;
-    int                             m_history_position = 0;
+    std::shared_ptr<GG::MultiEdit>     m_display;
+    std::shared_ptr<MessageWndEdit>    m_edit;
+    int                                m_display_show_time = 0;
+    std::deque<std::string>            m_history;
+    int                                m_history_position = 0;
+    boost::signals2::scoped_connection m_diplo_status_connection;
 };
 
 #endif

@@ -38,7 +38,7 @@ def get_current_exploration_info():
     return list(already_covered), available_scouts
 
 
-def assign_scouts_to_explore_systems():
+def assign_scouts_to_explore_systems():  # noqa: max-complexity
     # TODO: use Graph Theory to explore closest systems
     universe = fo.getUniverse()
     capital_sys_id = PlanetUtilsAI.get_capital_sys_id()
@@ -139,7 +139,7 @@ def assign_scouts_to_explore_systems():
     debug("Unassigned exploration targets: %s" % needs_coverage)
 
 
-def follow_vis_system_connections(start_system_id, home_system_id):
+def follow_vis_system_connections(start_system_id, home_system_id):  # noqa: max-complexity
     universe = fo.getUniverse()
     empire_id = fo.empireID()
     exploration_list = [start_system_id]
@@ -161,8 +161,8 @@ def follow_vis_system_connections(start_system_id, home_system_id):
             visibility_turn_list = sorted(
                 universe.getVisibilityTurnsMap(cur_system_id, empire_id).items(), key=lambda x: x[0].numerator
             )
-            visibility_info = ", ".join("%s: %s" % (vis.name, turn) for vis, turn in visibility_turn_list)
-            debug("%s previously %s. Visibility per turn: %s " % (system_header, pre_vis, visibility_info))
+            visibility_info = ", ".join(f"{vis.name}: {turn}" for vis, turn in visibility_turn_list)
+            debug(f"{system_header} previously {pre_vis}. Visibility per turn: {visibility_info} ")
             status_info = []
         else:
             status_info = [system_header]
@@ -251,7 +251,7 @@ def system_could_have_unknown_stationary_guard(system_id: SystemId) -> bool:
         return False
 
     # Universe setup settings may forbid guards
-    if fo.getGalaxySetupData().monsterFrequency == fo.galaxySetupOption.none:
+    if fo.getGalaxySetupData().monsterFrequency == fo.galaxySetupOptionMonsterFreq.none:
         return False
 
     # Stationary guards require some distance to the home system to be spawned

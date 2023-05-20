@@ -41,12 +41,12 @@ private:
 };
 
 /** Lets the player design ships */
-class DesignWnd : public GG::Wnd {
+class DesignWnd final : public GG::Wnd {
 public:
     DesignWnd(GG::X w, GG::Y h);
     void CompleteConstruction() override;
 
-    void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
+    void SizeMove(GG::Pt ul, GG::Pt lr) override;
     void Render() override;
     void Reset();
     void Sanitize();

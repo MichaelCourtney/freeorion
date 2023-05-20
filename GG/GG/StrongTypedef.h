@@ -48,38 +48,38 @@ inline constexpr std::size_t Value(std::size_t s)
 #define GG_MEMBER_NEG_INCR_DECR(this_type)       \
     inline constexpr this_type operator-() const \
     { return this_type(-m_value); }              \
-    inline this_type& operator++()               \
+    inline constexpr this_type& operator++()     \
     {                                            \
         ++m_value;                               \
         return *this;                            \
     }                                            \
-    inline this_type& operator--()               \
+    inline constexpr this_type& operator--()     \
     {                                            \
         --m_value;                               \
         return *this;                            \
     }                                            \
-    inline this_type operator++(int)             \
+    inline constexpr this_type operator++(int)   \
     {                                            \
         this_type retval(m_value);               \
         ++m_value;                               \
         return retval;                           \
     }                                            \
-    inline this_type operator--(int)             \
+    inline constexpr this_type operator--(int)   \
     {                                            \
         this_type retval(m_value);               \
         --m_value;                               \
         return retval;                           \
     }
 
-#define GG_MEMBER_ASSIGN_OP_SELF_TYPE(op, rhs_type)     \
-    inline rhs_type& operator op (rhs_type rhs)         \
-    {                                                   \
-        m_value op rhs.m_value;                         \
-        return *this;                                   \
+#define GG_MEMBER_ASSIGN_OP_SELF_TYPE(op, rhs_type)         \
+    inline constexpr rhs_type& operator op (rhs_type rhs)   \
+    {                                                       \
+        m_value op rhs.m_value;                             \
+        return *this;                                       \
     }
 
 #define GG_MEMBER_ASSIGN_OP_OTHER_TYPE_DECL(op, self_type, rhs_type) \
-    inline self_type& operator op ## = (rhs_type rhs)
+    inline constexpr self_type& operator op ## = (rhs_type rhs)
 
 #define GG_MEMBER_ASSIGN_OP_OTHER_TYPE(op, self_type, rhs_type)  \
     GG_MEMBER_ASSIGN_OP_OTHER_TYPE_DECL(op, self_type, rhs_type) \
@@ -91,18 +91,18 @@ inline constexpr std::size_t Value(std::size_t s)
     }
 
 #define GG_MEMBER_OP_OTHER_TYPE_DECL(op, self_type, rhs_type) \
-    inline self_type& operator op (rhs_type rhs) const
+    inline constexpr self_type& operator op (rhs_type rhs) const
 
 #define GG_MEMBER_OP_OTHER_TYPE(op, self_type, rhs_type)  \
     GG_MEMBER_OP_OTHER_TYPE_DECL(op, self_type, rhs_type) \
     { return self_type(m_value op Value(rhs)); }
 
-#define GG_NONMEMBER_OP_SELF_TYPE(op, self_type)                \
-    inline self_type operator op (self_type lhs, self_type rhs) \
+#define GG_NONMEMBER_OP_SELF_TYPE(op, self_type)                            \
+    inline constexpr self_type operator op (self_type lhs, self_type rhs)   \
     { return lhs op ## = rhs; }
 
-#define GG_NONMEMBER_OP_OTHER_TYPE(op, self_type, rhs_type)     \
-    inline self_type operator op (self_type lhs, rhs_type rhs)  \
+#define GG_NONMEMBER_OP_OTHER_TYPE(op, self_type, rhs_type)               \
+    inline constexpr self_type operator op (self_type lhs, rhs_type rhs)  \
     { return lhs op ## = Value(rhs); }
 
 #define GG_MEMBER_SELF_COMPARATORS(self_type)    \
@@ -145,34 +145,34 @@ inline constexpr std::size_t Value(std::size_t s)
     GG_NONMEMBER_OP_OTHER_TYPE(*, self_type, rhs_type);        \
     GG_NONMEMBER_OP_OTHER_TYPE(/, self_type, rhs_type);
 
-#define GG_NONMEMBER_REVERSED_BOOL_OP_SET(lhs_type, self_type)  \
-    inline bool operator==(lhs_type x, self_type y)             \
-    { return y == x; }                                          \
-    inline bool operator!=(lhs_type x, self_type y)             \
-    { return y != x; }                                          \
-    inline bool operator<(lhs_type x, self_type y)              \
-    { return !(y < x || y == x); }                              \
-    inline bool operator>(lhs_type x, self_type y)              \
-    { return !(y > x || y == x); }                              \
-    inline bool operator<=(lhs_type x, self_type y)             \
-    { return !(y < x); }                                        \
-    inline bool operator>=(lhs_type x, self_type y)             \
+#define GG_NONMEMBER_REVERSED_BOOL_OP_SET(lhs_type, self_type) \
+    inline constexpr bool operator==(lhs_type x, self_type y)  \
+    { return y == x; }                                         \
+    inline constexpr bool operator!=(lhs_type x, self_type y)  \
+    { return y != x; }                                         \
+    inline constexpr bool operator<(lhs_type x, self_type y)   \
+    { return !(y < x || y == x); }                             \
+    inline constexpr bool operator>(lhs_type x, self_type y)   \
+    { return !(y > x || y == x); }                             \
+    inline constexpr bool operator<=(lhs_type x, self_type y)  \
+    { return !(y < x); }                                       \
+    inline constexpr bool operator>=(lhs_type x, self_type y)  \
     { return !(y > x); }
 
-#define GG_NONMEMBER_REVERSED_ARITH_OP_SET(lhs_type, self_type) \
-    inline self_type operator+(lhs_type x, self_type y)         \
-    { return y += x; }                                          \
-    inline self_type operator-(lhs_type x, self_type y)         \
-    { return -(y -= x); }                                       \
-    inline self_type operator*(lhs_type x, self_type y)         \
+#define GG_NONMEMBER_REVERSED_ARITH_OP_SET(lhs_type, self_type)   \
+    inline constexpr self_type operator+(lhs_type x, self_type y) \
+    { return y += x; }                                            \
+    inline constexpr self_type operator-(lhs_type x, self_type y) \
+    { return -(y -= x); }                                         \
+    inline constexpr self_type operator*(lhs_type x, self_type y) \
     { return y *= x; }
 
 
 #define GG_STRONG_DOUBLE_TYPEDEF(name, type)                            \
     class name;                                                         \
     class name ## _d;                                                   \
-    constexpr type Value(name x);                                       \
-    constexpr double Value(name ## _d x);                               \
+    constexpr type Value(name x) noexcept;                              \
+    constexpr double Value(name ## _d x) noexcept;                      \
                                                                         \
     class name ## _d                                                    \
     {                                                                   \
@@ -206,7 +206,7 @@ inline constexpr std::size_t Value(std::size_t s)
     private:                                                            \
         double m_value = 0.0;                                           \
                                                                         \
-        friend constexpr double Value(name ## _d x);                    \
+        friend constexpr double Value(name ## _d x) noexcept;           \
     };                                                                  \
                                                                         \
     GG_NONMEMBER_ARITH_OPS_SELF_TYPE(name ## _d);                       \
@@ -217,7 +217,7 @@ inline constexpr std::size_t Value(std::size_t s)
                                                                         \
     GG_NONMEMBER_REVERSED_ARITH_OP_SET(double, name ## _d);             \
                                                                         \
-    inline constexpr double Value(name ## _d x)                         \
+    inline constexpr double Value(name ## _d x) noexcept                \
     { return x.m_value; }                                               \
                                                                         \
     inline std::ostream& operator<<(std::ostream& os, name ## _d x)     \
@@ -244,7 +244,7 @@ inline constexpr std::size_t Value(std::size_t s)
 #define GG_STRONG_INTEGRAL_TYPEDEF(name, type)                          \
     GG_STRONG_DOUBLE_TYPEDEF(name, type);                               \
                                                                         \
-    constexpr type Value(name x);                                       \
+    constexpr type Value(name x) noexcept;                              \
                                                                         \
     class name                                                          \
     {                                                                   \
@@ -290,7 +290,7 @@ inline constexpr std::size_t Value(std::size_t s)
         type m_value = 0;                                               \
                                                                         \
         friend class name ## _d;                                        \
-        friend constexpr type Value(name x);                            \
+        friend constexpr type Value(name x) noexcept;                   \
     };                                                                  \
                                                                         \
     GG_NONMEMBER_ARITH_OPS_SELF_TYPE(name);                             \
@@ -305,23 +305,23 @@ inline constexpr std::size_t Value(std::size_t s)
                                                                         \
     GG_NONMEMBER_REVERSED_ARITH_OP_SET(type, name);                     \
                                                                         \
-    inline name ## _d operator+(name x, double y)                       \
+    inline constexpr name ## _d operator+(name x, double y)             \
     { return name ## _d(Value(x)) + y; }                                \
-    inline name ## _d operator-(name x, double y)                       \
+    inline constexpr name ## _d operator-(name x, double y)             \
     { return name ## _d(Value(x)) - y; }                                \
-    inline name ## _d operator*(name x, double y)                       \
+    inline constexpr name ## _d operator*(name x, double y)             \
     { return name ## _d(Value(x)) * y; }                                \
-    inline name ## _d operator/(name x, double y)                       \
+    inline constexpr name ## _d operator/(name x, double y)             \
     { return name ## _d(Value(x)) / y; }                                \
                                                                         \
-    inline name ## _d operator+(double x, name y)                       \
+    inline constexpr name ## _d operator+(double x, name y)             \
     { return x + name ## _d(Value(y)); }                                \
-    inline name ## _d operator-(double x, name y)                       \
+    inline constexpr name ## _d operator-(double x, name y)             \
     { return x - name ## _d(Value(y)); }                                \
-    inline name ## _d operator*(double x, name y)                       \
+    inline constexpr name ## _d operator*(double x, name y)             \
     { return x * name ## _d(Value(y)); }                                \
                                                                         \
-    inline constexpr type Value(name x)                                 \
+    inline constexpr type Value(name x) noexcept                        \
     { return x.m_value; }                                               \
                                                                         \
     inline std::ostream& operator<<(std::ostream& os, name x)           \
@@ -335,19 +335,19 @@ inline constexpr std::size_t Value(std::size_t s)
         return os;                                                      \
     }                                                                   \
                                                                         \
-    inline name ## _d& name ## _d::operator+=(name rhs)                 \
+    inline constexpr name ## _d& name ## _d::operator+=(name rhs)       \
     { m_value += Value(rhs); return *this; }                            \
-    inline name ## _d& name ## _d::operator-=(name rhs)                 \
+    inline constexpr name ## _d& name ## _d::operator-=(name rhs)       \
     { m_value -= Value(rhs); return *this; }                            \
-    inline name ## _d& name ## _d::operator*=(name rhs)                 \
+    inline constexpr name ## _d& name ## _d::operator*=(name rhs)       \
     { m_value *= Value(rhs); return *this; }                            \
-    inline name ## _d& name ## _d::operator/=(name rhs)                 \
+    inline constexpr name ## _d& name ## _d::operator/=(name rhs)       \
     { m_value /= Value(rhs); return *this; }                            \
                                                                         \
     GG_NONMEMBER_ARITH_OPS_OTHER_TYPE(name ## _d, name);                \
                                                                         \
     GG_NONMEMBER_REVERSED_ARITH_OP_SET(name, name ## _d);               \
-    inline name ## _d operator/(name x, name ## _d y)                   \
+    inline constexpr name ## _d operator/(name x, name ## _d y)         \
     { return name ## _d(Value(x) / Value(y)); }                         \
                                                                         \
     void dummy_function_to_force_semicolon()
@@ -359,7 +359,7 @@ inline constexpr std::size_t Value(std::size_t s)
     interarithemtic with and comparable to objects of type std::size_t. */
 #define GG_STRONG_SIZE_TYPEDEF(name)                                    \
     class name;                                                         \
-    constexpr std::size_t Value(name x);                                \
+    constexpr std::size_t Value(name x) noexcept;                       \
                                                                         \
     class name                                                          \
     {                                                                   \
@@ -391,7 +391,7 @@ inline constexpr std::size_t Value(std::size_t s)
         std::size_t m_value = 0;                                        \
                                                                         \
         friend class name ## _d;                                        \
-        friend constexpr std::size_t Value(name x);                     \
+        friend constexpr std::size_t Value(name x) noexcept;            \
     };                                                                  \
                                                                         \
     GG_NONMEMBER_ARITH_OPS_SELF_TYPE(name);                             \
@@ -404,7 +404,7 @@ inline constexpr std::size_t Value(std::size_t s)
                                                                         \
     GG_NONMEMBER_REVERSED_ARITH_OP_SET(std::size_t, name);              \
                                                                         \
-    inline constexpr std::size_t Value(name x)                          \
+    inline constexpr std::size_t Value(name x) noexcept                 \
     { return x.m_value; }                                               \
                                                                         \
     inline std::ostream& operator<<(std::ostream& os, name x)           \

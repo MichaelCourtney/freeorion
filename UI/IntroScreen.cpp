@@ -51,9 +51,9 @@ public:
 
     void Render() override;
 
-    void LClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override
+    void LClick(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) override
     { OnExit(); }
-    void MouseWheel(const GG::Pt& pt, int move, GG::Flags<GG::ModKey> mod_keys) override
+    void MouseWheel(GG::Pt pt, int move, GG::Flags<GG::ModKey> mod_keys) override
     { m_scroll_offset -= move * 2000; }
 
     void KeyPress(GG::Key key, std::uint32_t key_code_point, GG::Flags<GG::ModKey> mod_keys) override {
@@ -114,11 +114,11 @@ CreditsWnd::CreditsWnd(GG::X x, GG::Y y, GG::X w, GG::Y h, int cx, int cy, int c
             credits << group_format % group.attributes.at("name");
             for (const XMLElement& item : group.children) {
                 if (0 == item.Tag().compare("PERSON")) {
-                    if (item.attributes.count("name"))
+                    if (item.attributes.contains("name"))
                         credits << item.attributes.at("name");
-                    if (item.attributes.count("nick") && item.attributes.at("nick").length() > 0)
+                    if (item.attributes.contains("nick") && item.attributes.at("nick").length() > 0)
                         credits << nick_format % item.attributes.at("nick");
-                    if (item.attributes.count("task"))
+                    if (item.attributes.contains("task"))
                         credits << task_format % item.attributes.at("task");
                 }
 
@@ -128,10 +128,10 @@ CreditsWnd::CreditsWnd(GG::X x, GG::Y y, GG::X w, GG::Y h, int cx, int cy, int c
                         % item.attributes.at("title")
                         % UserString("INTRO_CREDITS_LICENSE")
                         % item.attributes.at("license")
-                        % ((item.attributes.count("source"))
+                        % ((item.attributes.contains("source"))
                             ? boost::str(source_format % item.attributes.at("source"))
                             : std::string{});
-                    if (item.attributes.count("notes"))
+                    if (item.attributes.contains("notes"))
                         credits << note_format % item.attributes.at("notes");
                 }
 
@@ -156,7 +156,7 @@ void CreditsWnd::OnExit() {
         glDeleteLists(m_display_list_id, 1);
         m_display_list_id = 0;
     }
-    m_done = true;
+    m_modal_done.store(true);
 }
 
 void CreditsWnd::DrawCredits(GG::X x1, GG::Y y1, GG::X x2, GG::Y y2) {
@@ -356,7 +356,7 @@ void IntroScreen::OnOptions() {
 }
 
 void IntroScreen::OnPedia() {
-    static const std::string INTRO_PEDIA_WND_NAME = "intro.pedia";
+    static constexpr std::string_view INTRO_PEDIA_WND_NAME = "intro.pedia";
     auto enc_panel = GG::Wnd::Create<EncyclopediaDetailPanel>(
         GG::MODAL | GG::INTERACTIVE | GG::DRAGABLE |
         GG::RESIZABLE | CLOSABLE | PINABLE, INTRO_PEDIA_WND_NAME);
@@ -376,7 +376,7 @@ void IntroScreen::OnAbout() {
 }
 
 void IntroScreen::OnWebsite()
-{ GGHumanClientApp::GetApp()->OpenURL("http://freeorion.org"); }
+{ GGHumanClientApp::GetApp()->OpenURL("https://freeorion.org"); }
 
 void IntroScreen::OnCredits() {
     // only the area between the upper and lower line of the splash screen should be darkend
@@ -384,7 +384,7 @@ void IntroScreen::OnCredits() {
     GG::Y nUpperLine = ( 79 * GG::GUI::GetGUI()->AppHeight()) / 768;
     GG::Y nLowerLine = (692 * GG::GUI::GetGUI()->AppHeight()) / 768;
 
-    int credit_side_pad(30);
+    static constexpr int credit_side_pad(30);
 
     auto credits_wnd = GG::Wnd::Create<CreditsWnd>(
         GG::X0, nUpperLine, GG::GUI::GetGUI()->AppWidth(), nLowerLine-nUpperLine,
@@ -395,6 +395,7 @@ void IntroScreen::OnCredits() {
 }
 
 void IntroScreen::OnExitGame() {
+    DebugLogger() << "IntroScreen::OnExitGame";
     GG::GUI::GetGUI()->ExitApp(0);
 }
 
@@ -406,7 +407,7 @@ void IntroScreen::KeyPress(GG::Key key, std::uint32_t key_code_point, GG::Flags<
 void IntroScreen::Close()
 { OnExitGame(); }
 
-void IntroScreen::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
+void IntroScreen::SizeMove(GG::Pt ul, GG::Pt lr) {
     GG::Pt old_size = GG::Wnd::Size();
 
     GG::Wnd::SizeMove(ul, lr);

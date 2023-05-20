@@ -19,142 +19,23 @@
 
 using namespace GG;
 
-namespace {
-
-constexpr double EPSILON = 0.0001;
-
-HSVClr Convert(const Clr& color)
-{
-    HSVClr retval;
-    retval.a = color.a;
-    double r = (color.r / 255.0), g = (color.g / 255.0), b = (color.b / 255.0);
-
-    double min_channel = std::min(r, std::min(g, b));
-    double max_channel = std::max(r, std::max(g, b));
-    double channel_range = max_channel - min_channel;
-
-    retval.v = max_channel;
-
-    if (max_channel < EPSILON) {
-        retval.h = 0.0;
-        retval.s = 0.0;
-    } else {
-        retval.s = channel_range / max_channel;
-
-        if (channel_range) {
-            double delta_r = (((max_channel - r) / 6.0) + (channel_range / 2.0)) / channel_range;
-            double delta_g = (((max_channel - g) / 6.0) + (channel_range / 2.0)) / channel_range;
-            double delta_b = (((max_channel - b) / 6.0) + (channel_range / 2.0)) / channel_range;
-
-            if (r == max_channel)
-                retval.h = delta_b - delta_g;
-            else if (g == max_channel)
-                retval.h = (1.0 / 3.0) + delta_r - delta_b;
-            else if (b == max_channel)
-                retval.h = (2.0 / 3.0) + delta_g - delta_r;
-
-            if (retval.h < 0.0)
-                retval.h += 1.0;
-            if (1.0 < retval.h)
-                retval.h -= 1.0;
-        } else {
-            retval.h = 0.0;
-        }
-    }
-    return retval;
-}
-
-Clr Convert(const HSVClr& hsv_color)
-{
-    Clr retval;
-    retval.a = hsv_color.a;
-
-    if (hsv_color.s < EPSILON) {
-        retval.r = static_cast<GLubyte>(hsv_color.v * 255);
-        retval.g = static_cast<GLubyte>(hsv_color.v * 255);
-        retval.b = static_cast<GLubyte>(hsv_color.v * 255);
-    } else {
-        double tmph = hsv_color.h * 6.0;
-        int tmpi = static_cast<int>(tmph);
-        double tmp1 = hsv_color.v * (1 - hsv_color.s);
-        double tmp2 = hsv_color.v * (1 - hsv_color.s * (tmph - tmpi));
-        double tmp3 = hsv_color.v * (1 - hsv_color.s * (1 - (tmph - tmpi)));
-        switch (tmpi) {
-        case 0:
-            retval.r = static_cast<GLubyte>(hsv_color.v * 255);
-            retval.g = static_cast<GLubyte>(tmp3 * 255);
-            retval.b = static_cast<GLubyte>(tmp1 * 255);
-            break;
-        case 1:
-            retval.r = static_cast<GLubyte>(tmp2 * 255);
-            retval.g = static_cast<GLubyte>(hsv_color.v * 255);
-            retval.b = static_cast<GLubyte>(tmp1 * 255);
-            break;
-        case 2:
-            retval.r = static_cast<GLubyte>(tmp1 * 255);
-            retval.g = static_cast<GLubyte>(hsv_color.v * 255);
-            retval.b = static_cast<GLubyte>(tmp3 * 255);
-            break;
-        case 3:
-            retval.r = static_cast<GLubyte>(tmp1 * 255);
-            retval.g = static_cast<GLubyte>(tmp2 * 255);
-            retval.b = static_cast<GLubyte>(hsv_color.v * 255);
-            break;
-        case 4:
-            retval.r = static_cast<GLubyte>(tmp3 * 255);
-            retval.g = static_cast<GLubyte>(tmp1 * 255);
-            retval.b = static_cast<GLubyte>(hsv_color.v * 255);
-            break;
-        default:
-            retval.r = static_cast<GLubyte>(hsv_color.v * 255);
-            retval.g = static_cast<GLubyte>(tmp1 * 255);
-            retval.b = static_cast<GLubyte>(tmp2 * 255);
-            break;
-        }
-    }
-
-    return retval;
-}
-
-}
-
-
-////////////////////////////////////////////////
-// HSVClr
-////////////////////////////////////////////////
-HSVClr::HSVClr() :
-    h(0.0),
-    s(0.0),
-    v(0.0),
-    a(0)
-{}
-
-HSVClr::HSVClr(double h_, double s_, double v_, GLubyte a_/* = 255*/) :
-    h(h_),
-    s(s_),
-    v(v_),
-    a(a_)
-{}
-
 ////////////////////////////////////////////////
 // HueSaturationPicker
 ////////////////////////////////////////////////
 HueSaturationPicker::HueSaturationPicker(X x, Y y, X w, Y h) :
-    Control(x, y, w, h, INTERACTIVE),
-    m_hue(0.0),
-    m_saturation(0.0)
+    Control(x, y, w, h, INTERACTIVE)
 {
-    constexpr int SAMPLES = 100;
-    constexpr double INCREMENT = 1.0 / (SAMPLES + 1);
-    constexpr double VALUE = 1.0;
+    static constexpr int SAMPLES = 100;
+    static constexpr double INCREMENT = 1.0 / (SAMPLES + 1);
+    static constexpr double VALUE = 1.0;
     m_vertices.resize(SAMPLES, std::vector<std::pair<double, double>>(2 * (SAMPLES + 1)));
     m_colors.resize(SAMPLES, std::vector<Clr>(2 * (SAMPLES + 1)));
     for (int col = 0; col < SAMPLES; ++col) {
         for (int row = 0; row < SAMPLES + 1; ++row) {
             m_vertices[col][2 * row] =      {col * INCREMENT, row * INCREMENT};
             m_vertices[col][2 * row + 1] =  {(col + 1) * INCREMENT, row * INCREMENT};
-            m_colors[col][2 * row] =        Convert(HSVClr(col * INCREMENT, 1.0 - row * INCREMENT, VALUE));
-            m_colors[col][2 * row + 1] =    Convert(HSVClr((col + 1) * INCREMENT, 1.0 - row * INCREMENT, VALUE));
+            m_colors[col][2 * row] =        HSVClr(col * INCREMENT, 1.0 - row * INCREMENT, VALUE);
+            m_colors[col][2 * row + 1] =    HSVClr((col + 1) * INCREMENT, 1.0 - row * INCREMENT, VALUE);
         }
     }
 }
@@ -189,7 +70,7 @@ void HueSaturationPicker::Render()
                       static_cast<Y>(ul.y + size.y * (1.0 - m_saturation)));
     glColor(CLR_SHADOW);
 
-    constexpr float GAP(3.0f);
+    static constexpr float GAP(3.0f);
 
     GL2DVertexBuffer lines_verts;
     lines_verts.reserve(16);
@@ -227,10 +108,10 @@ void HueSaturationPicker::Render()
     glEnable(GL_TEXTURE_2D);
 }
 
-void HueSaturationPicker::LButtonDown(const Pt& pt, Flags<ModKey> mod_keys)
+void HueSaturationPicker::LButtonDown(Pt pt, Flags<ModKey> mod_keys)
 { SetHueSaturationFromPt(pt); }
 
-void HueSaturationPicker::LDrag(const Pt& pt, const Pt& move, Flags<ModKey> mod_keys)
+void HueSaturationPicker::LDrag(Pt pt, Pt move, Flags<ModKey> mod_keys)
 { SetHueSaturationFromPt(pt); }
 
 void HueSaturationPicker::SetHueSaturation(double hue, double saturation)
@@ -281,14 +162,14 @@ void ValuePicker::Render()
 
     // bar for picking lightness
     vert_buf.store(Value(eff_lr.x),    Value(eff_ul.y));
-    colour_buf.store(Convert(HSVClr(m_hue, m_saturation, 1.0)));
+    colour_buf.store(HSVClr(m_hue, m_saturation, 1.0));
     vert_buf.store(Value(eff_ul.x),    Value(eff_ul.y));
-    colour_buf.store(Convert(HSVClr(m_hue, m_saturation, 1.0)));
+    colour_buf.store(HSVClr(m_hue, m_saturation, 1.0));
 
     vert_buf.store(Value(eff_ul.x),    Value(eff_lr.y));
-    colour_buf.store(Convert(HSVClr(m_hue, m_saturation, 0.0)));
+    colour_buf.store(HSVClr(m_hue, m_saturation, 0.0));
     vert_buf.store(Value(eff_lr.x),    Value(eff_lr.y));
-    colour_buf.store(Convert(HSVClr(m_hue, m_saturation, 0.0)));
+    colour_buf.store(HSVClr(m_hue, m_saturation, 0.0));
 
     // line indicating currently-selected lightness
     Y color_position(eff_ul.y + h * (1.0 - m_value));
@@ -330,10 +211,10 @@ void ValuePicker::Render()
     glEnable(GL_TEXTURE_2D);
 }
 
-void ValuePicker::LButtonDown(const Pt& pt, Flags<ModKey> mod_keys)
+void ValuePicker::LButtonDown(Pt pt, Flags<ModKey> mod_keys)
 { SetValueFromPt(pt); }
 
-void ValuePicker::LDrag(const Pt& pt, const Pt& move, Flags<ModKey> mod_keys)
+void ValuePicker::LDrag(Pt pt, Pt move, Flags<ModKey> mod_keys)
 { SetValueFromPt(pt); }
 
 void ValuePicker::SetHueSaturation(double hue, double saturation)
@@ -366,16 +247,10 @@ void ValuePicker::SetValueFromPt(Pt pt)
 // ColorDlg
 ////////////////////////////////////////////////
 
-ColorDlg::ColorButton::ColorButton(const Clr& color) :
+ColorDlg::ColorButton::ColorButton(Clr color) :
     Button("", nullptr, color),
     m_represented_color(CLR_BLACK)
 {}
-
-Clr ColorDlg::ColorButton::RepresentedColor() const
-{ return m_represented_color; }
-
-void ColorDlg::ColorButton::SetRepresentedColor(const Clr& color)
-{ m_represented_color = color; }
 
 void ColorDlg::ColorButton::RenderUnpressed()
 {
@@ -403,7 +278,7 @@ ColorDlg::ColorDisplay::ColorDisplay(Clr color) :
 void ColorDlg::ColorDisplay::Render()
 {
     Pt ul = UpperLeft(), lr = LowerRight();
-    constexpr int SQUARE_SIZE = 7;
+    static constexpr int SQUARE_SIZE = 7;
 
     GL2DVertexBuffer    vert_buf;
     GLRGBAColorBuffer   colour_buf;
@@ -471,13 +346,20 @@ void ColorDlg::ColorDisplay::Render()
 
 
 namespace {
-    enum : size_t {R, G, B, A, H, S, V};
+    enum : uint8_t {R, G, B, A, H, S, V};
+
+    constexpr std::size_t COLOR_BUTTON_ROWS = 4;
+    constexpr std::size_t COLOR_BUTTON_COLS = 5;
+
+    std::vector<Clr> custom_colors = {
+        GG::CLR_WHITE,      GG::CLR_LIGHT_GRAY, GG::CLR_GRAY,       GG::CLR_DARK_GRAY,  GG::CLR_BLACK,
+        GG::CLR_PINK,       GG::CLR_RED,        GG::CLR_DARK_RED,   GG::CLR_MAGENTA,    GG::CLR_PURPLE,
+        GG::CLR_BLUE,       GG::CLR_DARK_BLUE,  GG::CLR_TEAL,       GG::CLR_CYAN,       GG::CLR_GREEN,
+        GG::CLR_DARK_GREEN, GG::CLR_OLIVE,      GG::CLR_YELLOW,     GG::CLR_ORANGE,     GG::CLR_GRAY};
 }
 
-std::vector<Clr> ColorDlg::s_custom_colors;
-
 ColorDlg::ColorDlg(X x, Y y, Clr original_color, const std::shared_ptr<Font>& font,
-                   Clr dialog_color, Clr border_color, Clr text_color/* = CLR_BLACK*/) :
+                   Clr dialog_color, Clr border_color, Clr text_color) :
     Wnd(x, y, X(315), Y(300), INTERACTIVE | DRAGABLE | MODAL),
     m_original_color(original_color),
     m_current_color_button(INVALID_COLOR_BUTTON),
@@ -485,29 +367,17 @@ ColorDlg::ColorDlg(X x, Y y, Clr original_color, const std::shared_ptr<Font>& fo
     m_border_color(border_color),
     m_text_color(text_color)
 {
-    m_current_color = m_original_color_specified ? Convert(m_original_color) : Convert(CLR_BLACK);
-    Clr color = Convert(m_current_color);
+    m_current_color = m_original_color_specified ? m_original_color : CLR_BLACK;
+    Clr color = m_current_color;
 
     const auto& style = GetStyleFactory();
-
-    constexpr int COLOR_BUTTON_ROWS = 4;
-    constexpr int COLOR_BUTTON_COLS = 5;
-    if (s_custom_colors.empty()) {
-        s_custom_colors = { GG::CLR_WHITE,      GG::CLR_LIGHT_GRAY, GG::CLR_GRAY,       GG::CLR_DARK_GRAY,  GG::CLR_BLACK,
-                            GG::CLR_PINK,       GG::CLR_RED,        GG::CLR_DARK_RED,   GG::CLR_MAGENTA,    GG::CLR_PURPLE,
-                            GG::CLR_BLUE,       GG::CLR_DARK_BLUE,  GG::CLR_TEAL,       GG::CLR_CYAN,       GG::CLR_GREEN,
-                            GG::CLR_DARK_GREEN, GG::CLR_OLIVE,      GG::CLR_YELLOW,     GG::CLR_ORANGE};
-
-        for (unsigned int i = s_custom_colors.size(); i < COLOR_BUTTON_ROWS * COLOR_BUTTON_COLS; ++i)
-            s_custom_colors.push_back(CLR_GRAY);
-    }
 
     m_hue_saturation_picker = Wnd::Create<HueSaturationPicker>(X(10), Y(10), X(300), Y(300));
     m_hue_saturation_picker->SetHueSaturation(m_current_color.h, m_current_color.s);
     m_value_picker = Wnd::Create<ValuePicker>(X(320), Y(10), X(25), Y(300), m_text_color);
     m_value_picker->SetHueSaturation(m_current_color.h, m_current_color.s);
     m_value_picker->SetValue(m_current_color.v);
-    constexpr int HUE_SATURATION_PICKER_SIZE = 200;
+    static constexpr int HUE_SATURATION_PICKER_SIZE = 200;
     m_pickers_layout = Wnd::Create<Layout>(X0, Y0, X(HUE_SATURATION_PICKER_SIZE + 30),
                                            Y(HUE_SATURATION_PICKER_SIZE),
                                            1, 2, 0, 5);
@@ -539,10 +409,10 @@ ColorDlg::ColorDlg(X x, Y y, Clr original_color, const std::shared_ptr<Font>& fo
     m_color_buttons_layout = Wnd::Create<Layout>(X0, m_color_squares_layout->Bottom() + 5,
                                                  m_pickers_layout->Width(), Y(80),
                                                  COLOR_BUTTON_ROWS, COLOR_BUTTON_COLS, 0, 4);
-    for (int i = 0; i < COLOR_BUTTON_ROWS; ++i) {
-        for (int j = 0; j < COLOR_BUTTON_COLS; ++j) {
+    for (std::size_t i = 0u; i < COLOR_BUTTON_ROWS; ++i) {
+        for (std::size_t j = 0u; j < COLOR_BUTTON_COLS; ++j) {
             m_color_buttons.push_back(Wnd::Create<ColorButton>(m_color));
-            m_color_buttons.back()->SetRepresentedColor(s_custom_colors[i * COLOR_BUTTON_COLS + j]);
+            m_color_buttons.back()->SetRepresentedColor(custom_colors[i * COLOR_BUTTON_COLS + j]);
             m_color_buttons_layout->Add(m_color_buttons.back(), i, j);
         }
     }
@@ -601,33 +471,32 @@ void ColorDlg::CompleteConstruction()
     master_layout->Add(m_sliders_ok_cancel_layout, 0, 1, 3, 1);
     SetLayout(master_layout);
 
-    using boost::placeholders::_1;
-    using boost::placeholders::_2;
-    using boost::placeholders::_3;
-
     for (std::size_t i = 0; i < m_color_buttons.size(); ++i) {
         m_color_buttons[i]->LeftClickedSignal.connect(
             [this, i](){ this->ColorButtonClicked(i); });
     }
-    m_sliders[R]->SlidSignal.connect(boost::bind(&ColorDlg::RedSliderChanged, this, _1, _2, _3));
-    m_sliders[G]->SlidSignal.connect(boost::bind(&ColorDlg::GreenSliderChanged, this, _1, _2, _3));
-    m_sliders[B]->SlidSignal.connect(boost::bind(&ColorDlg::BlueSliderChanged, this, _1, _2, _3));
-    m_sliders[A]->SlidSignal.connect(boost::bind(&ColorDlg::AlphaSliderChanged, this, _1, _2, _3));
-    m_sliders[H]->SlidSignal.connect(boost::bind(&ColorDlg::HueSliderChanged, this, _1, _2, _3));
-    m_sliders[S]->SlidSignal.connect(boost::bind(&ColorDlg::SaturationSliderChanged, this, _1, _2, _3));
-    m_sliders[V]->SlidSignal.connect(boost::bind(&ColorDlg::ValueSliderChanged, this, _1, _2, _3));
-    m_ok->LeftClickedSignal.connect(boost::bind(&ColorDlg::OkClicked, this));
-    m_cancel->LeftClickedSignal.connect(boost::bind(&ColorDlg::CancelClicked, this));
-    m_hue_saturation_picker->ChangedSignal.connect(boost::bind(&ValuePicker::SetHueSaturation, m_value_picker, _1, _2));
-    m_hue_saturation_picker->ChangedSignal.connect(boost::bind(&ColorDlg::HueSaturationPickerChanged, this, _1, _2));
-    m_value_picker->ChangedSignal.connect(boost::bind(&ColorDlg::ValuePickerChanged, this, _1));
+
+    m_sliders[R]->SlidSignal.connect([this](auto pos, auto ub, auto lb) { RedSliderChanged(pos, ub, lb); });
+    m_sliders[G]->SlidSignal.connect([this](auto pos, auto ub, auto lb) { GreenSliderChanged(pos, ub, lb); });
+    m_sliders[B]->SlidSignal.connect([this](auto pos, auto ub, auto lb) { BlueSliderChanged(pos, ub, lb); });
+    m_sliders[A]->SlidSignal.connect([this](auto pos, auto ub, auto lb) { AlphaSliderChanged(pos, ub, lb); });
+    m_sliders[H]->SlidSignal.connect([this](auto pos, auto ub, auto lb) { HueSliderChanged(pos, ub, lb); });
+    m_sliders[S]->SlidSignal.connect([this](auto pos, auto ub, auto lb) { SaturationSliderChanged(pos, ub, lb); });
+    m_sliders[V]->SlidSignal.connect([this](auto pos, auto ub, auto lb) { ValueSliderChanged(pos, ub, lb); });
+    m_ok->LeftClickedSignal.connect([this]() { OkClicked(); });
+    m_cancel->LeftClickedSignal.connect([this]() { CancelClicked(); });
+    m_hue_saturation_picker->ChangedSignal.connect([this](auto hue, auto sat) {
+        m_value_picker->SetHueSaturation(hue, sat);
+        HueSaturationPickerChanged(hue, sat);
+    });
+    m_value_picker->ChangedSignal.connect([this](auto value) { ValuePickerChanged(value); });
 }
 
 bool ColorDlg::ColorWasSelected() const
 { return m_color_was_picked; }
 
 Clr ColorDlg::Result() const
-{ return Convert(m_current_color); }
+{ return m_current_color; }
 
 void ColorDlg::Render()
 {
@@ -654,11 +523,11 @@ void ColorDlg::ColorChanged(HSVClr color)
     m_hue_saturation_picker->SetHueSaturation(m_current_color.h, m_current_color.s);
     m_value_picker->SetHueSaturation(m_current_color.h, m_current_color.s);
     m_value_picker->SetValue(m_current_color.v);
-    Clr rgb_color = Convert(m_current_color);
+    Clr rgb_color = m_current_color;
     m_new_color_square->SetColor(rgb_color);
     if (m_current_color_button != INVALID_COLOR_BUTTON) {
         m_color_buttons[m_current_color_button]->SetRepresentedColor(rgb_color);
-        s_custom_colors[m_current_color_button] = rgb_color;
+        custom_colors[m_current_color_button] = rgb_color;
     }
     UpdateRGBSliders();
     UpdateHSVSliders();
@@ -679,7 +548,7 @@ void ColorDlg::ValuePickerChanged(double value)
 
 void ColorDlg::UpdateRGBSliders()
 {
-    Clr color = Convert(m_current_color);
+    Clr color = m_current_color;
     *m_slider_values[R] << static_cast<int>(color.r);
     *m_slider_values[G] << static_cast<int>(color.g);
     *m_slider_values[B] << static_cast<int>(color.b);
@@ -702,14 +571,14 @@ void ColorDlg::UpdateHSVSliders()
 
 void ColorDlg::ColorChangeFromRGBSlider()
 {
-    Clr color = Convert(m_current_color);
+    Clr color = m_current_color;
     m_hue_saturation_picker->SetHueSaturation(m_current_color.h, m_current_color.s);
     m_value_picker->SetHueSaturation(m_current_color.h, m_current_color.s);
     m_value_picker->SetValue(m_current_color.v);
     m_new_color_square->SetColor(color);
     if (m_current_color_button != INVALID_COLOR_BUTTON) {
         m_color_buttons[m_current_color_button]->SetRepresentedColor(color);
-        s_custom_colors[m_current_color_button] = color;
+        custom_colors[m_current_color_button] = color;
     }
     UpdateHSVSliders();
 }
@@ -717,42 +586,42 @@ void ColorDlg::ColorChangeFromRGBSlider()
 void ColorDlg::ColorButtonClicked(std::size_t i)
 {
     m_current_color_button = i;
-    m_current_color = Convert(m_color_buttons[m_current_color_button]->RepresentedColor());
+    m_current_color = m_color_buttons[m_current_color_button]->RepresentedColor();
     ColorChanged(m_current_color);
 }
 
 void ColorDlg::RedSliderChanged(int value, int low, int high)
 {
-    Clr color = Convert(m_current_color);
+    Clr color = m_current_color;
     color.r = value;
-    m_current_color = Convert(color);
+    m_current_color = color;
     ColorChangeFromRGBSlider();
     *m_slider_values[R] << value;
 }
 
 void ColorDlg::GreenSliderChanged(int value, int low, int high)
 {
-    Clr color = Convert(m_current_color);
+    Clr color = m_current_color;
     color.g = value;
-    m_current_color = Convert(color);
+    m_current_color = color;
     ColorChangeFromRGBSlider();
     *m_slider_values[G] << value;
 }
 
 void ColorDlg::BlueSliderChanged(int value, int low, int high)
 {
-    Clr color = Convert(m_current_color);
+    Clr color = m_current_color;
     color.b = value;
-    m_current_color = Convert(color);
+    m_current_color = color;
     ColorChangeFromRGBSlider();
     *m_slider_values[B] << value;
 }
 
 void ColorDlg::AlphaSliderChanged(int value, int low, int high)
 {
-    Clr color = Convert(m_current_color);
+    Clr color = m_current_color;
     color.a = value;
-    m_current_color = Convert(color);
+    m_current_color = color;
     ColorChangeFromRGBSlider();
     *m_slider_values[A] << value;
 }
@@ -778,11 +647,11 @@ void ColorDlg::ValueSliderChanged(int value, int low, int high)
 void ColorDlg::OkClicked()
 {
     m_color_was_picked = true;
-    m_done = true;
+    m_modal_done.store(true);
 }
 
 void ColorDlg::CancelClicked()
 {
-    m_current_color = Convert(m_original_color);
-    m_done = true;
+    m_current_color = m_original_color;
+    m_modal_done.store(true);
 }

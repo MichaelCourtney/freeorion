@@ -5,7 +5,7 @@
 
 #include "../universe/Planet.h"
 
-namespace parse { namespace detail {
+namespace parse::detail {
     planet_type_parser_rules::planet_type_parser_rules(
         const parse::lexer& tok,
         Labeller& label,
@@ -16,9 +16,10 @@ namespace parse { namespace detail {
         boost::spirit::qi::_val_type _val;
 
         variable_name
-            %=   tok.planettype_
+            %=   tok.PlanetType_
             |    tok.OriginalType_
             |    tok.NextCloserToOriginalPlanetType_
+            |    tok.NextBestPlanetType_
             |    tok.NextBetterPlanetType_
             |    tok.ClockwiseNextPlanetType_
             |    tok.CounterClockwiseNextPlanetType_
@@ -38,4 +39,4 @@ namespace parse { namespace detail {
             |   tok.GasGiant_   [ _val = PlanetType::PT_GASGIANT ]
             ;
     }
-} }
+}

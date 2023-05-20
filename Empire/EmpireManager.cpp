@@ -12,13 +12,15 @@
 namespace {
     // sorted pair, so order of empire IDs specified doesn't matter
     std::pair<int, int> DiploKey(int id1, int ind2)
-    { return std::make_pair(std::max(id1, ind2), std::min(id1, ind2)); }
+    { return std::pair(std::max(id1, ind2), std::min(id1, ind2)); }
 
     const std::string EMPTY_STRING;
 }
 
 EmpireManager& EmpireManager::operator=(EmpireManager&& other) noexcept {
     if (this != &other) {
+        m_empire_ids = std::move(other.m_empire_ids);
+        m_capital_ids = std::move(other.m_capital_ids);
         m_empire_map = std::move(other.m_empire_map);
         m_const_empire_map = std::move(other.m_const_empire_map);
         m_empire_diplomatic_statuses = std::move(other.m_empire_diplomatic_statuses);
@@ -26,9 +28,6 @@ EmpireManager& EmpireManager::operator=(EmpireManager&& other) noexcept {
     }
     return *this;
 }
-
-const EmpireManager::const_container_type& EmpireManager::GetEmpires() const
-{ return m_const_empire_map; }
 
 std::shared_ptr<const Empire> EmpireManager::GetEmpire(int id) const {
     auto it = m_const_empire_map.find(id);
@@ -39,14 +38,6 @@ std::shared_ptr<const UniverseObject> EmpireManager::GetSource(int id, const Obj
     auto it = m_const_empire_map.find(id);
     return it != m_const_empire_map.end() ? it->second->Source(objects) : nullptr;
 }
-
-const std::string& EmpireManager::GetEmpireName(int id) const {
-    auto it = m_const_empire_map.find(id);
-    return it == m_const_empire_map.end() ? EMPTY_STRING : it->second->Name();
-}
-
-int EmpireManager::NumEmpires() const
-{ return m_const_empire_map.size(); }
 
 int EmpireManager::NumEliminatedEmpires() const {
     int eliminated_count = 0;
@@ -100,25 +91,10 @@ std::string EmpireManager::DumpDiplomacy() const {
     return retval;
 }
 
-const EmpireManager::container_type& EmpireManager::GetEmpires()
-{ return m_empire_map; }
-
 std::shared_ptr<Empire> EmpireManager::GetEmpire(int id) {
     iterator it = m_empire_map.find(id);
     return it == end() ? nullptr : it->second;
 }
-
-EmpireManager::const_iterator EmpireManager::begin() const
-{ return m_const_empire_map.begin(); }
-
-EmpireManager::const_iterator EmpireManager::end() const
-{ return m_const_empire_map.end(); }
-
-EmpireManager::iterator EmpireManager::begin()
-{ return m_empire_map.begin(); }
-
-EmpireManager::iterator EmpireManager::end()
-{ return m_empire_map.end(); }
 
 void EmpireManager::BackPropagateMeters() {
     for (auto& entry : m_empire_map)
@@ -141,23 +117,23 @@ void EmpireManager::InsertEmpire(std::shared_ptr<Empire>&& empire) {
 
     int empire_id = empire->EmpireID();
 
-    if (m_empire_map.count(empire_id)) {
+    if (m_empire_map.contains(empire_id)) {
         ErrorLogger() << "EmpireManager::InsertEmpire passed empire with id (" << empire_id << ") for which there already is an empire.";
         return;
     }
 
+    m_empire_ids.push_back(empire_id);
+    std::sort(m_empire_ids.begin(), m_empire_ids.end());
     m_const_empire_map[empire_id] = empire;
     m_empire_map[empire_id] = std::move(empire);
 }
 
-void EmpireManager::Clear() {
+void EmpireManager::Clear() noexcept {
+    m_empire_ids.clear();
     m_const_empire_map.clear();
     m_empire_map.clear();
     m_empire_diplomatic_statuses.clear();
 }
-
-const EmpireManager::DiploStatusMap& EmpireManager::GetDiplomaticStatuses() const
-{ return m_empire_diplomatic_statuses; }
 
 DiplomaticStatus EmpireManager::GetDiplomaticStatus(int empire1, int empire2) const {
     if (empire1 == ALL_EMPIRES || empire2 == ALL_EMPIRES || empire1 == empire2)
@@ -359,6 +335,12 @@ void EmpireManager::ResetDiplomacy() {
     }
 }
 
+void EmpireManager::RefreshCapitalIDs() {
+    m_capital_ids.clear();
+    std::transform(m_const_empire_map.begin(), m_const_empire_map.end(), std::back_inserter(m_capital_ids),
+                   [](const auto& e) { return e.second->CapitalID(); });
+}
+
 void EmpireManager::GetDiplomaticMessagesToSerialize(std::map<std::pair<int, int>, DiplomaticMessage>& messages,
                                                      int encoding_empire) const
 {
@@ -377,74 +359,49 @@ void EmpireManager::GetDiplomaticMessagesToSerialize(std::map<std::pair<int, int
     }
 }
 
-std::vector<EmpireColor>& EmpireColorsNonConst() {
-    static std::vector<EmpireColor> colors;
-    return colors;
+namespace {
+    const std::vector<EmpireColor> backup_empire_colors = {
+        {{ 0, 255,   0, 255}}, {{  0,   0, 255, 255}}, {{255,   0,   0, 255}},
+        {{ 0, 255, 255, 255}}, {{255, 255,   0, 255}}, {{255,   0, 255, 255}}
+    };
+    std::vector<EmpireColor> empire_colors;
+
+    constexpr uint8_t HexCharsToUInt8(std::string_view chars) noexcept {
+        auto digit0 = chars[0];
+        auto digit1 = chars[1];
+        uint8_t val0 = 16 * (digit0 >= 'A' ? (digit0 - 'A' + 10) : (digit0 - '0'));
+        uint8_t val1 = (digit1 >= 'A' ? (digit1 - 'A' + 10) : (digit1 - '0'));
+        return val0 + val1;
+    };
+
+    EmpireColor HexStringToEmpireColor(std::string_view hex_colour) {
+        const auto sz = hex_colour.size();
+        return {{
+            (sz >= 2) ? HexCharsToUInt8(hex_colour.substr(0, 2)) : uint8_t{0u},
+            (sz >= 4) ? HexCharsToUInt8(hex_colour.substr(2, 2)) : uint8_t{0u},
+            (sz >= 6) ? HexCharsToUInt8(hex_colour.substr(4, 2)) : uint8_t{0u},
+            (sz >= 8) ? HexCharsToUInt8(hex_colour.substr(6, 2)) : uint8_t{255u}
+        }};
+    }
 }
 
-/** Named ctor that constructs a EmpireColor from a string that represents the color
-    channels in the format '#RRGGBB', '#RRGGBBAA' where each channel value
-    ranges from 0 to FF.  When the alpha component is left out the alpha
-    value FF is assumed.
-    @throws std::invalid_argument if the hex_colour string is not well formed
-    */
-inline EmpireColor HexClr(const std::string& hex_colour)
-{
-    std::istringstream iss(hex_colour);
-
-    unsigned long rgba = 0;
-    if ((hex_colour.size() == 7 || hex_colour.size() == 9) &&
-            '#' == iss.get() && !(iss >> std::hex >> rgba).fail())
-    {
-        EmpireColor retval = EmpireColor{{0, 0, 0, 255}};
-
-        if (hex_colour.size() == 7) {
-            std::get<0>(retval) = (rgba >> 16) & 0xFF;
-            std::get<1>(retval) = (rgba >> 8)  & 0xFF;
-            std::get<2>(retval) = rgba         & 0xFF;
-            std::get<3>(retval) = 255;
-        } else {
-            std::get<0>(retval) = (rgba >> 24) & 0xFF;
-            std::get<1>(retval) = (rgba >> 16) & 0xFF;
-            std::get<2>(retval) = (rgba >> 8)  & 0xFF;
-            std::get<3>(retval) = rgba         & 0xFF;
-        }
-
-        return retval;
-    }
-
-    throw std::invalid_argument("EmpireColor could not interpret hex colour string");
+const std::vector<EmpireColor>& EmpireColors() {
+    if (empire_colors.empty())
+        return backup_empire_colors;
+    return empire_colors;
 }
 
 void InitEmpireColors(const boost::filesystem::path& path) {
-    auto& colors = EmpireColorsNonConst();
-
     XMLDoc doc;
 
     std::string empire_colors_content;
     if (ReadFile(path, empire_colors_content)) {
         doc.ReadDoc(empire_colors_content);
     } else {
-        ErrorLogger() << "Unable to open data file " << path.filename();
+        ErrorLogger() << "InitEmpireColors: Unable to open data file " << path.filename();
         return;
     }
 
-    for (const XMLElement& elem : doc.root_node.children) {
-        try {
-            std::string hex_colour("#");
-            hex_colour.append(elem.attributes.at("hex"));
-            colors.push_back(HexClr(hex_colour));
-        } catch(const std::exception& e) {
-            ErrorLogger() << "empire_colors.xml: " << e.what() << "\n";
-        }
-    }
-}
-
-const std::vector<EmpireColor>& EmpireColors() {
-    auto& colors = EmpireColorsNonConst();
-    if (colors.empty()) {
-        colors = {{{ 0, 255,   0, 255}}, {{  0,   0, 255, 255}}, {{255,   0,   0, 255}},
-                  {{ 0, 255, 255, 255}}, {{255, 255,   0, 255}}, {{255,   0, 255, 255}}};
-    }
-    return colors;
+    for (const XMLElement& elem : doc.root_node.children)
+        empire_colors.push_back(HexStringToEmpireColor(elem.attributes.at("hex")));
 }

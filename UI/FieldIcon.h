@@ -11,7 +11,7 @@
   * interaction with fields on the galaxy map.  It contains the graphic to
   * display the field, along with the object ID of the UniverseObject
     associated with it. */
-class FieldIcon : public GG::Control {
+class FieldIcon final : public GG::Control {
 public:
     FieldIcon(int field_id);
     ~FieldIcon() = default;
@@ -19,24 +19,24 @@ public:
 
     /** Checks to see if point lies inside in-system fleet buttons before
         checking parent InWindow method. */
-    bool InWindow(const GG::Pt& pt) const override;
-    int  FieldID() const;                        //!< returns ID of system this icon represents
+    bool InWindow(GG::Pt pt) const noexcept override;
+    int  FieldID() const noexcept { return m_field_id; }
 
     /** Returns the field texture. */
-    const std::shared_ptr<GG::Texture>& FieldTexture() const;
+    const auto& FieldTexture() const noexcept { return m_texture; }
 
-    void LButtonDown(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
-    void LDrag(const GG::Pt& pt, const GG::Pt& move, GG::Flags<GG::ModKey> mod_keys) override;
-    void LButtonUp(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
-    void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
-    void Render() override;
-    void LClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
-    void RClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
-    void LDoubleClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
-    void RDoubleClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
-    void MouseEnter(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
+    void LButtonDown(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) override;
+    void LDrag(GG::Pt pt, GG::Pt move, GG::Flags<GG::ModKey> mod_keys) override;
+    void LButtonUp(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) override;
+    void SizeMove(GG::Pt ul, GG::Pt lr) override;
+    void Render() override {}
+    void LClick(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) override;
+    void RClick(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) override;
+    void LDoubleClick(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) override;
+    void RDoubleClick(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) override;
+    void MouseEnter(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) override;
     void MouseLeave() override;
-    void MouseWheel(const GG::Pt& pt, int move, GG::Flags<GG::ModKey> mod_keys) override;
+    void MouseWheel(GG::Pt pt, int move, GG::Flags<GG::ModKey> mod_keys) override;
     void Refresh();
     void SetSelected(bool selected = true);   //!< shows/hides the selection indicator over this field
 

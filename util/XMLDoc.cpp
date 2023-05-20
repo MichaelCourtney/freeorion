@@ -72,7 +72,7 @@ struct IUnknown; // Workaround for "combaseapi.h(229,21): error C2760: syntax er
 namespace {
     using namespace boost::spirit::classic;
 
-    typedef chset<unsigned char> chset_t;
+    typedef chset<uint8_t> chset_t;
 
     //! XML grammar rules
     rule<> document, prolog, element, Misc, Reference, CData, doctypedecl,
@@ -81,20 +81,14 @@ namespace {
            Comment, CDSect, CharRef, EntityRef, EncName, Name, Comment1, S;
 
     //! XML Character classes
-    chset_t Char("\x9\xA\xD\x20-\xFF");
-    chset_t Letter("\x41-\x5A\x61-\x7A\xC0-\xD6\xD8-\xF6\xF8-\xFF");
-    chset_t Digit("0-9");
-    chset_t Extender('\xB7');
-    chset_t NameChar = Letter | Digit | chset_t("._:-") | Extender;
-    chset_t Sch("\x20\x9\xD\xA");
+    const chset_t Char("\x9\xA\xD\x20-\xFF");
+    const chset_t Letter("\x41-\x5A\x61-\x7A\xC0-\xD6\xD8-\xF6\xF8-\xFF");
+    const chset_t Digit("0-9");
+    const chset_t Extender(static_cast<uint8_t>('\xB7'));
+    const chset_t NameChar = Letter | Digit | chset_t("._:-") | Extender;
+    const chset_t Sch("\x20\x9\xD\xA");
 }
 
-
-const std::string& XMLElement::Tag() const
-{ return m_tag; }
-
-const std::string& XMLElement::Text() const
-{ return m_text; }
 
 bool XMLElement::ContainsChild(const std::string& tag) const {
     return children.end() != std::find_if(children.begin(), children.end(),
@@ -111,13 +105,13 @@ const XMLElement& XMLElement::Child(const std::string& tag) const {
     return *match;
 }
 
-std::string XMLElement::WriteElement(int indent/* = 0*/, bool whitespace/* = true*/) const {
+std::string XMLElement::WriteElement(int indent, bool whitespace) const {
     std::stringstream ss;
     WriteElement(ss, indent, whitespace);
     return ss.str();
 }
 
-std::ostream& XMLElement::WriteElement(std::ostream& os, int indent/* = 0*/, bool whitespace/* = true*/) const {
+std::ostream& XMLElement::WriteElement(std::ostream& os, int indent, bool whitespace) const {
     if (whitespace)
         os << std::string(indent * 2, ' ');
     os << '<' << m_tag;
@@ -170,7 +164,7 @@ XMLDoc::RuleDefiner      XMLDoc::s_rule_definer;
 XMLElement               XMLDoc::s_temp_elem;
 std::string              XMLDoc::s_temp_attr_name;
 
-XMLDoc::XMLDoc(std::string root_tag/*= "XMLDoc"*/) :
+XMLDoc::XMLDoc(std::string root_tag) :
     root_node(XMLElement(std::move(root_tag), true))
 {}
 
@@ -178,7 +172,7 @@ XMLDoc::XMLDoc(const std::istream& is) :
     root_node(XMLElement())
 {}
 
-std::ostream& XMLDoc::WriteDoc(std::ostream& os, bool whitespace/* = true*/) const {
+std::ostream& XMLDoc::WriteDoc(std::ostream& os, bool whitespace) const {
     os << "<?xml version=\"1.0\"?>";
     if (whitespace) os << "\n";
     return root_node.WriteElement(os, 0, whitespace);

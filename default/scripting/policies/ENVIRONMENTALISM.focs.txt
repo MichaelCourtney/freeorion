@@ -4,7 +4,7 @@ Policy
     short_description = "PLC_ENVIRONMENTALISM_SHORT_DESC"
     category = "ECONOMIC_CATEGORY"
     adoptioncost = floor(2.0 * [[POPULATION_OWNED_BY_EMPIRE]]^0.5)
-    exclusions = [ "PLC_TERRAFORMING" "PLC_INDUSTRIALISM" ]
+    exclusions = [ "PLC_INDUSTRIALISM" "PLC_TERRAFORMING" ]
     effectsgroups = [
         [[SPECIES_LIKES_OR_DISLIKES_POLICY_STABILITY_EFFECTS]]
 
@@ -67,7 +67,7 @@ Policy
                     + (NamedReal name = "PLC_ENVIRONMENTALISM_STEALTH_ORIGINAL_FLAT" value = 10)
             ]            
     ]
-    graphic = "icons/policies/environmentalism.png"
+    graphic = "icons/policies/economic_environmentalism.png"
 
 #include "/scripting/common/base_prod.macros"
 #include "/scripting/common/priorities.macros"

@@ -4,7 +4,6 @@ import random
 import universe_statistics
 import universe_tables
 from galaxy import DisjointSets
-
 from util import MapGenerationError, report_error
 
 
@@ -83,7 +82,7 @@ def populate_monster_fleet(fleet_plan, system):
     print("Spawn", fleet_plan.name(), "at", fo.get_name(system))
 
 
-def generate_monsters(monster_freq, systems):
+def generate_monsters(monster_freq, systems):  # noqa: max-complexity
     """
     Adds space monsters to systems.
     """

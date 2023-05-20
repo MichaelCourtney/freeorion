@@ -4,7 +4,7 @@
 #include "MovableEnvelope.h"
 #include "../universe/ValueRef.h"
 
-#include <boost/spirit/include/phoenix.hpp>
+#include <boost/phoenix.hpp>
 
 parse::detail::simple_int_parser_rules::simple_int_parser_rules(const parse::lexer& tok) :
     simple_variable_rules("integer", tok)
@@ -54,6 +54,7 @@ parse::detail::simple_int_parser_rules::simple_int_parser_rules(const parse::lex
         |   tok.TurnsSinceLastConquered_
         |   tok.ETA_
         |   tok.LaunchedFrom_
+        |   tok.OrderedColonizePlanetID_
         ;
 
     free_variable_name
@@ -83,7 +84,8 @@ parse::castable_as_int_parser_rules::castable_as_int_parser_rules(
     const parse::detail::value_ref_grammar<std::string>& string_grammar
 ) :
     int_rules(tok, label, condition_parser, string_grammar),
-    double_rules(tok, label, condition_parser, string_grammar)
+    double_rules(tok, label, condition_parser, string_grammar),
+    planet_type_rules(tok, label, condition_parser)
 {
     namespace phoenix = boost::phoenix;
     namespace qi = boost::spirit::qi;
@@ -97,19 +99,33 @@ parse::castable_as_int_parser_rules::castable_as_int_parser_rules(
     const boost::phoenix::function<parse::detail::deconstruct_movable> deconstruct_movable_;
 
     castable_expr
-        = double_rules.expr [ _val = construct_movable_(new_<ValueRef::StaticCast<double, int>>(deconstruct_movable_(_1, _pass))) ]
+        = double_rules.expr [ _val = construct_movable_(
+            new_<ValueRef::StaticCast<double, int>>(deconstruct_movable_(_1, _pass))) ]
+        ;
+
+    enum_expr
+        = planet_type_rules.expr [ _val = construct_movable_(
+            new_<ValueRef::StaticCast<PlanetType, int>>(deconstruct_movable_(_1, _pass))) ]
+        ;
+
+    enum_or_int
+        = int_rules.expr
+        | enum_expr
         ;
 
     flexible_int
         = int_rules.expr
         | castable_expr
+        | enum_expr
         ;
 
     castable_expr.name("castable as integer expression");
+    enum_expr.name("castble as integer enum express");
     flexible_int.name("integer or castable as integer");
 
 #if DEBUG_VALUEREF_PARSERS
     debug(castable_expr);
+    debug(enum_expr);
 #endif
 }
 
@@ -121,7 +137,7 @@ parse::int_arithmetic_rules::int_arithmetic_rules(
 ) :
     arithmetic_rules("integer", tok, label, condition_parser, string_grammar),
     simple_int_rules(tok),
-    int_complex_grammar(tok, label, *this, string_grammar)
+    int_complex_grammar(tok, label, *this, condition_parser, string_grammar)
 {
     namespace phoenix = boost::phoenix;
     namespace qi = boost::spirit::qi;

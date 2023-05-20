@@ -34,8 +34,8 @@ constexpr double DEFAULT_FPS = 15.0;
 
 DynamicGraphic::DynamicGraphic(X x, Y y, X w, Y h, bool loop, X frame_width, Y frame_height,
                                unsigned int margin, std::vector<std::shared_ptr<Texture>> textures,
-                               Flags<GraphicStyle> style/* = GRAPHIC_NONE*/, std::size_t frames/* = ALL_FRAMES*/,
-                               Flags<WndFlag> flags/* = Flags<WndFlags>()*/) :
+                               Flags<GraphicStyle> style, std::size_t frames,
+                               Flags<WndFlag> flags) :
     Control(x, y, w, h, flags),
     m_margin(margin),
     m_frame_width(frame_width),
@@ -201,7 +201,7 @@ void DynamicGraphic::Render()
     }
 }
 
-void DynamicGraphic::AddFrames(const Texture* texture, std::size_t frames/* = ALL_FRAMES*/)
+void DynamicGraphic::AddFrames(const Texture* texture, std::size_t frames)
 {
     std::size_t frames_in_texture = FramesInTexture(texture);
     if (!frames_in_texture)
@@ -211,10 +211,10 @@ void DynamicGraphic::AddFrames(const Texture* texture, std::size_t frames/* = AL
     fs.texture.reset(texture);
     fs.frames = std::min(frames_in_texture, std::max(frames, static_cast<std::size_t>(1)));
     m_frames += fs.frames;
-    m_textures.emplace_back(std::move(fs));
+    m_textures.push_back(std::move(fs));
 }
 
-void DynamicGraphic::AddFrames(std::shared_ptr<Texture> texture, std::size_t frames/* = ALL_FRAMES*/)
+void DynamicGraphic::AddFrames(std::shared_ptr<Texture> texture, std::size_t frames)
 {
     std::size_t frames_in_texture = FramesInTexture(texture.get());
     if (!frames_in_texture)
@@ -224,10 +224,10 @@ void DynamicGraphic::AddFrames(std::shared_ptr<Texture> texture, std::size_t fra
     fs.texture = std::move(texture);
     fs.frames = std::min(frames_in_texture, std::max(frames, static_cast<std::size_t>(1)));
     m_frames += fs.frames;
-    m_textures.emplace_back(std::move(fs));
+    m_textures.push_back(std::move(fs));
 }
 
-void DynamicGraphic::AddFrames(std::vector<std::shared_ptr<Texture>> textures, std::size_t frames/* = ALL_FRAMES*/)
+void DynamicGraphic::AddFrames(std::vector<std::shared_ptr<Texture>> textures, std::size_t frames)
 {
     if (!textures.empty()) {
         std::size_t old_frames = m_frames;
@@ -296,7 +296,7 @@ void DynamicGraphic::Stop()
     SetFrameIndex(0.0 <= m_FPS ? m_first_frame_idx : m_last_frame_idx);
 }
 
-void DynamicGraphic::Loop(bool b/* = true*/)
+void DynamicGraphic::Loop(bool b)
 { m_looping = b; }
 
 void DynamicGraphic::SetFPS(double fps)

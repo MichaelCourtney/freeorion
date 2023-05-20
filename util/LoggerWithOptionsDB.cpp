@@ -11,12 +11,12 @@
 namespace {
     // Create the log logger for logging of logger and logging related events.
     // Manually created to prevent a recursive call during initialization.
-    BOOST_LOG_INLINE_GLOBAL_LOGGER_INIT(                                \
-        FO_GLOBAL_LOGGER_NAME(log), NamedThreadedLogger)                \
-    {                                                                   \
-        return NamedThreadedLogger(                                     \
-            (boost::log::keywords::severity = LogLevel::debug),         \
-            (boost::log::keywords::channel = "log"));                   \
+    BOOST_LOG_INLINE_GLOBAL_LOGGER_INIT(                                    \
+        FO_GLOBAL_LOGGER_NAME(log), NamedThreadedLogger)                    \
+    {                                                                       \
+        return NamedThreadedLogger(                                         \
+            (boost::log::keywords::severity = default_log_level_threshold), \
+            (boost::log::keywords::channel = "log"));                       \
     }
 
     constexpr LogLevel default_sink_level = default_log_level_threshold;
@@ -64,9 +64,12 @@ namespace {
 }
 
 std::unique_ptr<DiscreteValidator<std::string>> LogLevelValidator() {
-    std::set<std::string> valid_labels;
-    for (const auto& label_and_value : ValidNameToLogLevel())
-        valid_labels.insert(label_and_value.first);
+    std::vector<std::string> valid_labels;
+    valid_labels.reserve(LoggerDetails::valid_names_and_levels.size());
+    std::transform(LoggerDetails::valid_names_and_levels.begin(),
+                   LoggerDetails::valid_names_and_levels.end(),
+                   std::back_inserter(valid_labels),
+                   [](auto name_level) { return std::string{name_level.first}; });
     return std::make_unique<DiscreteValidator<std::string>>(std::move(valid_labels));
 }
 
@@ -91,7 +94,7 @@ void InitLoggingOptionsDBSystem() {
     InfoLogger(log) << "Initialized OptionsDB logging configuration.";
 }
 
-void RegisterLoggerWithOptionsDB(const std::string& logger_name, const bool is_exec_logger/*= false*/) {
+void RegisterLoggerWithOptionsDB(const std::string& logger_name, const bool is_exec_logger) {
     if (logger_name.empty())
         return;
 

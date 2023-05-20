@@ -43,11 +43,11 @@ def print_production_queue(after_turn=False):
             element.name,
             universe.getPlanet(element.locationID),
             "%dx %d" % (element.remaining, element.blocksize),
-            "%.1f / %.1f" % (element.progress * cost, cost),
+            f"{element.progress * cost:.1f} / {cost:.1f}",
             "%.1f" % element.allocation,
             "%d" % element.turnsLeft,
         )
-    prod_queue_table.print_table(info)
+    info(prod_queue_table)
 
 
 def print_capital_info(homeworld):
@@ -75,4 +75,4 @@ def print_capital_info(homeworld):
             building.owner,
         )
 
-    table.print_table(info)
+    info(table)

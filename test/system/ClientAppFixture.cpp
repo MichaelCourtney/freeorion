@@ -29,11 +29,17 @@ ClientAppFixture::ClientAppFixture() :
 #endif
     //InitLoggingOptionsDBSystem();
 
+    static constexpr auto server_path_option = "misc.server-local-binary.path";
+    static constexpr auto server_filename =
 #ifdef FREEORION_WIN32
-    GetOptionsDB().Add<std::string>("misc.server-local-binary.path", UserStringNop("OPTIONS_DB_FREEORIOND_PATH"),        PathToString(GetBinDir() / "freeoriond.exe"));
+        "freeoriond.exe";
 #else
-    GetOptionsDB().Add<std::string>("misc.server-local-binary.path", UserStringNop("OPTIONS_DB_FREEORIOND_PATH"),        PathToString(GetBinDir() / "freeoriond"));
+        "freeoriond";
 #endif
+    if (!GetOptionsDB().OptionExists(server_path_option)) {
+        auto server_path = PathToString(GetBinDir() / server_filename);
+        GetOptionsDB().Add<std::string>(server_path_option, UserStringNop("OPTIONS_DB_FREEORIOND_PATH"), std::move(server_path));
+    }
 
     InfoLogger() << FreeOrionVersionString();
     DebugLogger() << "Test client initialized";
@@ -78,12 +84,12 @@ void ClientAppFixture::HostSPGame(unsigned int num_AIs) {
     setup_data.SetSeed("TestSeed1");
     setup_data.size =             100;
     setup_data.shape =            Shape::SPIRAL_4;
-    setup_data.age =              GalaxySetupOption::GALAXY_SETUP_MEDIUM;
-    setup_data.starlane_freq =    GalaxySetupOption::GALAXY_SETUP_MEDIUM;
-    setup_data.planet_density =   GalaxySetupOption::GALAXY_SETUP_MEDIUM;
-    setup_data.specials_freq =    GalaxySetupOption::GALAXY_SETUP_MEDIUM;
-    setup_data.monster_freq =     GalaxySetupOption::GALAXY_SETUP_MEDIUM;
-    setup_data.native_freq =      GalaxySetupOption::GALAXY_SETUP_MEDIUM;
+    setup_data.age =              GalaxySetupOptionGeneric::GALAXY_SETUP_MEDIUM;
+    setup_data.starlane_freq =    GalaxySetupOptionGeneric::GALAXY_SETUP_MEDIUM;
+    setup_data.planet_density =   GalaxySetupOptionGeneric::GALAXY_SETUP_MEDIUM;
+    setup_data.specials_freq =    GalaxySetupOptionGeneric::GALAXY_SETUP_MEDIUM;
+    setup_data.monster_freq =     GalaxySetupOptionMonsterFreq::MONSTER_SETUP_MEDIUM;
+    setup_data.native_freq =      GalaxySetupOptionGeneric::GALAXY_SETUP_MEDIUM;
     setup_data.ai_aggr =          Aggression::MANIACAL;
     setup_data.game_rules =       game_rules;
 
@@ -119,13 +125,14 @@ void ClientAppFixture::HostSPGame(unsigned int num_AIs) {
         setup_data.players.push_back(ai_setup_data);
     }
 
-    m_networking->SendMessage(HostSPGameMessage(setup_data));
+    m_networking->SendMessage(HostSPGameMessage(setup_data, DependencyVersions()));
 }
 
 void ClientAppFixture::JoinGame() {
     m_lobby_updated = false;
     m_networking->SendMessage(JoinGameMessage("TestPlayer",
                                               Networking::ClientType::CLIENT_TYPE_HUMAN_PLAYER,
+                                              {},
                                               m_cookie));
 }
 
@@ -203,7 +210,7 @@ bool ClientAppFixture::HandleMessage(Message& msg) {
 
         ExtractGameStartMessageData(msg,                     single_player_game,     m_empire_id,
                                     m_current_turn,          m_empires,              m_universe,
-                                    GetSpeciesManager(),     GetCombatLogManager(),  GetSupplyManager(),
+                                    m_species_manager,       GetCombatLogManager(),  m_supply_manager,
                                     m_player_info,           m_orders,               loaded_game_data,
                                     ui_data_available,       ui_data,                state_string_available,
                                     save_state_string,       m_galaxy_setup_data);
@@ -211,7 +218,7 @@ bool ClientAppFixture::HandleMessage(Message& msg) {
         InfoLogger() << "Extracted GameStart message for turn: " << m_current_turn << " with empire: " << m_empire_id;
 
         m_ai_empires.clear();
-        for (const auto& empire : Empires()) {
+        for (const auto& empire : m_empires) {
             if (GetEmpireClientType(empire.first) == Networking::ClientType::CLIENT_TYPE_AI_PLAYER)
                 m_ai_empires.insert(empire.first);
         }
@@ -238,14 +245,14 @@ bool ClientAppFixture::HandleMessage(Message& msg) {
         return true;
     }
     case Message::MessageType::TURN_PARTIAL_UPDATE: {
-        ExtractTurnPartialUpdateMessageData(msg, EmpireID(), GetUniverse());
+        ExtractTurnPartialUpdateMessageData(msg, m_empire_id, m_universe);
         BOOST_TEST_MESSAGE("Partial turn update unpacked");
         return true;
     }
     case Message::MessageType::TURN_UPDATE: {
-        ExtractTurnUpdateMessageData(msg,                   EmpireID(),         m_current_turn,
-                                     Empires(),             GetUniverse(),      GetSpeciesManager(),
-                                     GetCombatLogManager(), GetSupplyManager(), Players());
+        ExtractTurnUpdateMessageData(msg,                   m_empire_id,      m_current_turn,
+                                     m_empires,             m_universe,       m_species_manager,
+                                     GetCombatLogManager(), m_supply_manager, m_player_info);
         m_turn_done = true;
         BOOST_TEST_MESSAGE("Full turn update unpacked");
         return true;
@@ -265,7 +272,7 @@ bool ClientAppFixture::HandleMessage(Message& msg) {
             host_id = boost::lexical_cast<int>(msg.Text());
             m_networking->SetHostPlayerID(host_id);
             BOOST_TEST_MESSAGE("Set Host Player ID to: " << host_id);
-        } catch (const boost::bad_lexical_cast& ex) {
+        } catch (const boost::bad_lexical_cast&) {
             ErrorLogger() << "HOST_ID: Could not convert \"" << msg.Text() << "\" to host id";
             BOOST_TEST_MESSAGE("Couldn't get host ID: " << msg.Text());
             return false;
@@ -294,7 +301,8 @@ bool ClientAppFixture::HandleMessage(Message& msg) {
 }
 
 void ClientAppFixture::SaveGame() {
-    std::string save_filename = boost::io::str(boost::format("FreeOrionTestGame_%04d_%s%s") % CurrentTurn() % FilenameTimestamp() % SP_SAVE_FILE_EXTENSION);
+    std::string save_filename = boost::io::str(boost::format("FreeOrionTestGame_%04d_%s%s")
+                                               % m_current_turn % FilenameTimestamp() % SP_SAVE_FILE_EXTENSION);
     boost::filesystem::path save_dir_path(GetSaveDir() / "test");
     boost::filesystem::path save_path(save_dir_path / save_filename);
     if (!exists(save_dir_path))

@@ -193,7 +193,7 @@ private:
         DoLayout();
     }
 
-    void HandleTabChanged(size_t tabnum) {
+    void HandleTabChanged(std::size_t tabnum) {
         if (tabnum == 1)
             m_log->HandleMadeVisible();
 
@@ -220,7 +220,7 @@ void CombatReportWnd::SetLog(int log_id)
 void CombatReportWnd::CloseClicked()
 { Hide(); }
 
-void CombatReportWnd::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
+void CombatReportWnd::SizeMove(GG::Pt ul, GG::Pt lr) {
     GG::Pt new_size = GG::Pt(std::max(lr.x - ul.x, m_impl->GetMinSize().x),
                              std::max(lr.y - ul.y, m_impl->GetMinSize().y));
 

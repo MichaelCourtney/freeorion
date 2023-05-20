@@ -7,7 +7,7 @@
 
 /** a FreeOrion Slider control */
 template <typename T>
-class CUISlider : public GG::Slider<T>
+class CUISlider final : public GG::Slider<T>
 {
 public:
     CUISlider(T min, T max,
@@ -35,7 +35,7 @@ public:
         GG::FlatRectangle(ul, lr, GG::CLR_ZERO, border_color_to_use, 1);
     }
 
-    void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override {
+    void SizeMove(GG::Pt ul, GG::Pt lr) override {
         GG::Wnd::SizeMove(ul, lr);
         if (this->GetOrientation() == GG::Orientation::VERTICAL) {
             this->Tab()->Resize(GG::Pt(GG::X(this->TabWidth()), GG::Y(this->TabWidth())));

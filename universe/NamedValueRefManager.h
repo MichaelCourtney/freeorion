@@ -5,19 +5,19 @@
 #include <thread>
 #include "ValueRef.h"
 
-FO_COMMON_API const std::string& UserString(const std::string& str);
+[[nodiscard]] FO_COMMON_API const std::string& UserString(const std::string& str);
 
 namespace CheckSums {
-    FO_COMMON_API void CheckSumCombine(unsigned int& sum, const char* s);
-    FO_COMMON_API void CheckSumCombine(unsigned int& sum, const std::string& c);
+    FO_COMMON_API void CheckSumCombine(uint32_t& sum, const char* s);
+    FO_COMMON_API void CheckSumCombine(uint32_t& sum, const std::string& c);
 }
 
 class NamedValueRefManager;
-FO_COMMON_API auto GetNamedValueRefManager() -> NamedValueRefManager&;
+[[nodiscard]] FO_COMMON_API auto GetNamedValueRefManager() -> NamedValueRefManager&;
 
 template <typename T>
-FO_COMMON_API const ValueRef::ValueRef<T>* GetValueRef(const std::string& name,
-                                                       bool wait_for_named_value_focs_txt_parse = false);
+[[nodiscard]] FO_COMMON_API const ValueRef::ValueRef<T>* GetValueRef(
+    std::string_view name, bool wait_for_named_value_focs_txt_parse = false);
 
 namespace ValueRef {
 
@@ -78,27 +78,42 @@ struct FO_COMMON_API NamedRef final : public ValueRef<T>
         return ref ? ref->Description() : UserString("NAMED_REF_UNKNOWN");
     }
 
-    std::string Dump(unsigned short ntabs = 0) const override {
-        auto ref = GetValueRef();
-        return ref ? ref->Dump() : "NAMED_REF_UNKNOWN";
+    [[nodiscard]] std::string Dump(uint8_t ntabs = 0) const override {
+        std::string retval = "Named";
+        if constexpr (std::is_same<T, int>::value) {
+            retval += "Integer";
+        } else if constexpr (std::is_same<T, double>::value) {
+            retval += "Real";
+        } else {
+            retval += "Generic";
+        }
+        if (m_is_lookup_only) {
+            retval += "Lookup";
+        }
+        retval += " name = \"" + m_value_ref_name + "\"";
+        if (!m_is_lookup_only) {
+            auto ref = GetValueRef();
+            retval += " value = " + (ref ? ref->Dump() : " (NAMED_REF_UNKNOWN)");
+        }
+        return retval;
     }
 
     void SetTopLevelContent(const std::string& content_name) override;
 
-    const ValueRef<T>* GetValueRef() const {
+    [[nodiscard]] const ValueRef<T>* GetValueRef() const {
         TraceLogger() << "NamedRef<T>::GetValueRef() look for registered valueref for \"" << m_value_ref_name << '"';
         return ::GetValueRef<T>(m_value_ref_name, m_is_lookup_only);
     }
 
-    unsigned int GetCheckSum() const override {
-        unsigned int retval{0};
+    [[nodiscard]] uint32_t GetCheckSum() const override {
+        uint32_t retval{0};
         CheckSums::CheckSumCombine(retval, "ValueRef::NamedRef");
         CheckSums::CheckSumCombine(retval, m_value_ref_name);
         TraceLogger() << "GetCheckSum(NamedRef<T>): " << typeid(*this).name() << " retval: " << retval;
         return retval;
     }
 
-    std::unique_ptr<ValueRef<T>> Clone() const override
+    [[nodiscard]] std::unique_ptr<ValueRef<T>> Clone() const override
     { return std::make_unique<NamedRef<T>>(m_value_ref_name, m_is_lookup_only); }
 
 private:
@@ -175,13 +190,13 @@ public:
     using value_type = std::unique_ptr<ValueRef::ValueRefBase>;
     using int_value_type = std::unique_ptr<ValueRef::ValueRef<int>>;
     using double_value_type = std::unique_ptr<ValueRef::ValueRef<double>>;
-    using container_type = std::map<key_type, value_type>;
-    using int_container_type = std::map<key_type, int_value_type>;
-    using double_container_type = std::map<key_type, double_value_type>;
+    using container_type = std::map<key_type, value_type, std::less<>>;
+    using int_container_type = std::map<key_type, int_value_type, std::less<>>;
+    using double_container_type = std::map<key_type, double_value_type, std::less<>>;
     using entry_type = std::pair<key_type, value_type>;
     using int_entry_type = std::pair<key_type, int_value_type>;
     using double_entry_type = std::pair<key_type, double_value_type>;
-    using any_container_type = std::map<key_type, std::reference_wrapper<ValueRef::ValueRefBase>>;
+    using any_container_type = std::map<key_type, std::reference_wrapper<ValueRef::ValueRefBase>, std::less<>>;
     using any_entry_type = std::pair<key_type, std::reference_wrapper<ValueRef::ValueRefBase>>;
 
     using iterator = container_type::const_iterator;
@@ -190,7 +205,7 @@ public:
     //! ValueRef with such a name or of the wrong type use the free function
     //! GetValueRef(...) instead, mainly to save some typing.
     template <typename T>
-    const ValueRef::ValueRef<T>* GetValueRef(const std::string& name,
+    const ValueRef::ValueRef<T>* GetValueRef(std::string_view name,
                                              bool wait_for_named_value_focs_txt_parse = false) const
     {
         if (wait_for_named_value_focs_txt_parse)
@@ -200,7 +215,7 @@ public:
 
     //! Returns the ValueRef with the name @p name; you should use the
     //! free function GetValueRef(...) instead, mainly to save some typing.
-    auto GetValueRefBase(const std::string& name) const -> const ValueRef::ValueRefBase*;
+    auto GetValueRefBase(std::string_view name) const -> const ValueRef::ValueRefBase*;
 
     /** returns a map with all named value refs */
     auto GetItems() const -> any_container_type;
@@ -220,9 +235,9 @@ public:
     //! and executions of the program and the function. Useful to verify that
     //! the parsed content is consistent without sending it all between
     //! clients and server.
-    auto GetCheckSum() const -> unsigned int;
+    auto GetCheckSum() const -> uint32_t;
 
-    using NamedValueRefParseMap = std::map<std::string, std::unique_ptr<ValueRef::ValueRefBase>>;
+    using NamedValueRefParseMap = std::map<std::string, std::unique_ptr<ValueRef::ValueRefBase>, std::less<>>;
     //! This sets the asynchronous parse, so we can block on that
     //! when a function needs to access a registry
     FO_COMMON_API void SetNamedValueRefParse(Pending::Pending<NamedValueRefParseMap>&& future)
@@ -245,7 +260,7 @@ private:
 
     // getter of mutable ValueRef<T>* that can be modified within SetTopLevelContext functions
     template <typename T>
-    ValueRef::ValueRef<T>* GetMutableValueRef(const std::string& name,
+    ValueRef::ValueRef<T>* GetMutableValueRef(std::string_view name,
                                               bool wait_for_named_value_focs_txt_parse = false)
     {
         if (wait_for_named_value_focs_txt_parse)
@@ -254,15 +269,17 @@ private:
     }
 
     template <typename V>
-    V* GetValueRefImpl(const std::map<NamedValueRefManager::key_type, std::unique_ptr<V>>& registry,
-                       const std::string& label, const std::string& name) const
+    V* GetValueRefImpl(const std::map<NamedValueRefManager::key_type, std::unique_ptr<V>, std::less<>>& registry,
+                       std::string_view label, std::string_view name) const
     {
-        TraceLogger() << "NamedValueRefManager::GetValueRef look for registered " << label << " valueref for \"" << name << '"';
-        TraceLogger() << "Number of registered " << label << " ValueRefs: " << registry.size();
+        //TraceLogger() << "NamedValueRefManager::GetValueRef look for registered (" << label << ") valueref for \"" << name << '"';
+        //TraceLogger() << "Number of registered (" << label << ") ValueRefs: " << registry.size();
         const auto it = registry.find(name);
         if (it != registry.end())
             return it->second.get();
-        WarnLogger() << "NamedValueRefManager::GetValueRef found no registered " << label << " valueref for \"" << name << "\". This should not happen once \"#3225 Refactor initialisation of invariants in value refs to happen after parsing\" is implemented";
+        DebugLogger() << "NamedValueRefManager::GetValueRef found no registered (" << label << ") valueref for \"" << name
+                      << "\". This is may be due to looking in the wrong registry (which can be OK)"
+                      << ".  This should not happen if looking in the right registry.";
         return nullptr;
     }
 
@@ -296,24 +313,26 @@ private:
 // NamedValueRefManager                                  //
 ///////////////////////////////////////////////////////////
 template<>
-FO_COMMON_API void NamedValueRefManager::RegisterValueRef(std::string&& name,
-                                                          std::unique_ptr<ValueRef::ValueRef<PlanetType>>&& vref);
+FO_COMMON_API void NamedValueRefManager::RegisterValueRef(
+    std::string&& name, std::unique_ptr<ValueRef::ValueRef<PlanetType>>&& vref);
 
 template<>
-FO_COMMON_API void NamedValueRefManager::RegisterValueRef(std::string&& name,
-                                                          std::unique_ptr<ValueRef::ValueRef<PlanetEnvironment>>&& vref);
+FO_COMMON_API void NamedValueRefManager::RegisterValueRef(
+    std::string&& name, std::unique_ptr<ValueRef::ValueRef<PlanetEnvironment>>&& vref);
 
 template<>
-FO_COMMON_API const ValueRef::ValueRef<int>* NamedValueRefManager::GetValueRef(const std::string&, bool) const;
+[[nodiscard]] FO_COMMON_API const ValueRef::ValueRef<int>* NamedValueRefManager::GetValueRef(
+    std::string_view, bool) const;
 
 template<>
-FO_COMMON_API const ValueRef::ValueRef<double>* NamedValueRefManager::GetValueRef(const std::string&, bool) const;
+[[nodiscard]] FO_COMMON_API const ValueRef::ValueRef<double>* NamedValueRefManager::GetValueRef(
+    std::string_view, bool) const;
 
 template<>
-ValueRef::ValueRef<int>* NamedValueRefManager::GetMutableValueRef(const std::string&, bool);
+[[nodiscard]] ValueRef::ValueRef<int>* NamedValueRefManager::GetMutableValueRef(std::string_view, bool);
 
 template<>
-ValueRef::ValueRef<double>* NamedValueRefManager::GetMutableValueRef(const std::string&, bool);
+[[nodiscard]] ValueRef::ValueRef<double>* NamedValueRefManager::GetMutableValueRef(std::string_view, bool);
 
 
 ///////////////////////////////////////////////////////////
@@ -342,18 +361,19 @@ void ::ValueRef::NamedRef<T>::SetTopLevelContent(const std::string& content_name
 
 //! Returns the ValueRef object registered with the given
 //! @p name.  If no such ValueRef exists, nullptr is returned instead.
-FO_COMMON_API const ValueRef::ValueRefBase* GetValueRefBase(const std::string& name);
+[[nodiscard]] FO_COMMON_API const ValueRef::ValueRefBase* GetValueRefBase(std::string_view name);
 
 //! Returns the ValueRef object registered with the given
 //! @p name in the registry matching the given type T.  If no such ValueRef exists, nullptr is returned instead.
 template <typename T>
-FO_COMMON_API const ValueRef::ValueRef<T>* GetValueRef(const std::string& name,
-                                                       bool wait_for_named_value_focs_txt_parse)
+[[nodiscard]] FO_COMMON_API const ValueRef::ValueRef<T>* GetValueRef(
+    std::string_view name, bool wait_for_named_value_focs_txt_parse)
 { return GetNamedValueRefManager().GetValueRef<T>(name, wait_for_named_value_focs_txt_parse); }
 
 //! Register and take possesion of the ValueRef object @p vref under the given @p name.
 template <typename T>
-FO_COMMON_API void RegisterValueRef(std::string name, std::unique_ptr<ValueRef::ValueRef<T>>&& vref)
+FO_COMMON_API void RegisterValueRef(
+    std::string name, std::unique_ptr<ValueRef::ValueRef<T>>&& vref)
 { return GetNamedValueRefManager().RegisterValueRef<T>(std::move(name), std::move(vref)); }
 
 #endif // _ValueRefManager_h_

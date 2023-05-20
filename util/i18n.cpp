@@ -9,11 +9,64 @@
 #include <boost/algorithm/string/case_conv.hpp>
 #include <atomic>
 
+// define needed on Windows due to conflict with windows.h and std::min and std::max
+#ifndef NOMINMAX
+#  define NOMINMAX
+#endif
+// define needed in GCC
+#ifndef _GNU_SOURCE
+#  define _GNU_SOURCE
+#endif
+#if defined(_MSC_VER) && _MSC_VER >= 1930
+struct IUnknown; // Workaround for "combaseapi.h(229,21): error C2760: syntax error: 'identifier' was unexpected here; expected 'type specifier'"
+#endif
+
+#include <boost/stacktrace.hpp>
+
 namespace {
     std::map<std::string, std::shared_ptr<StringTable>> stringtables;
     std::shared_mutex                                   stringtable_access_mutex;
     std::atomic<bool>                                   stringtable_filename_init;
     std::mutex                                          stringtable_filename_init_mutex;
+    StringTable                                         error_stringtable;
+    std::shared_mutex                                   error_stringtable_access_mutex;
+    constexpr std::string_view                          ERROR_STRING = "ERROR: ";
+
+
+    std::string StackTrace() {
+        static std::atomic<int> string_error_lookup_count = 0;
+        if (string_error_lookup_count++ > 3)
+            return "";
+        std::stringstream ss;
+        ss << "stacktrace:\n" << boost::stacktrace::stacktrace();
+        return ss.str();
+    }
+
+
+    std::string operator+(const std::string_view sv, const std::string& s) {
+        std::string retval;
+        retval.reserve(sv.size() + s.size());
+        retval.append(sv);
+        retval.append(s);
+        return retval;
+    }
+
+    std::string operator+(const std::string_view sv1, const std::string_view sv2) {
+        std::string retval;
+        retval.reserve(sv1.size() + sv2.size());
+        retval.append(sv1);
+        retval.append(sv2);
+        return retval;
+    }
+
+    std::string operator+(const std::string_view sv, const char* c) {
+        std::string retval;
+        retval.reserve(sv.size() + std::strlen(c));
+        retval.append(sv);
+        retval.append(c);
+        return retval;
+    }
+
 
     // fallback stringtable to look up key in if entry is not found in currently configured stringtable
     boost::filesystem::path DevDefaultEnglishStringtablePath()
@@ -141,33 +194,31 @@ namespace {
         SS&& filename, std::shared_lock<std::shared_mutex>& access_lock,
         std::shared_ptr<const StringTable> fallback = nullptr)
     {
+        if (auto it = stringtables.find(filename); it != stringtables.end())
+            return it->second;
+
+        auto retval{std::make_shared<StringTable>(filename, std::move(fallback))};
+
         access_lock.unlock();
-        std::unique_lock mutation_lock(stringtable_access_mutex);
-
         try {
-            if (auto it = stringtables.find(filename); it != stringtables.end()) {
-                auto retval{it->second};
-                mutation_lock.unlock();
-                access_lock.lock();
-                return retval;
+            std::unique_lock mutation_lock(stringtable_access_mutex);
+            stringtables.emplace(std::forward<SS>(filename), retval);
+        } catch (...) {
+            ErrorLogger() << "Unable to emplace new stringtable";
+            access_lock.lock();
+            return nullptr;
+        }
 
-            } else {
-                auto retval{std::make_shared<StringTable>(filename, std::move(fallback))};
-                stringtables.emplace(std::forward<SS>(filename), retval);
-                mutation_lock.unlock();
-                access_lock.lock();
-                return retval;
-            }
-        } catch (...) {}
-
-        mutation_lock.unlock();
         access_lock.lock();
-        return nullptr;
+        return retval;
     }
 
     StringTable& GetStringTable(const std::string& stringtable_filename,
                                 std::shared_lock<std::shared_mutex>& access_lock)
     {
+        if (!access_lock)
+            ErrorLogger() << "GetStringTable passed unlocked shared_lock";
+
         if (auto it = stringtables.find(stringtable_filename); it != stringtables.end())
             return *it->second;
 
@@ -176,8 +227,7 @@ namespace {
         auto default_stringtable_filename{GetOptionsDB().GetDefault<std::string>("resource.stringtable.path")};
 
         if (default_stringtable_filename == stringtable_filename) {
-            auto default_table{GetOrCreateStringTable(default_stringtable_filename, access_lock)};
-            if (default_table)
+            if (auto default_table{GetOrCreateStringTable(default_stringtable_filename, access_lock)})
                 return *default_table;
             throw std::runtime_error("couldn't get default stringtable!");
         }
@@ -192,46 +242,49 @@ namespace {
             throw std::runtime_error("couldn't get stringtable or default stringtable!");
     }
 
+    std::shared_mutex path_LUT_mutex;
+    std::map<boost::filesystem::path, std::string> path_to_string_LUT;
+
     StringTable& GetStringTable(const boost::filesystem::path& stringtable_path,
                                 std::shared_lock<std::shared_mutex>& access_lock)
-    { return GetStringTable(PathToString(stringtable_path), access_lock); }
+    {
+        {
+            std::shared_lock path_LUT_read_lock{path_LUT_mutex};
+            auto path_it = path_to_string_LUT.find(stringtable_path);
+            if (path_it != path_to_string_LUT.end())
+                return GetStringTable(path_it->second, access_lock);
+        }
+
+        {
+            std::unique_lock path_LUT_write_lock{path_LUT_mutex};
+            const auto& string_of_path = path_to_string_LUT.emplace(stringtable_path,
+                                                                    PathToString(stringtable_path)).first->second;
+            return GetStringTable(string_of_path, access_lock);
+        }
+    }
 
     StringTable& GetStringTable(std::shared_lock<std::shared_mutex>& access_lock)
     { return GetStringTable(GetStringTableFileName(), access_lock); }
 
     StringTable& GetDevDefaultStringTable(std::shared_lock<std::shared_mutex>& access_lock)
-    { return GetStringTable(PathToString(DevDefaultEnglishStringtablePath()), access_lock); }
+    { return GetStringTable(DevDefaultEnglishStringtablePath(), access_lock); }
 }
 
 #if !defined(FREEORION_ANDROID)
-std::locale GetLocale(const std::string& name) {
-    static bool locale_init { false };
-    // Initialize backend and generator on first use, provide a log for current enivornment locale
-    static auto locale_backend = boost::locale::localization_backend_manager::global();
-    if (!locale_init)
+const std::locale& GetLocale(std::string_view name) {
+    thread_local auto retval = [name_str{std::string{name}}]() -> std::locale {
+        static auto locale_backend = boost::locale::localization_backend_manager::global();
         locale_backend.select("std");
-    static boost::locale::generator locale_gen(locale_backend);
-    if (!locale_init) {
+        static boost::locale::generator locale_gen(locale_backend);
         locale_gen.locale_cache_enabled(true);
         try {
-            InfoLogger() << "Global locale: " << std::use_facet<boost::locale::info>(locale_gen("")).name();
-        } catch (const std::runtime_error&) {
-            ErrorLogger() << "Global locale: set to invalid locale, setting to C locale";
-            std::locale::global(std::locale::classic());
+            auto retval2 = locale_gen.generate(name_str);
+            std::use_facet<boost::locale::info>(retval2);
+            return retval2;
+        } catch (...) {
+            return std::locale::classic();
         }
-        locale_init = true;
-    }
-
-    std::locale retval;
-    try {
-        retval = locale_gen(name);
-    } catch(const std::runtime_error&) {
-        ErrorLogger() << "Requested locale \"" << name << "\" is not a valid locale for this operating system";
-        return std::locale::classic();
-    }
-
-    TraceLogger() << "Requested " << (name.empty() ? "(default)" : name) << " locale"
-                  << " returning " << std::use_facet<boost::locale::info>(retval).name();
+    }();
     return retval;
 }
 #endif
@@ -241,7 +294,7 @@ void FlushLoadedStringTables() {
     stringtables.clear();
 }
 
-const std::map<std::string, std::string, std::less<>>& AllStringtableEntries(bool default_table) {
+AllStringsResultT& AllStringtableEntries(bool default_table) {
     std::shared_lock stringtable_lock(stringtable_access_mutex);
     if (default_table)
         return GetDevDefaultStringTable(stringtable_lock).AllStrings();
@@ -250,27 +303,93 @@ const std::map<std::string, std::string, std::less<>>& AllStringtableEntries(boo
 }
 
 const std::string& UserString(const std::string& str) {
-    std::shared_lock stringtable_lock(stringtable_access_mutex);
-    const auto& [string_found, string_value] = GetStringTable(stringtable_lock).CheckGet(str);
-    if (string_found)
-        return string_value;
-    return GetDevDefaultStringTable(stringtable_lock)[str];
+    {
+        std::shared_lock stringtable_lock(stringtable_access_mutex);
+        const auto& [string_found, string_value] = GetStringTable(stringtable_lock).CheckGet(str);
+        if (string_found)
+            return string_value;
+
+        const auto& [default_string_found, default_string_value] =
+            GetDevDefaultStringTable(stringtable_lock).CheckGet(str);
+        if (default_string_found)
+            return default_string_value;
+    }
+
+    {
+        std::shared_lock error_read_lock(error_stringtable_access_mutex);
+        const auto& [error_string_found, error_string_value] = error_stringtable.CheckGet(str);
+        if (error_string_found)
+            return error_string_value;
+    }
+
+    ErrorLogger() << "Missing string: " << str;
+    DebugLogger() << StackTrace();
+
+    {
+        std::unique_lock error_mutation_lock(error_stringtable_access_mutex);
+        auto error_string{ERROR_STRING + str};
+        return error_stringtable.Add(str, std::move(error_string));
+    }
 }
 
 const std::string& UserString(const std::string_view str) {
-    std::shared_lock stringtable_lock(stringtable_access_mutex);
-    const auto& [string_found, string_value] = GetStringTable(stringtable_lock).CheckGet(str);
-    if (string_found)
-        return string_value;
-    return GetDevDefaultStringTable(stringtable_lock)[str];
+    {
+        std::shared_lock stringtable_lock(stringtable_access_mutex);
+        const auto& [string_found, string_value] = GetStringTable(stringtable_lock).CheckGet(str);
+        if (string_found)
+            return string_value;
+
+        const auto& [default_string_found, default_string_value] =
+            GetDevDefaultStringTable(stringtable_lock).CheckGet(str);
+        if (default_string_found)
+            return default_string_value;
+    }
+
+    {
+        std::shared_lock error_read_lock(error_stringtable_access_mutex);
+        const auto& [error_string_found, error_string_value] = error_stringtable.CheckGet(str);
+        if (error_string_found)
+            return error_string_value;
+    }
+
+    ErrorLogger() << "Missing string: " << str;
+    DebugLogger() << StackTrace();
+
+    {
+        std::unique_lock error_mutation_lock(error_stringtable_access_mutex);
+        auto error_string{ERROR_STRING + str};
+        return error_stringtable.Add(std::string{str}, std::move(error_string));
+    }
 }
 
 const std::string& UserString(const char* str) {
-    std::shared_lock stringtable_lock(stringtable_access_mutex);
-    const auto& [string_found, string_value] = GetStringTable(stringtable_lock).CheckGet(str);
-    if (string_found)
-        return string_value;
-    return GetDevDefaultStringTable(stringtable_lock)[str];
+    {
+        std::shared_lock stringtable_lock(stringtable_access_mutex);
+        const auto& [string_found, string_value] = GetStringTable(stringtable_lock).CheckGet(str);
+        if (string_found)
+            return string_value;
+
+        const auto& [default_string_found, default_string_value] =
+            GetDevDefaultStringTable(stringtable_lock).CheckGet(str);
+        if (default_string_found)
+            return default_string_value;
+    }
+
+    {
+        std::shared_lock error_read_lock(error_stringtable_access_mutex);
+        const auto& [error_string_found, error_string_value] = error_stringtable.CheckGet(str);
+        if (error_string_found)
+            return error_string_value;
+    }
+
+    ErrorLogger() << "Missing string: " << str;
+    DebugLogger() << StackTrace();
+
+    {
+        std::unique_lock error_mutation_lock(error_stringtable_access_mutex);
+        auto error_string{ERROR_STRING + str};
+        return error_stringtable.Add(std::string{str}, std::move(error_string));
+    }
 }
 
 std::vector<std::string> UserStringList(const std::string& key) {
@@ -302,59 +421,6 @@ bool UserStringExists(const char* str) {
            GetDevDefaultStringTable(stringtable_lock).StringExists(str);
 }
 
-LockedStringTable::LockedStringTable() :
-    m_read_lock(stringtable_access_mutex),
-    m_table(GetStringTable(m_read_lock)),
-    m_default_table(GetDevDefaultStringTable(m_read_lock))
-{}
-
-LockedStringTable::~LockedStringTable() = default;
-
-const std::string& LockedStringTable::UserString(const std::string& str) {
-    const auto& [string_found, string_value] = m_table.CheckGet(str);
-    if (string_found)
-        return string_value;
-    m_read_lock.unlock();
-    std::unique_lock mutation_lock(stringtable_access_mutex);
-    auto& retval{m_default_table[str]};
-    mutation_lock.unlock();
-    m_read_lock.lock();
-    return retval;
-}
-
-const std::string& LockedStringTable::UserString(const std::string_view str) {
-    const auto& [string_found, string_value] = m_table.CheckGet(str);
-    if (string_found)
-        return string_value;
-    m_read_lock.unlock();
-    std::unique_lock mutation_lock(stringtable_access_mutex);
-    auto& retval{m_default_table[str]};
-    mutation_lock.unlock();
-    m_read_lock.lock();
-    return retval;
-}
-
-const std::string& LockedStringTable::UserString(const char* str) {
-    const auto& [string_found, string_value] = m_table.CheckGet(str);
-    if (string_found)
-        return string_value;
-    m_read_lock.unlock();
-    std::unique_lock mutation_lock(stringtable_access_mutex);
-    auto& retval{m_default_table[str]};
-    mutation_lock.unlock();
-    m_read_lock.lock();
-    return retval;
-}
-
-bool LockedStringTable::UserStringExists(const std::string& str) const
-{ return m_table.StringExists(str) || m_default_table.StringExists(str); }
-
-bool LockedStringTable::UserStringExists(const std::string_view str) const
-{ return m_table.StringExists(str) || m_default_table.StringExists(str); }
-
-bool LockedStringTable::UserStringExists(const char* str) const
-{ return m_table.StringExists(str) || m_default_table.StringExists(str); }
-
 boost::format FlexibleFormat(const std::string &string_to_format) {
     try {
         boost::format retval(string_to_format);
@@ -375,30 +441,27 @@ const std::string& Language() {
 
 std::string RomanNumber(unsigned int n) {
     //letter pattern (N) and the associated values (V)
-    static const std::string N[] = { "M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"};
-    constexpr unsigned int V[] =   {1000,  900, 500,  400, 100,   90,  50,   40,  10,    9,   5,    4,   1};
-    unsigned int remainder = n; // remainder of the number to be written
-    int i = 0;                  // pattern index
-    if (n == 0) return "";      // the romans didn't know there is a zero, read a book about history of the zero if you want to know more
-                                // Roman numbers are written using patterns, you chosse the highest pattern lower that the number
-                                // write it down, and substract it's value until you reach zero.
+    static constexpr std::array N = {  "M",  "CM",  "D",  "CD",  "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I" };
+    static constexpr std::array V = { 1000u, 900u, 500u,  400u, 100u,  90u, 50u,  40u, 10u,   9u,  5u,   4u,  1u };
+    if (n == 0) return ""; // the romans didn't know there is a zero, read a book about history of the zero if you want to know more
+                           // Roman numbers are written using patterns, you chosse the highest pattern lower that the number
+                           // write it down, and substract it's value until you reach zero.
 
     // safety check to avoid very long loops
     if (n > 10000)
         return "!";
 
-    //we start with the highest pattern and reduce the size every time it doesn't fit
+    // start with the highest pattern and reduce the size every time it doesn't fit
     std::string retval;
+    unsigned int remainder = n; // remainder of the number to be written
+    int i = 0;                  // pattern index
     while (remainder > 0) {
-        //check if number is larger than the actual pattern value
+        // check if number is larger than the actual pattern value
         if (remainder >= V[i]) {
-            //write pattern down
-            retval += N[i];
-            //reduce number
-            remainder -= V[i];
+            retval += N[i]; // write pattern down
+            remainder -= V[i]; // reduce number
         } else {
-            //we need the next pattern
-            i++;
+            i++; // go to next pattern
         }
     }
     return retval;
@@ -444,8 +507,6 @@ namespace {
 }
 
 std::string DoubleToString(double val, int digits, bool always_show_sign) {
-    std::string text; // = ""
-
     // minimum digits is 2. Fewer than this and things can't be sensibly displayed.
     // eg. 300 with 2 digits is 0.3k. With 1 digits, it would be unrepresentable.
     digits = std::max(digits, 2);
@@ -458,10 +519,12 @@ std::string DoubleToString(double val, int digits, bool always_show_sign) {
 
     // early termination if magnitude is 0
     if (mag == 0.0 || RoundMagnitude(mag, digits + 1) == 0.0) {
-        std::string format = "%1." + std::to_string(digits - 1) + "f";
-        text += (boost::format(format) % mag).str();
-        return text;
+        std::string format = "%1." + std::to_string(digits - 1) + "f"; // TODO: avoid extra string here?
+        return (boost::format(format) % mag).str();
     }
+
+    std::string text;
+    text.reserve(digits+3);
 
     // prepend signs if neccessary
     int effective_sign = EffectiveSign(val);
@@ -470,9 +533,6 @@ std::string DoubleToString(double val, int digits, bool always_show_sign) {
     else if (always_show_sign)
         text += "+";
 
-    if (mag > LARGE_UI_DISPLAY_VALUE)
-        mag = LARGE_UI_DISPLAY_VALUE;
-
     // if value is effectively 0, avoid unnecessary later processing
     if (effective_sign == 0) {
         text = "0.0";
@@ -480,6 +540,9 @@ std::string DoubleToString(double val, int digits, bool always_show_sign) {
             text += "0";  // fill in 0's to required number of digits
         return text;
     }
+
+    if (mag > LARGE_UI_DISPLAY_VALUE)
+        mag = LARGE_UI_DISPLAY_VALUE;
 
     //std::cout << std::endl << "DoubleToString val: " << val << " digits: " << digits << std::endl;
     const double initial_mag = mag;
@@ -553,7 +616,7 @@ std::string DoubleToString(double val, int digits, bool always_show_sign) {
         text += "n";        // nano
         break;
     case -6:
-        text += "\xC2\xB5"; // micro.  mu in UTF-8
+        text += "\xC2\xB5"; // micro / µ in UTF-8
         break;
     case -3:
         text += "m";        // milli

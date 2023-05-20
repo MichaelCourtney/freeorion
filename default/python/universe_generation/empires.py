@@ -20,7 +20,6 @@ from planets import (
     planet_types_real,
 )
 from starsystems import pick_star_type, star_types_real
-
 from util import report_error, unique_product
 
 
@@ -46,10 +45,11 @@ def get_starting_species_pool():
     """
     Empire species pool generator, return random empire species and ensure somewhat even distribution
     """
-    # fill the initial pool with two sets of all playable species
-    # this way we have somewhat, but not absolutely strict even distribution of starting species at least when there
-    # is only a few number of players (some species can occur twice at max while others not at all)
-    pool = fo.get_playable_species() * 2
+    # fill the initial pool of playable species, without repetitions unless RULE_ALLOW_REPEATED_SPECIES is true
+    if not fo.getGameRules().getToggle("RULE_ALLOW_REPEATED_SPECIES"):
+        pool = fo.get_playable_species()
+    else:
+        pool = fo.get_playable_species() * 2
 
     # randomize order in initial pool so we don't get the same species all the time
     random.shuffle(pool)
@@ -102,7 +102,7 @@ class HomeSystemFinder:
         self.system_merit = {}
         self.num_home_systems = _num_home_systems
 
-    def find_home_systems_for_min_jump_distance(self, systems_pool, min_jumps):
+    def find_home_systems_for_min_jump_distance(self, systems_pool, min_jumps):  # noqa: C901
         """
         Return a good list of home systems or an empty list if there are fewer than num_home_systems in the pool.
 
@@ -252,7 +252,7 @@ def find_home_systems(num_home_systems, pool_list, jump_distance, min_jump_dista
     return []
 
 
-def add_planets_to_vicinity(vicinity, num_planets, gsd):
+def add_planets_to_vicinity(vicinity, num_planets, gsd):  # noqa C901
     """
     Adds the specified number of planets to the specified systems.
     """
@@ -320,7 +320,7 @@ def add_planets_to_vicinity(vicinity, num_planets, gsd):
         # pick a planet size, continue until we get a size that matches the HS_ACCEPTABLE_PLANET_SIZES option
         planet_size = fo.planetSize.unknown
         while planet_size not in HS_ACCEPTABLE_PLANET_SIZES:
-            planet_size = calc_planet_size(star_type, orbit, fo.galaxySetupOption.high, gsd.shape)
+            planet_size = calc_planet_size(star_type, orbit, fo.galaxySetupOptionGeneric.high, gsd.shape)
 
         # pick an according planet type
         planet_type = calc_planet_type(star_type, orbit, planet_size)
@@ -334,7 +334,7 @@ def add_planets_to_vicinity(vicinity, num_planets, gsd):
         num_planets -= 1
 
 
-def compile_home_system_list(num_home_systems, systems, gsd):
+def compile_home_system_list(num_home_systems, systems, gsd):  # noqa: max-complexity
     """
     Compiles a list with a requested number of home systems.
     """
@@ -484,7 +484,8 @@ def compile_home_system_list(num_home_systems, systems, gsd):
     return home_systems
 
 
-def setup_empire(empire, empire_name, home_system, starting_species, player_name):
+# noqa: C901
+def setup_empire(empire, empire_name, home_system, starting_species, player_name):  # noqa: C901
     """
     Sets up various aspects of an empire, like empire name, homeworld, etc.
     """
@@ -601,10 +602,14 @@ def setup_empire(empire, empire_name, home_system, starting_species, player_name
                     % (ship_design, fleet_plan.name())
                 )
 
+    # starting resource stockpiles
+    print("Player", player_name, ": add starting resource stockpiles")
+    fo.empire_set_stockpile(empire, fo.resourceType.influence, 20.0)
+
     return True
 
 
-def home_system_layout(home_systems, systems):
+def home_system_layout(home_systems, systems):  # noqa: C901
     """
     Home systems layout generation to place teams.
     Returns map from home system to neighbor home systems.

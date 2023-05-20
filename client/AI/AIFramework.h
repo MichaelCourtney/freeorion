@@ -25,9 +25,11 @@ struct DiplomaticStatusUpdateInfo;
 
 /** @brief Class allowing AI to recieve basic game events.
  */
-class PythonAI : public PythonBase {
+class PythonAI final : public PythonBase {
 public:
     bool Initialize();
+
+    void Start();
 
     /** Initializes AI Python imports. */
     bool InitImports() override;
@@ -98,25 +100,9 @@ public:
      */
     [[nodiscard]] const std::string& GetSaveStateString() const;
 
-    /** @brief Set the aggressiveness of this AI
-     *
-     * The AI should change their behaviour when setting another aggression
-     * level.
-     *
-     * @param aggr The new aggression level.  The value should be one of
-     *      Aggression.
-     */
-    void SetAggression(int aggr);
-
 private:
     // reference to imported Python AI module
     boost::python::object m_python_module_ai;
-
-    /** @brief The current aggressiveness of this AI
-     *
-     * The value should be one of Aggression.
-     */
-    int m_aggression = 0;
 };
 
 

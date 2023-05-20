@@ -22,7 +22,7 @@ namespace {
         // makes all ships cost 1 PP and take 1 turn to produce
         rules.Add<bool>(UserStringNop("RULE_CHEAP_AND_FAST_SHIP_PRODUCTION"),
                         UserStringNop("RULE_CHEAP_AND_FAST_SHIP_PRODUCTION_DESC"),
-                        "", false, true);
+                        "TEST", false, true);
     }
     bool temp_bool = RegisterGameRules(&AddRules);
 
@@ -53,7 +53,7 @@ namespace {
 CommonParams::CommonParams(std::unique_ptr<ValueRef::ValueRef<double>>&& production_cost_,
                            std::unique_ptr<ValueRef::ValueRef<int>>&& production_time_,
                            bool producible_,
-                           const std::set<std::string>& tags_,
+                           std::set<std::string>& tags_,
                            std::unique_ptr<Condition::Condition>&& location_,
                            std::vector<std::unique_ptr<Effect::EffectsGroup>>&& effects_,
                            ConsumptionMap<MeterType>&& production_meter_consumption_,
@@ -62,14 +62,14 @@ CommonParams::CommonParams(std::unique_ptr<ValueRef::ValueRef<double>>&& product
     production_cost(std::move(production_cost_)),
     production_time(std::move(production_time_)),
     producible(producible_),
+    tags(tags_.begin(), tags_.end()),
     production_meter_consumption(std::move(production_meter_consumption_)),
     production_special_consumption(std::move(production_special_consumption_)),
     location(std::move(location_)),
     enqueue_location(std::move(enqueue_location_)),
     effects(std::move(effects_))
 {
-    for (const std::string& tag : tags_)
-        tags.insert(boost::to_upper_copy<std::string>(tag));
+    std::transform(tags.begin(), tags.end(), tags.begin(), [](const auto& t) { return boost::to_upper_copy(t); } );
 }
 
 CommonParams::~CommonParams() = default;
@@ -96,11 +96,11 @@ ParsedShipDesign::ParsedShipDesign(
     m_name_desc_in_stringtable(name_desc_in_stringtable)
 {}
 
+
 ////////////////////////////////////////////////
 // ShipDesign
 ////////////////////////////////////////////////
-ShipDesign::ShipDesign()
-{}
+ShipDesign::ShipDesign() = default;
 
 ShipDesign::ShipDesign(const boost::optional<std::invalid_argument>& should_throw,
                        std::string name, std::string description,
@@ -134,29 +134,26 @@ ShipDesign::ShipDesign(const ParsedShipDesign& design) :
                design.m_is_monster, design.m_uuid)
 {}
 
-const std::string& ShipDesign::Name(bool stringtable_lookup /* = true */) const {
+const std::string& ShipDesign::Name(bool stringtable_lookup) const {
     if (m_name_desc_in_stringtable && stringtable_lookup)
         return UserString(m_name);
     else
         return m_name;
 }
 
-void ShipDesign::SetName(const std::string& name) {
+void ShipDesign::SetName(std::string name) noexcept {
     if (!name.empty() && !m_name.empty())
-        m_name = name;
+        m_name = std::move(name);
 }
 
-void ShipDesign::SetUUID(const boost::uuids::uuid& uuid)
-{ m_uuid = uuid; }
-
-const std::string& ShipDesign::Description(bool stringtable_lookup /* = true */) const {
+const std::string& ShipDesign::Description(bool stringtable_lookup) const {
     if (m_name_desc_in_stringtable && stringtable_lookup)
         return UserString(m_description);
     else
         return m_description;
 }
 
-void ShipDesign::SetDescription(const std::string& description)
+void ShipDesign::SetDescription(const std::string& description) // TODO: pass by value with move
 { m_description = description; }
 
 bool ShipDesign::ProductionCostTimeLocationInvariant() const {
@@ -179,11 +176,9 @@ bool ShipDesign::ProductionCostTimeLocationInvariant() const {
     return true;
 }
 
-float ShipDesign::ProductionCost(int empire_id, int location_id) const {
+float ShipDesign::ProductionCost(int empire_id, int location_id, const ScriptingContext& context) const {
     if (GetGameRules().Get<bool>("RULE_CHEAP_AND_FAST_SHIP_PRODUCTION"))
         return 1.0f;
-
-    ScriptingContext context; // TODO: pass in and use, instead of creating here...
 
     float cost_accumulator = 0.0f;
     if (const ShipHull* hull = GetShipHull(m_hull))
@@ -204,18 +199,18 @@ float ShipDesign::ProductionCost(int empire_id, int location_id) const {
     return std::min(std::max(0.0f, cost_accumulator), ARBITRARY_LARGE_COST);
 }
 
-float ShipDesign::PerTurnCost(int empire_id, int location_id) const
-{ return ProductionCost(empire_id, location_id) / std::max(1, ProductionTime(empire_id, location_id)); }
+float ShipDesign::PerTurnCost(int empire_id, int location_id, const ScriptingContext& context) const {
+    return ProductionCost(empire_id, location_id, context) /
+        std::max(1, ProductionTime(empire_id, location_id, context));
+}
 
-int ShipDesign::ProductionTime(int empire_id, int location_id) const {
+int ShipDesign::ProductionTime(int empire_id, int location_id, const ScriptingContext& context) const {
     if (GetGameRules().Get<bool>("RULE_CHEAP_AND_FAST_SHIP_PRODUCTION"))
         return 1;
 
-    ScriptingContext context; // TODO: pass in
-
     int time_accumulator = 1;
     if (const ShipHull* hull = GetShipHull(m_hull))
-        time_accumulator = std::max(time_accumulator, hull->ProductionTime(empire_id, location_id));
+        time_accumulator = std::max(time_accumulator, hull->ProductionTime(empire_id, location_id, context));
 
     for (const std::string& part_name : m_parts)
         if (const ShipPart* part = GetShipPart(part_name))
@@ -229,7 +224,7 @@ int ShipDesign::ProductionTime(int empire_id, int location_id) const {
 }
 
 bool ShipDesign::CanColonize() const {
-    for (const std::string& part_name : m_parts) {
+    for (const auto& part_name : m_parts) {
         if (part_name.empty())
             continue;
         if (const ShipPart* part = GetShipPart(part_name))
@@ -243,7 +238,7 @@ float ShipDesign::Defense() const {
     // accumulate defense from defensive parts in design.
     float total_defense = 0.0f;
     const ShipPartManager& part_manager = GetShipPartManager();
-    for (const std::string& part_name : Parts()) {
+    for (const auto& part_name : m_parts) {
         const ShipPart* part = part_manager.GetShipPart(part_name);
         if (part && (part->Class() == ShipPartClass::PC_SHIELD || part->Class() == ShipPartClass::PC_ARMOUR))
             total_defense += part->Capacity();
@@ -319,7 +314,7 @@ std::vector<std::string> ShipDesign::Parts(ShipSlotType slot_type) const {
     retval.reserve(m_parts.size());
     for (unsigned int i = 0; i < m_parts.size(); ++i)
         if (slots[i].type == slot_type)
-            retval.emplace_back(m_parts[i]);
+            retval.push_back(m_parts[i]);
 
     return retval;
 }
@@ -333,7 +328,7 @@ std::vector<std::string> ShipDesign::Weapons() const {
             continue;
         ShipPartClass part_class = part->Class();
         if (part_class == ShipPartClass::PC_DIRECT_WEAPON || part_class == ShipPartClass::PC_FIGHTER_BAY)
-            retval.emplace_back(part_name);
+            retval.push_back(part_name);
     }
     return retval;
 }
@@ -345,15 +340,15 @@ int ShipDesign::PartCount() const {
     return count;
 }
 
-bool ShipDesign::ProductionLocation(int empire_id, int location_id) const { // TODO: pass in ScriptingContext
-    Empire* empire = GetEmpire(empire_id); // TODO: get from context
+bool ShipDesign::ProductionLocation(int empire_id, int location_id, const ScriptingContext& context) const {
+    auto empire = context.GetEmpire(empire_id);
     if (!empire) {
         DebugLogger() << "ShipDesign::ProductionLocation: Unable to get pointer to empire " << empire_id;
         return false;
     }
 
     // must own the production location...
-    auto location = Objects().get(location_id); // TODO: get from context
+    auto location = context.ContextObjects().getRaw(location_id);
     if (!location) {
         WarnLogger() << "ShipDesign::ProductionLocation unable to get location object with id " << location_id;
         return false;
@@ -361,21 +356,19 @@ bool ShipDesign::ProductionLocation(int empire_id, int location_id) const { // T
     if (!location->OwnedBy(empire_id))
         return false;
 
-    auto planet = std::dynamic_pointer_cast<const Planet>(location);
-    std::shared_ptr<const Ship> ship;
-    if (!planet)
-        ship = std::dynamic_pointer_cast<const Ship>(location);
-    if (!planet && !ship)
-        return false;
+    std::string_view species_name = "";
+    if (location->ObjectType() == UniverseObjectType::OBJ_PLANET)
+        species_name = static_cast<const Planet*>(location)->SpeciesName();
+    else if (location->ObjectType() == UniverseObjectType::OBJ_SHIP)
+        species_name = static_cast<const Ship*>(location)->SpeciesName();
 
-    // ships can only be produced by species that are not planetbound
-    const std::string& species_name = planet ? planet->SpeciesName() : (ship ? ship->SpeciesName() : EMPTY_STRING);
     if (species_name.empty())
         return false;
-    const Species* species = GetSpecies(species_name);
+    const Species* species = context.species.GetSpecies(species_name);
     if (!species)
         return false;
 
+    // ships can only be produced by species that are not planetbound
     if (!species->CanProduceShips())
         return false;
     // also, species that can't colonize can't produce colony ships
@@ -389,12 +382,12 @@ bool ShipDesign::ProductionLocation(int empire_id, int location_id) const { // T
         return false;
     }
     // evaluate using location as the source, as it should be an object owned by this empire.
-    ScriptingContext location_as_source_context{location, location};
-    if (!hull->Location()->Eval(location_as_source_context, location))
+    const ScriptingContext location_as_source_context{location, context};
+    if (!hull->Location()->EvalOne(location_as_source_context, location))
         return false;
 
     // apply external and internal parts' location conditions to potential location
-    for (const std::string& part_name : m_parts) {
+    for (const auto& part_name : m_parts) {
         if (part_name.empty())
             continue;       // empty slots don't limit build location
 
@@ -403,7 +396,7 @@ bool ShipDesign::ProductionLocation(int empire_id, int location_id) const { // T
             ErrorLogger() << "ShipDesign::ProductionLocation  ShipDesign couldn't get part with name " << part_name;
             return false;
         }
-        if (!part->Location()->Eval(location_as_source_context, location))
+        if (!part->Location()->EvalOne(location_as_source_context, location))
             return false;
     }
     // location matched all hull and part conditions, so is a valid build location
@@ -413,20 +406,13 @@ bool ShipDesign::ProductionLocation(int empire_id, int location_id) const { // T
 void ShipDesign::SetID(int id)
 { m_id = id; }
 
-bool ShipDesign::ValidDesign(const std::string& hull, const std::vector<std::string>& parts_in) {
-    auto parts = parts_in;
-    return !MaybeInvalidDesign(hull, parts, true);
-}
+bool ShipDesign::ValidDesign(const std::string& hull, const std::vector<std::string>& parts_in)
+{ return !MaybeInvalidDesign(hull, std::vector<std::string>(parts_in), true); }
 
 boost::optional<std::pair<std::string, std::vector<std::string>>>
-ShipDesign::MaybeInvalidDesign(const std::string& hull_in,
-                               std::vector<std::string>& parts_in,
-                               bool produce_log)
+ShipDesign::MaybeInvalidDesign(std::string hull, std::vector<std::string> parts, bool produce_log)
 {
     bool is_valid = true;
-
-    auto hull = hull_in;
-    auto parts = parts_in;
 
     // ensure hull type exists
     auto ship_hull = GetShipHullManager().GetShipHull(hull);
@@ -446,7 +432,7 @@ ShipDesign::MaybeInvalidDesign(const std::string& hull_in,
                 ErrorLogger() << "Invalid ShipDesign no available hulls ";
             hull.clear();
             parts.clear();
-            return std::make_pair(hull, parts);
+            return std::pair(std::move(hull), std::move(parts));
         }
     }
 
@@ -461,7 +447,7 @@ ShipDesign::MaybeInvalidDesign(const std::string& hull_in,
 
     // If parts is smaller than the full hull size pad it and the incoming parts
     if (parts.size() < ship_hull->NumSlots())
-        parts_in.resize(ship_hull->NumSlots(), "");
+        parts.resize(ship_hull->NumSlots(), "");
 
     // Truncate or pad with "" parts.
     parts.resize(ship_hull->NumSlots(), "");
@@ -473,7 +459,7 @@ ShipDesign::MaybeInvalidDesign(const std::string& hull_in,
     for (auto& part_name : parts) {
         if (part_name.empty())
             continue;
-        if (hull_exclusions.count(part_name)) {
+        if (std::count(hull_exclusions.begin(), hull_exclusions.end(), part_name)) {
             is_valid = false;
             if (produce_log)
                 WarnLogger() << "Invalid ShipDesign part \"" << part_name << "\" is excluded by \""
@@ -483,62 +469,72 @@ ShipDesign::MaybeInvalidDesign(const std::string& hull_in,
     }
 
     // check part exclusions against other parts and hull
-    std::unordered_map<std::string, unsigned int> component_name_counts;
-    component_name_counts[hull] = 1;
-    for (auto part_name : parts)
-        component_name_counts[part_name]++;
-    component_name_counts.erase("");
 
+    // find how many of each part and hull are present...
+    boost::container::flat_map<std::string_view, uint8_t> component_counts;
+    component_counts.reserve(parts.size() + 1);
+    component_counts.emplace(hull, 1);
+    for (auto& part : parts)
+        component_counts[part]++;
+
+    auto has_component = [&component_counts](std::string_view sv) -> bool
+    { return component_counts.contains(sv); };
+    auto has_multiples_of_component = [&component_counts](std::string_view sv) -> bool
+    { return component_counts.contains(sv); };
+
+
+    // check each part's existance and exclusions
     for (std::size_t ii = 0; ii < parts.size(); ++ii) {
-        const auto part_name = parts[ii];
-        // Ignore empty slots, which are valid.
-        if (part_name.empty())
+        std::string_view part_name = parts[ii];
+        if (part_name.empty()) // ignore empty slots, which are always valid
             continue;
 
         // Parts must exist...
         const auto ship_part = GetShipPart(part_name);
         if (!ship_part) {
+            is_valid = false;
             if (produce_log)
                 WarnLogger() << "Invalid ShipDesign part \"" << part_name << "\" not found"
                              << ". Removing \"" << part_name <<"\"";
-            is_valid = false;
             continue;
         }
 
         for (const auto& excluded : ship_part->Exclusions()) {
             // confict if a different excluded part is present, or if there are
             // two or more of a part that excludes itself
-            if ((excluded == part_name && component_name_counts[excluded] > 1) ||
-                (excluded != part_name && component_name_counts[excluded] > 0))
+            if ((excluded == part_name && has_multiples_of_component(excluded)) ||
+                (excluded != part_name && has_component(excluded)))
             {
                 is_valid = false;
                 if (produce_log)
                     WarnLogger() << "Invalid ShipDesign part " << part_name << " conflicts with \""
                                  << excluded << "\". Removing \"" << part_name <<"\"";
-                continue;
+                else
+                    break; // don't break if logging, so all conflicts will be logged
             }
         }
+        if (!is_valid && !produce_log)
+            continue; // if not logging, don't also need to check slot moutability
 
         // verify part can mount in indicated slot
-        const ShipSlotType& slot_type = slots[ii].type;
+        const auto slot_type = slots[ii].type;
 
         if (!ship_part->CanMountInSlotType(slot_type)) {
             if (produce_log)
                 DebugLogger() << "Invalid ShipDesign part \"" << part_name << "\" can't be mounted in "
                               << slot_type << " slot. Removing \"" << part_name <<"\"";
             is_valid = false;
-            continue;
         }
     }
 
-    if (is_valid)
+    if (is_valid) // if valid, return none to indicate no modifications needed
         return boost::none;
     else
-        return std::make_pair(hull, parts);
+        return std::pair(std::move(hull), std::move(parts)); // return modified design
 }
 
 void ShipDesign::ForceValidDesignOrThrow(const boost::optional<std::invalid_argument>& should_throw,
-                                         bool  produce_log)
+                                         bool produce_log)
 {
     auto force_valid = MaybeInvalidDesign(m_hull, m_parts, produce_log);
     if (!force_valid)
@@ -574,6 +570,8 @@ void ShipDesign::BuildStatCaches() {
         return;
     }
 
+    std::vector<std::string_view> tags(hull->Tags().begin(), hull->Tags().end());
+
     m_producible =      hull->Producible();
     m_detection =       hull->Detection();
     m_colony_capacity = hull->ColonyCapacity();
@@ -598,6 +596,8 @@ void ShipDesign::BuildStatCaches() {
             ErrorLogger() << "ShipDesign::BuildStatCaches couldn't get part with name " << part_name;
             continue;
         }
+
+        std::copy(part->Tags().begin(), part->Tags().end(), std::back_inserter(tags));
 
         if (!part->Producible())
             m_producible = false;
@@ -670,9 +670,28 @@ void ShipDesign::BuildStatCaches() {
             part_class < ShipPartClass::NUM_SHIP_PART_CLASSES)
         { m_num_part_classes[part_class]++; }
     }
+
+    // collect unique tags
+    std::sort(tags.begin(), tags.end());
+    auto last = std::unique(tags.begin(), tags.end());
+
+    // compile concatenated tags into contiguous storage
+    // TODO: transform_reduce when available on all platforms...
+    std::size_t tags_sz = 0;
+    std::for_each(tags.begin(), last, [&tags_sz](auto str) { tags_sz += str.size(); });
+
+    m_tags_concatenated.reserve(tags_sz);
+    m_tags.clear();
+    m_tags.reserve(tags.size());
+
+    std::for_each(tags.begin(), last, [this](auto str) {
+        auto next_start = m_tags_concatenated.size();
+        m_tags_concatenated.append(str);
+        m_tags.push_back(std::string_view{m_tags_concatenated}.substr(next_start));
+    });
 }
 
-std::string ShipDesign::Dump(unsigned short ntabs) const {
+std::string ShipDesign::Dump(uint8_t ntabs) const {
     std::string retval = DumpIndent(ntabs) + "ShipDesign\n";
     retval += DumpIndent(ntabs+1) + "name = \"" + m_name + "\"\n";
     retval += DumpIndent(ntabs+1) + "uuid = \"" + boost::uuids::to_string(m_uuid) + "\"\n";
@@ -685,7 +704,7 @@ std::string ShipDesign::Dump(unsigned short ntabs) const {
     if (m_parts.empty()) {
         retval += "[]\n";
     } else if (m_parts.size() == 1) {
-        retval += "\"" + *m_parts.begin() + "\"\n";
+        retval += "\"" + m_parts.front() + "\"\n";
     } else {
         retval += "[\n";
         for (const std::string& part_name : m_parts) {
@@ -699,8 +718,8 @@ std::string ShipDesign::Dump(unsigned short ntabs) const {
     return retval;
 }
 
-unsigned int ShipDesign::GetCheckSum() const {
-    unsigned int retval{0};
+uint32_t ShipDesign::GetCheckSum() const {
+    uint32_t retval{0};
     CheckSums::CheckSumCombine(retval, m_id);
     CheckSums::CheckSumCombine(retval, m_uuid);
     CheckSums::CheckSumCombine(retval, m_name);
@@ -726,18 +745,18 @@ bool operator ==(const ShipDesign& first, const ShipDesign& second) {
 
     // don't care if order is different, as long as the types and numbers of parts is the same
     for (const std::string& part_name : first.Parts())
-    { ++first_parts[part_name]; }
+        ++first_parts[part_name];
 
     for (const std::string& part_name : second.Parts())
-    { ++second_parts[part_name]; }
+        ++second_parts[part_name];
 
     return first_parts == second_parts;
 }
 
+
 /////////////////////////////////////
 // PredefinedShipDesignManager     //
 /////////////////////////////////////
-// static(s)
 PredefinedShipDesignManager* PredefinedShipDesignManager::s_instance = nullptr;
 
 PredefinedShipDesignManager::PredefinedShipDesignManager() {
@@ -756,35 +775,24 @@ namespace {
             return;
 
         /* check if there already exists this same design in the universe. */
-        for (auto it = universe.beginShipDesigns(); it != universe.endShipDesigns(); ++it) {
-            const ShipDesign* existing_design = it->second;
-            if (!existing_design) {
-                ErrorLogger() << "PredefinedShipDesignManager::AddShipDesignsToUniverse found an invalid design in the Universe";
-                continue;
-            }
-
-            if (DesignsTheSame(*existing_design, *design)) {
+        for (const auto& [existing_id, existing_design] : universe.ShipDesigns()) {
+            if (DesignsTheSame(existing_design, *design)) {
                 WarnLogger() << "AddShipDesignsToUniverse found an exact duplicate of ship design "
                              << design->Name() << "to be added, so is not re-adding it";
-                design_generic_ids[design->Name(false)] = existing_design->ID();
+                design_generic_ids[design->Name(false)] = existing_id;
                 return; // design already added; don't need to do so again
             }
         }
 
         // duplicate design to add to Universe
-        ShipDesign* copy = new ShipDesign(*design);
-
-        bool success = universe.InsertShipDesign(copy);
-        if (!success) {
+        const auto new_design_id = universe.InsertShipDesign(*design);
+        if (new_design_id == INVALID_DESIGN_ID) {
             ErrorLogger() << "Empire::AddShipDesign Unable to add new design to universe";
-            delete copy;
             return;
         }
 
-        auto new_design_id = copy->ID();
         design_generic_ids[design->Name(false)] = new_design_id;
-        TraceLogger() << "AddShipDesignsToUniverse added ship design "
-                      << design->Name() << " to universe.";
+        TraceLogger() << "AddShipDesignsToUniverse added ship design " << design->Name() << " to universe.";
     };
 }
 
@@ -804,13 +812,12 @@ PredefinedShipDesignManager& PredefinedShipDesignManager::GetPredefinedShipDesig
     return manager;
 }
 
-
 std::vector<const ShipDesign*> PredefinedShipDesignManager::GetOrderedShipDesigns() const {
     CheckPendingDesignsTypes();
     std::vector<const ShipDesign*> retval;
     retval.reserve(m_ship_ordering.size());
     for (const auto& uuid : m_ship_ordering)
-        retval.emplace_back(m_designs.at(uuid).get());
+        retval.push_back(m_designs.at(uuid).get());
     return retval;
 }
 
@@ -819,27 +826,27 @@ std::vector<const ShipDesign*> PredefinedShipDesignManager::GetOrderedMonsterDes
     std::vector<const ShipDesign*> retval;
     retval.reserve(m_monster_ordering.size());
     for (const auto& uuid : m_monster_ordering)
-        retval.emplace_back(m_designs.at(uuid).get());
+        retval.push_back(m_designs.at(uuid).get());
     return retval;
 }
 
 int PredefinedShipDesignManager::GetDesignID(const std::string& name) const {
     CheckPendingDesignsTypes();
-    const auto& it = m_design_generic_ids.find(name);
+    const auto it = m_design_generic_ids.find(name);
     if (it == m_design_generic_ids.end())
         return INVALID_DESIGN_ID;
     return it->second;
 }
 
-unsigned int PredefinedShipDesignManager::GetCheckSum() const {
+uint32_t PredefinedShipDesignManager::GetCheckSum() const {
     CheckPendingDesignsTypes();
-    unsigned int retval{0};
+    uint32_t retval{0};
 
     auto build_checksum = [&retval, this](const std::vector<boost::uuids::uuid>& ordering){
         for (auto const& uuid : ordering) {
             auto it = m_designs.find(uuid);
             if (it != m_designs.end())
-                CheckSums::CheckSumCombine(retval, std::make_pair(it->second->Name(false), *it->second));
+                CheckSums::CheckSumCombine(retval, std::pair(it->second->Name(false), *it->second));
         }
         CheckSums::CheckSumCombine(retval, ordering.size());
     };
@@ -881,14 +888,14 @@ namespace {
         for (auto& uuid_and_design : disk_designs) {
             auto& design = uuid_and_design.second.first;
 
-            if (designs.count(design->UUID())) {
+            if (designs.contains(design->UUID())) {
                 ErrorLogger() << design->Name() << " ship design does not have a unique UUID for "
                               << "its type monster or pre-defined. "
                               << designs[design->UUID()]->Name() << " has the same UUID.";
                 continue;
             }
 
-            if (name_to_uuid.count(design->Name())) {
+            if (name_to_uuid.contains(design->Name())) {
                 ErrorLogger() << design->Name() << " ship design does not have a unique name for "
                               << "its type monster or pre-defined.";
                 continue;
@@ -982,11 +989,11 @@ LoadShipDesignsAndManifestOrderFromParseResults(
                           << design->UUID() << " for name " << design->Name();
         }
 
-        if (!saved_designs.count(design->UUID())) {
+        if (!saved_designs.contains(design->UUID())) {
             TraceLogger() << "Added saved design UUID " << design->UUID()
                           << " with name " << design->Name();
             auto uuid = design->UUID();
-            saved_designs.emplace(std::move(uuid), std::make_pair(std::move(design), design_and_path.second));
+            saved_designs.emplace(std::move(uuid), std::pair(std::move(design), design_and_path.second));
         } else {
             WarnLogger() << "Duplicate ship design UUID " << design->UUID()
                          << " found for ship design " << design->Name()
@@ -1003,13 +1010,13 @@ LoadShipDesignsAndManifestOrderFromParseResults(
         if (uuid.is_nil())
             continue;
 
-        if (!saved_designs.count(uuid)) {
+        if (!saved_designs.contains(uuid)) {
             WarnLogger() << "UUID " << uuid << " is in ship design manifest for "
                          << "a ship design that does not exist.";
             ship_manifest_inconsistent = true;
             continue;
         }
-        ordering.emplace_back(uuid);
+        ordering.push_back(uuid);
     }
 
     // Verify that every design in saved_designs is in ordering.
@@ -1019,7 +1026,7 @@ LoadShipDesignsAndManifestOrderFromParseResults(
             uuids_in_ordering{ordering.begin(), ordering.end()};
         std::map<std::string, boost::uuids::uuid> missing_uuids_sorted_by_name;
         for (auto& uuid_to_design_and_filename : saved_designs) {
-            if (uuids_in_ordering.count(uuid_to_design_and_filename.first))
+            if (uuids_in_ordering.contains(uuid_to_design_and_filename.first))
                 continue;
             ship_manifest_inconsistent = true;
             missing_uuids_sorted_by_name.emplace(
@@ -1031,7 +1038,7 @@ LoadShipDesignsAndManifestOrderFromParseResults(
             WarnLogger() << "Missing ship design " << name_and_uuid.second
                          << " called " << name_and_uuid.first
                          << " added to the manifest.";
-            ordering.emplace_back(name_and_uuid.second);
+            ordering.push_back(name_and_uuid.second);
         }
     }
 

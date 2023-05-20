@@ -80,6 +80,10 @@ namespace {
         static std::shared_ptr<GG::Texture> retval = ClientUI::GetTexture(ClientUI::ArtDir() / "icons" / "meter" / "research.png");
         return retval;
     }
+    std::shared_ptr<GG::Texture> InfluenceIcon() {
+        static std::shared_ptr<GG::Texture> retval = ClientUI::GetTexture(ClientUI::ArtDir() / "icons" / "meter" / "influence.png");
+        return retval;
+    }
     std::shared_ptr<GG::Texture> DetectionIcon() {
         static std::shared_ptr<GG::Texture> retval = ClientUI::GetTexture(ClientUI::ArtDir() / "icons" / "meter" / "detection.png");
         return retval;
@@ -202,8 +206,8 @@ namespace {
             }
         }
 
-        void RClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override { ForwardEventToParent(); }
-        void RButtonDown(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override { ForwardEventToParent(); }
+        void RClick(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) override { ForwardEventToParent(); }
+        void RButtonDown(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) override { ForwardEventToParent(); }
 
     private:
         int                                        m_empire_id;
@@ -242,6 +246,7 @@ namespace {
             m_empire_planet_text = GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT);
             m_empire_production_text = GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT);
             m_empire_research_text = GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT);
+            m_empire_influence_text = GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT);
             m_empire_detection_text = GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT);
 
             m_war_indicator =      GG::Wnd::Create<DiplomaticStatusIndicator>(GG::X0, Height(), m_empire_id, DiplomaticStatus::DIPLO_WAR);
@@ -254,6 +259,7 @@ namespace {
             AttachChild(m_empire_planet_text);
             AttachChild(m_empire_production_text);
             AttachChild(m_empire_research_text);
+            AttachChild(m_empire_influence_text);
             AttachChild(m_empire_detection_text);
             AttachChild(m_war_indicator);
             AttachChild(m_peace_indicator);
@@ -264,11 +270,11 @@ namespace {
         }
 
         /** Excludes border from the client area. */
-        GG::Pt ClientUpperLeft() const override
+        GG::Pt ClientUpperLeft() const noexcept override
         { return UpperLeft() + GG::Pt(GG::X(DATA_PANEL_BORDER), GG::Y(DATA_PANEL_BORDER)); }
 
         /** Excludes border from the client area. */
-        GG::Pt ClientLowerRight() const override
+        GG::Pt ClientLowerRight() const noexcept override
         { return LowerRight() - GG::Pt(GG::X(DATA_PANEL_BORDER), GG::Y(DATA_PANEL_BORDER)); }
 
         /** Renders panel background, border with color depending on the current state. */
@@ -294,6 +300,7 @@ namespace {
 
             ProductionIcon()->OrthoBlit(UpperLeft() + m_production_icon_ul, UpperLeft() + m_production_icon_ul + ICON_SIZE);
             ResearchIcon()->OrthoBlit(UpperLeft() + m_research_icon_ul, UpperLeft() + m_research_icon_ul + ICON_SIZE);
+            InfluenceIcon()->OrthoBlit(UpperLeft() + m_influence_icon_ul, UpperLeft() + m_influence_icon_ul + ICON_SIZE);
             DetectionIcon()->OrthoBlit(UpperLeft() + m_detection_icon_ul, UpperLeft() + m_detection_icon_ul + ICON_SIZE);
 
             const ClientApp* app = ClientApp::GetApp();
@@ -351,7 +358,7 @@ namespace {
         void Select(bool b)
         { m_selected = b; }
 
-        void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override {
+        void SizeMove(GG::Pt ul, GG::Pt lr) override {
             const GG::Pt old_size = Size();
             GG::Control::SizeMove(ul, lr);
             if (old_size != Size())
@@ -411,24 +418,26 @@ namespace {
             double empires_planet_count = 0.0;
             double empires_production_points = 0.0;
             double empires_research_points = 0.0;
+            double empires_influence_points = 0.0;
 
-            const std::set<int>& this_client_known_destroyed_objects = GetUniverse().EmpireKnownDestroyedObjectIDs(GGHumanClientApp::GetApp()->EmpireID());
-            const std::set<int>& this_client_stale_object_info       = GetUniverse().EmpireStaleKnowledgeObjectIDs(GGHumanClientApp::GetApp()->EmpireID());
+            const auto& this_client_known_destroyed_objects = GetUniverse().EmpireKnownDestroyedObjectIDs(GGHumanClientApp::GetApp()->EmpireID());
+            const auto& this_client_stale_object_info       = GetUniverse().EmpireStaleKnowledgeObjectIDs(GGHumanClientApp::GetApp()->EmpireID());
 
             if (empire) {
-                for (auto& ship : objects.all<Ship>()) {
+                for (auto* ship : objects.allRaw<Ship>()) {
                     if (ship->Owner() == empire->EmpireID()
-                        && !this_client_known_destroyed_objects.count(ship->ID())
-                        && !this_client_stale_object_info.count(ship->ID())) {
+                        && !this_client_known_destroyed_objects.contains(ship->ID())
+                        && !this_client_stale_object_info.contains(ship->ID())) {
                             empires_ship_count += 1;
                     }
                 }
 
-                for (auto& planet : objects.all<Planet>()) {
+                for (auto* planet : objects.allRaw<Planet>()) {
                     if (planet->Owner() == empire->EmpireID()) {
                         empires_planet_count      += 1;
                         empires_production_points += planet->GetMeter(MeterType::METER_INDUSTRY)->Initial();
                         empires_research_points   += planet->GetMeter(MeterType::METER_RESEARCH)->Initial();
+                        empires_influence_points  += planet->GetMeter(MeterType::METER_INFLUENCE)->Initial();
                     }
                 }
             }
@@ -453,6 +462,10 @@ namespace {
                 m_empire_research_text->SetText(UserString("NOTHING_VALUE_SYMBOL"));
             else
                 m_empire_research_text->SetText(DoubleToString(empires_research_points, 2, false));
+            if (empires_influence_points == 0.0)
+                m_empire_influence_text->SetText(UserString("NOTHING_VALUE_SYMBOL"));
+            else
+                m_empire_influence_text->SetText(DoubleToString(empires_influence_points, 2, false));
 
             m_empire_detection_text->SetText(DoubleToString(empire ? empire->GetMeter("METER_DETECTION_STRENGTH")->Current() : 0.0, 0, false));
 
@@ -470,12 +483,13 @@ namespace {
             const GG::X EMPIRE_PLANET_WIDTH(ClientUI::Pts()     * 16/5);
             const GG::X EMPIRE_PRODUCTION_WIDTH(ClientUI::Pts() * 16/5);
             const GG::X EMPIRE_RESEARCH_WIDTH(ClientUI::Pts()   * 16/5);
+            const GG::X EMPIRE_INFLUENCE_WIDTH(ClientUI::Pts()  * 16/5);
             const GG::X EMPIRE_DETECTION_WIDTH(ClientUI::Pts()  * 16/5);
 
             GG::X left(DATA_PANEL_BORDER);
             GG::Y top(DATA_PANEL_BORDER);
             GG::Y bottom(ClientHeight());
-            constexpr GG::X PAD{3};
+            static constexpr GG::X PAD{3};
 
             int diplo_status_width = (Empires().NumEmpires() - Empires().NumEliminatedEmpires() + 1) * (IconSize() + Value(PAD));
 
@@ -515,6 +529,12 @@ namespace {
             m_empire_research_text->SizeMove(GG::Pt(left, top), GG::Pt(left + EMPIRE_RESEARCH_WIDTH, bottom));
             left += EMPIRE_RESEARCH_WIDTH;
 
+            m_influence_icon_ul = GG::Pt(left, top);
+            left += GG::X(IconSize()) + PAD;
+
+            m_empire_influence_text->SizeMove(GG::Pt(left, top), GG::Pt(left + EMPIRE_INFLUENCE_WIDTH, bottom));
+            left += EMPIRE_INFLUENCE_WIDTH;
+
             m_detection_icon_ul = GG::Pt(left, top);
             left += GG::X(IconSize()) + PAD;
 
@@ -552,6 +572,7 @@ namespace {
         std::shared_ptr<GG::Label>                  m_empire_planet_text;
         std::shared_ptr<GG::Label>                  m_empire_production_text;
         std::shared_ptr<GG::Label>                  m_empire_research_text;
+        std::shared_ptr<GG::Label>                  m_empire_influence_text;
         std::shared_ptr<GG::Label>                  m_empire_detection_text;
 
         std::shared_ptr<DiplomaticStatusIndicator>  m_war_indicator;
@@ -564,6 +585,7 @@ namespace {
         GG::Pt                  m_planet_icon_ul;
         GG::Pt                  m_production_icon_ul;
         GG::Pt                  m_research_icon_ul;
+        GG::Pt                  m_influence_icon_ul;
         GG::Pt                  m_detection_icon_ul;
         GG::Pt                  m_player_status_icon_ul;
         GG::Pt                  m_player_type_icon_ul;
@@ -573,7 +595,7 @@ namespace {
         DiplomaticStatus        m_diplo_status;
         Networking::ClientType  m_player_type;
         bool                    m_host = false;
-        enum : int {
+        enum : uint8_t {
             WON,
             LOST,
             NEITHER
@@ -622,7 +644,7 @@ namespace {
 
         /** This function overridden because otherwise, rows don't expand
           * larger than their initial size when resizing the list. */
-        void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override {
+        void SizeMove(GG::Pt ul, GG::Pt lr) override {
             const GG::Pt old_size = Size();
             GG::ListBox::Row::SizeMove(ul, lr);
             //std::cout << "PlayerRow::SizeMove size: (" << Value(Width()) << ", " << Value(Height()) << ")" << std::endl;
@@ -652,7 +674,7 @@ public:
         LockColWidths();
     }
 
-    void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override {
+    void SizeMove(GG::Pt ul, GG::Pt lr) override {
         const GG::Pt old_size = Size();
         CUIListBox::SizeMove(ul, lr);
         if (old_size != Size()) {
@@ -815,7 +837,7 @@ void PlayerListWnd::SetSelectedPlayers(const std::set<int>& player_ids) {
         }
 
         // if this row's player should be selected, so so
-        if (player_ids.count(row->PlayerID())) {
+        if (player_ids.contains(row->PlayerID())) {
             m_player_list->SelectRow(it);
             m_player_list->BringRowIntoView(it);  // may cause earlier rows brought into view to be brought out of view... oh well
         }
@@ -828,7 +850,7 @@ void PlayerListWnd::SetSelectedPlayers(const std::set<int>& player_ids) {
 void PlayerListWnd::Clear()
 { m_player_list->Clear(); }
 
-void PlayerListWnd::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
+void PlayerListWnd::SizeMove(GG::Pt ul, GG::Pt lr) {
     const GG::Pt old_size = Size();
     CUIWnd::SizeMove(ul, lr);
     if (old_size != Size())
@@ -845,12 +867,12 @@ void PlayerListWnd::CloseClicked() {
     StopFlash();
 }
 
-void PlayerListWnd::LClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) {
+void PlayerListWnd::LClick(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) {
     CUIWnd::LClick(pt, mod_keys);
     StopFlash();
 }
 
-void PlayerListWnd::LDrag(const GG::Pt& pt, const GG::Pt& move, GG::Flags<GG::ModKey> mod_keys) {
+void PlayerListWnd::LDrag(GG::Pt pt, GG::Pt move, GG::Flags<GG::ModKey> mod_keys) {
     CUIWnd::LDrag(pt, move, mod_keys);
     StopFlash();
 }
@@ -878,13 +900,13 @@ void PlayerListWnd::PlayerSelectionChanged(const GG::ListBox::SelectionSet& rows
             ErrorLogger() << "PlayerListWnd::PlayerSelectionChanged couldn't get PlayerDataPanel from control";
             continue;
         }
-        data_panel->Select(rows.count(it));
+        data_panel->Select(rows.contains(it));
     }
 
     SelectedPlayersChangedSignal();
 }
 
-void PlayerListWnd::PlayerDoubleClicked(GG::ListBox::iterator it, const GG::Pt& pt, const GG::Flags<GG::ModKey>& modkeys) {
+void PlayerListWnd::PlayerDoubleClicked(GG::ListBox::iterator it, GG::Pt pt, GG::Flags<GG::ModKey> modkeys) {
     int player_id = PlayerInRow(it);
     if (player_id != Networking::INVALID_PLAYER_ID)
         PlayerDoubleClickedSignal(player_id);
@@ -901,7 +923,7 @@ namespace {
     }
 }
 
-void PlayerListWnd::PlayerRightClicked(GG::ListBox::iterator it, const GG::Pt& pt, const GG::Flags<GG::ModKey>& modkeys) {
+void PlayerListWnd::PlayerRightClicked(GG::ListBox::iterator it, GG::Pt pt, GG::Flags<GG::ModKey> modkeys) {
     // check that a valid player was clicked and that it wasn't this client's own player
     int clicked_empire_id = EmpireInRow(it);
     if (clicked_empire_id == ALL_EMPIRES)

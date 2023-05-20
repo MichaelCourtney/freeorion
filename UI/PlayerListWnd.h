@@ -14,7 +14,7 @@ public:
 
     std::set<int>   SelectedPlayerIDs() const;
 
-    void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
+    void SizeMove(GG::Pt ul, GG::Pt lr) override;
 
     void            HandleDiplomaticMessageChange(int empire1_id, int empire2_id);
     void            Update();
@@ -29,14 +29,14 @@ public:
 
 private:
     void            CloseClicked() override;
-    void            LClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
-    void            LDrag(const GG::Pt& pt, const GG::Pt& move, GG::Flags<GG::ModKey> mod_keys) override;
+    void            LClick(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) override;
+    void            LDrag(GG::Pt pt, GG::Pt move, GG::Flags<GG::ModKey> mod_keys) override;
 
     void            DoLayout();
 
     void            PlayerSelectionChanged(const GG::ListBox::SelectionSet& rows);
-    void            PlayerDoubleClicked(GG::ListBox::iterator it, const GG::Pt& pt, const GG::Flags<GG::ModKey>& modkeys);
-    void            PlayerRightClicked(GG::ListBox::iterator it, const GG::Pt& pt, const GG::Flags<GG::ModKey>& modkeys);
+    void            PlayerDoubleClicked(GG::ListBox::iterator it, GG::Pt pt, GG::Flags<GG::ModKey> modkeys);
+    void            PlayerRightClicked(GG::ListBox::iterator it, GG::Pt pt, GG::Flags<GG::ModKey> modkeys);
     int             PlayerInRow(GG::ListBox::iterator it) const;
     int             EmpireInRow(GG::ListBox::iterator it) const;
 

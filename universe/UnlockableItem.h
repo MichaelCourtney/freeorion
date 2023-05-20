@@ -4,6 +4,7 @@
 
 #include "../util/Enum.h"
 #include "../util/Export.h"
+#include <cstdint>
 
 
 /** types of items that can be unlocked for empires */
@@ -34,24 +35,26 @@ struct FO_COMMON_API UnlockableItem {
         name(std::forward<S>(name_))
     {}
 
+    bool operator<(const UnlockableItem& rhs) const noexcept
+    { return (type < rhs.type) || (type == rhs.type && name < rhs.name); }
+
     //! Returns a data file format representation of this object
-    auto Dump(unsigned short ntabs = 0) const -> std::string;
+    auto Dump(uint8_t ntabs = 0) const -> std::string;
 
-    //! The kind of item this is
-    UnlockableItemType type = UnlockableItemType::INVALID_UNLOCKABLE_ITEM_TYPE;
-
-    //! the exact item this is
-    std::string name;
+    UnlockableItemType type = UnlockableItemType::INVALID_UNLOCKABLE_ITEM_TYPE; //! The kind of item this is
+    std::string name; //! the exact item this is
 };
 
 
-FO_COMMON_API bool operator==(const UnlockableItem& lhs, const UnlockableItem& rhs);
+FO_COMMON_API inline bool operator==(const UnlockableItem& lhs, const UnlockableItem& rhs) noexcept
+{ return lhs.type == rhs.type && lhs.name == rhs.name; }
 
-bool operator!=(const UnlockableItem& lhs, const UnlockableItem& rhs);
+FO_COMMON_API inline bool operator!=(const UnlockableItem& lhs, const UnlockableItem& rhs) noexcept
+{ return !(lhs == rhs); }
 
 
 namespace CheckSums {
-    FO_COMMON_API void CheckSumCombine(unsigned int& sum, const UnlockableItem& item);
+    FO_COMMON_API void CheckSumCombine(uint32_t& sum, const UnlockableItem& item);
 }
 
 

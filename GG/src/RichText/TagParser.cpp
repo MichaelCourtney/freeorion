@@ -19,6 +19,10 @@ RichTextTag::RichTextTag(std::string tag_, std::string params_string_, std::stri
     content(std::move(content_))
 {}
 
+RichTextTag::RichTextTag(std::string_view tag_, std::string params_string_, std::string content_) :
+    RichTextTag(std::string{tag_}, std::move(params_string_), std::move(content_))
+{}
+
 std::string RichTextTag::ToString() const
 { return "<" + tag + (tag_params.length() != 0 ? " " + tag_params : "") + ">" + content + "</" + tag + ">"; }
 
@@ -147,7 +151,7 @@ class TagParserImpl {
             const std::string::const_iterator& end,
             std::vector<RichTextTag>* tags)
         {
-            // Use ParseTagsImpl to get the the beginning of the first unmatched end tag.
+            // Use ParseTagsImpl to get the beginning of the first unmatched end tag.
             // We are interested only in the first level tags, so don't pass the vector to populate.
             auto current = ParseTagsImpl(start, end, nullptr);
 

@@ -13,35 +13,33 @@
 #include "../util/i18n.h"
 
 
-#define CHECK_COND_VREF_MEMBER(m_ptr) { if (m_ptr == rhs.m_ptr) {           \
-                                            /* check next member */         \
-                                        } else if (!m_ptr || !rhs.m_ptr) {  \
-                                            return false;                   \
-                                        } else {                            \
-                                            if (*m_ptr != *(rhs.m_ptr))     \
-                                                return false;               \
+#define CHECK_COND_VREF_MEMBER(m_ptr) { if (m_ptr == rhs.m_ptr) {            \
+                                            /* check next member */          \
+                                        } else if (!m_ptr || !rhs.m_ptr) {   \
+                                            return false;                    \
+                                        } else if (*m_ptr != *(rhs.m_ptr)) { \
+                                            return false;                    \
                                         }   }
 
 std::vector<std::string_view> SpecialsManager::SpecialNames() const {
     CheckPendingSpecialsTypes();
-    std::vector<std::string_view> retval;
-    retval.reserve(m_specials.size());
-    for (const auto& entry : m_specials)
-        retval.emplace_back(entry.first);
-    return retval;
+    return m_special_names;
 }
 
-const Special* SpecialsManager::GetSpecial(const std::string& name) const {
+const Special* SpecialsManager::GetSpecial(std::string_view name) const {
     CheckPendingSpecialsTypes();
-    auto it = m_specials.find(name);
-    return it != m_specials.end() ? it->second.get() : nullptr;
+    auto name_it = std::find(m_special_names.begin(), m_special_names.end(), name);
+    if (name_it == m_special_names.end())
+        return nullptr;
+    auto offset = std::distance(m_special_names.begin(), name_it);
+    return &m_specials[offset];
 }
 
-unsigned int SpecialsManager::GetCheckSum() const {
+uint32_t SpecialsManager::GetCheckSum() const {
     CheckPendingSpecialsTypes();
-    unsigned int retval{0};
-    for (auto const& name_type_pair : m_specials)
-        CheckSums::CheckSumCombine(retval, name_type_pair);
+    uint32_t retval{0};
+    for (auto const& special : m_specials)
+        CheckSums::CheckSumCombine(retval, special);
     CheckSums::CheckSumCombine(retval, m_specials.size());
     DebugLogger() << "SpecialsManager checksum: " << retval;
     return retval;
@@ -54,7 +52,33 @@ void SpecialsManager::CheckPendingSpecialsTypes() const {
     if (!m_pending_types)
         return;
 
-    Pending::SwapPending(m_pending_types, m_specials);
+    std::scoped_lock lock(m_pending_types->m_mutex);
+    if (!m_pending_types)
+        return; // another thread in the meantime reset m_pending_types after transferring pending to stored
+
+    if (auto tt = Pending::WaitForPendingUnlocked(std::move(*m_pending_types))) { // moving from contained object should / does not reset the optional
+        // extract from optional
+        SpecialsTypeMap temp;
+        std::swap(*tt, temp);
+        // TODO: validate all passed in pointers before using
+
+        // copy to internal storage and make views
+        std::size_t special_names_sz = 0;
+        std::for_each(temp.begin(), temp.end(),
+                      [&special_names_sz](const auto& s) { special_names_sz += s.first.size(); });
+        m_concatenated_special_names.reserve(special_names_sz);
+        m_special_names.reserve(temp.size());
+        m_specials.reserve(temp.size());
+        std::for_each(temp.begin(), temp.end(), [this](SpecialsTypeMap::value_type& s) {
+            auto next_idx = m_concatenated_special_names.length();
+            m_concatenated_special_names.append(s.first);
+            m_special_names.push_back(
+                std::string_view{m_concatenated_special_names}.substr(next_idx, s.first.size()));
+            m_specials.push_back(std::move(*(s.second.release())));
+        });
+    }
+
+    m_pending_types.reset(); // after processing, set pending to empty so future calls to this function will early exit and any waiting on the mutex will exit when it is available to them
 }
 
 SpecialsManager& GetSpecialsManager() {
@@ -72,18 +96,24 @@ Special::Special(std::string&& name, std::string&& description,
                  std::unique_ptr<ValueRef::ValueRef<double>>&& initial_capaicty,
                  std::unique_ptr<Condition::Condition>&& location,
                  const std::string& graphic) :
-    m_name(std::move(name)),
+    m_name(name), // not moving so usable below
     m_description(std::move(description)),
     m_stealth(std::move(stealth)),
+    m_effects([](auto& effects, const auto& name) {
+        std::vector<Effect::EffectsGroup> retval;
+        retval.reserve(effects.size());
+        for (auto& e : effects) {
+            e->SetTopLevelContent(name);
+            retval.push_back(std::move(*e));
+        }
+        return retval;
+    }(effects, name)),
     m_spawn_rate(spawn_rate),
     m_spawn_limit(spawn_limit),
     m_initial_capacity(std::move(initial_capaicty)),
     m_location(std::move(location)),
     m_graphic(graphic)
 {
-    for (auto&& effect : effects)
-        m_effects.push_back(std::move(effect));
-
     Init();
 }
 
@@ -104,25 +134,7 @@ bool Special::operator==(const Special& rhs) const {
     CHECK_COND_VREF_MEMBER(m_initial_capacity)
     CHECK_COND_VREF_MEMBER(m_location)
 
-    if (m_effects.size() != rhs.m_effects.size())
-        return false;
-    try {
-        for (std::size_t idx = 0; idx < m_effects.size(); ++idx) {
-            const auto& my_op = m_effects.at(idx);
-            const auto& rhs_op = rhs.m_effects.at(idx);
-
-            if (my_op == rhs_op)
-                continue;
-            if (!my_op || !rhs_op)
-                return false;
-            if (*my_op != *rhs_op)
-                return false;
-        }
-    } catch (...) {
-        return false;
-    }
-
-    return true;
+    return m_effects == rhs.m_effects;
 }
 
 std::string Special::Description() const {
@@ -131,11 +143,9 @@ std::string Special::Description() const {
     result << UserString(m_description) << "\n";
 
     for (auto& effect : m_effects) {
-        const std::string& description = effect->GetDescription();
-
-        if (!description.empty()) {
+        const auto& description = effect.GetDescription();
+        if (!description.empty())
             result << "\n" << UserString(description) << "\n";
-        }
     }
 
     return result.str();
@@ -144,16 +154,13 @@ std::string Special::Description() const {
 void Special::Init() {
     if (m_stealth)
         m_stealth->SetTopLevelContent(m_name);
-    for (auto& effect : m_effects) {
-        effect->SetTopLevelContent(m_name);
-    }
     if (m_initial_capacity)
         m_initial_capacity->SetTopLevelContent(m_name);
     if (m_location)
         m_location->SetTopLevelContent(m_name);
 }
 
-std::string Special::Dump(unsigned short ntabs) const {
+std::string Special::Dump(uint8_t ntabs) const {
     std::string retval = DumpIndent(ntabs) + "Special\n";
     retval += DumpIndent(ntabs+1) + "name = \"" + m_name + "\"\n";
     retval += DumpIndent(ntabs+1) + "description = \"" + m_description + "\"\n";
@@ -176,30 +183,31 @@ std::string Special::Dump(unsigned short ntabs) const {
 
     if (m_effects.size() == 1) {
         retval += DumpIndent(ntabs+1) + "effectsgroups =\n";
-        retval += m_effects[0]->Dump(ntabs+2);
+        retval += m_effects.front().Dump(ntabs+2);
     } else {
         retval += DumpIndent(ntabs+1) + "effectsgroups = [\n";
         for (auto& effect : m_effects)
-            retval += effect->Dump(ntabs+2);
+            retval += effect.Dump(ntabs+2);
         retval += DumpIndent(ntabs+1) + "]\n";
     }
     retval += DumpIndent(ntabs+1) + "graphic = \"" + m_graphic + "\"\n";
     return retval;
 }
 
-float Special::InitialCapacity(int object_id) const {
+float Special::InitialCapacity(int object_id, const ScriptingContext& context) const {
     if (!m_initial_capacity)
         return 0.0f;
 
-    auto obj = Objects().get(object_id);    // TODO: pass ScriptingContext and use here...
+    auto obj = context.ContextObjects().getRaw(object_id);
     if (!obj)
         return 0.0f;
 
-    return m_initial_capacity->Eval(ScriptingContext(std::move(obj)));
+    const ScriptingContext local_context{obj, context};
+    return m_initial_capacity->Eval(local_context);
 }
 
-unsigned int Special::GetCheckSum() const {
-    unsigned int retval{0};
+uint32_t Special::GetCheckSum() const {
+    uint32_t retval{0};
 
     CheckSums::CheckSumCombine(retval, m_name);
     CheckSums::CheckSumCombine(retval, m_description);
@@ -211,9 +219,6 @@ unsigned int Special::GetCheckSum() const {
 
     return retval;
 }
-
-const Special* GetSpecial(const std::string& name)
-{ return GetSpecialsManager().GetSpecial(name); }
 
 const Special* GetSpecial(std::string_view name)
 { return GetSpecialsManager().GetSpecial(std::string{name}); }

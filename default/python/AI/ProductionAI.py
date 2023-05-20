@@ -1,9 +1,14 @@
 import freeOrionAIInterface as fo
 import math
 import random
+from collections.abc import Iterable, Sequence
 from logging import debug, error, warning
 from operator import itemgetter
-from typing import FrozenSet, List
+from typing import (
+    NamedTuple,
+    NewType,
+    Union,
+)
 
 import AIDependencies
 import AIstate
@@ -11,16 +16,15 @@ import FleetUtilsAI
 import MilitaryAI
 import PlanetUtilsAI
 import PriorityAI
-from AIDependencies import INVALID_ID
+from AIDependencies import INVALID_ID, Tags
 from aistate_interface import get_aistate
+from buildings import BuildingType, BuildingTypeBase, Shipyard, get_empire_drydocks
 from character.character_module import Aggression
 from colonization import rate_planetary_piloting
+from colonization.colony_score import MINIMUM_COLONY_SCORE
 from colonization.rate_pilots import GREAT_PILOT_RATING
-from common.fo_typing import PlanetId
-from empire.buildings_locations import (
-    get_best_pilot_facilities,
-    get_systems_with_building,
-)
+from common.fo_typing import BuildingName, PlanetId, SystemId
+from empire.buildings_locations import get_best_pilot_facilities
 from empire.colony_builders import (
     can_build_colony_for_species,
     can_build_only_sly_colonies,
@@ -46,12 +50,13 @@ from EnumsAI import (
     ShipRoleType,
     get_priority_production_types,
 )
-from freeorion_tools import ppstring, tech_is_complete
+from expansion_plans import get_colonisable_planet_ids
+from freeorion_tools import get_named_real, ppstring, tech_is_complete
 from production import print_building_list, print_capital_info, print_production_queue
 from turn_state import (
     get_all_empire_planets,
     get_colonized_planets,
-    get_empire_drydocks,
+    get_colonized_planets_in_system,
     get_empire_outposts,
     get_empire_planets_by_species,
     get_empire_planets_with_species,
@@ -64,18 +69,50 @@ from turn_state.design import get_best_ship_info, get_best_ship_ratings
 from universe.system_network import get_neighbors
 
 
-def get_priority_locations() -> FrozenSet[PlanetId]:
+def get_priority_locations() -> frozenset[PlanetId]:
     priority_facilities = [
         "BLD_SHIPYARD_ENRG_SOLAR",
         "BLD_SHIPYARD_CON_GEOINT",
         "BLD_SHIPYARD_AST_REF",
-        "BLD_SHIPYARD_ENRG_COMP",
+        Shipyard.ENRG_COMP.value,
     ]
     # TODO: also cover good troopship locations
     return frozenset(loc for building in priority_facilities for loc in get_best_pilot_facilities(building))
 
 
-def _get_capital_info():
+# set by ResourceAI
+candidate_for_translator = None
+
+
+def translators_wanted() -> int:
+    """
+    How many near universal translators we'd like to build.
+    Function is also used by ResearchAI to determine when to research the prerequisites.
+    """
+    pid = PlanetUtilsAI.get_capital()
+    # planet is needed to determine the cost. Without a capital we have bigger problems anyway...
+    # At the beginning of the game influence_priority fluctuates strongly and that early in the game there are
+    # surely more important things to build.
+    if pid == INVALID_ID or fo.currentTurn() < 30:
+        return 0.0
+    building_type = BuildingType.TRANSLATOR
+    translator_cost = building_type.production_cost(pid)
+    influence_priority = get_aistate().get_priority(PriorityType.RESOURCE_INFLUENCE)
+    num_species = len(get_empire_planets_by_species())
+    num_enqueued = len(building_type.queued_at())
+    num_built = len(building_type.built_at())
+    # first one gives a policy slot
+    first_bonus = 30 if num_enqueued + num_built == 0 else 0
+    importance = 6 * (influence_priority + first_bonus) / translator_cost * num_species**0.25 - num_enqueued
+    debug(
+        f"translators_wanted: influence_priority: {influence_priority}, translator_cost: {translator_cost}, "
+        f"built: {num_built}, enqueued: {num_enqueued}, num_species: {num_species}, turn: {fo.currentTurn()}, "
+        f"importance: {importance}"
+    )
+    return int(importance)
+
+
+def _get_capital_info() -> tuple[PlanetId, "fo.planet", SystemId]:
     capital_id = PlanetUtilsAI.get_capital()
     if capital_id is None or capital_id == INVALID_ID:
         homeworld = None
@@ -112,20 +149,24 @@ def _first_turn_action():
             fo.updateProductionQueue()
 
 
+def get_building_allocations() -> float:
+    empire = fo.getEmpire()
+    return sum(e.allocation for e in empire.productionQueue if e.buildType == EmpireProductionTypes.BT_BUILDING)
+
+
 # TODO Move Building names to AIDependencies to avoid typos and for IDE-Support
-def generate_production_orders():
-    """generate production orders"""
+def generate_production_orders():  # noqa: max-complexity
+    """Generate production orders."""
     # first check ship designs
-    # next check for buildings etc that could be placed on queue regardless of locally available PP
+    # next check for buildings etc, that could be placed on queue regardless of locally available PP
     # next loop over resource groups, adding buildings & ships
     print_production_queue()
     universe = fo.getUniverse()
 
     debug("Production Queue Management:")
     empire = fo.getEmpire()
-    total_pp = empire.productionPoints
     debug("")
-    debug("  Total Available Production Points: %s" % total_pp)
+    debug("  Total Available Production Points: %s" % empire.productionPoints)
     print_building_list()
 
     aistate = get_aistate()
@@ -135,6 +176,7 @@ def generate_production_orders():
     building_ratio = aistate.character.preferred_building_ratio([0.4, 0.35, 0.30])
     capital_id, homeworld, capital_system_id = _get_capital_info()
     current_turn = fo.currentTurn()
+    building_expense += get_building_allocations()
     if not homeworld:
         debug("if no capital, no place to build, should get around to capturing or colonizing a new one")  # TODO
     else:
@@ -144,20 +186,12 @@ def generate_production_orders():
 
         possible_building_type_ids = []
         for type_id in empire.availableBuildingTypes:
-            try:
-                if fo.getBuildingType(type_id).canBeProduced(empire.empireID, homeworld.id):
-                    possible_building_type_ids.append(type_id)
-            except:  # noqa: E722
-                if fo.getBuildingType(type_id) is None:
-                    debug(
-                        "For empire %d, 'available Building Type priority_id' %s returns None from fo.getBuildingType(type_id)"
-                        % (empire.empireID, type_id)
-                    )
-                else:
-                    debug(
-                        "For empire %d, problem getting BuildingTypeID for 'available Building Type priority_id' %s"
-                        % (empire.empireID, type_id)
-                    )
+            # Apparently, when loading a saved game from another version, availableBuildingTypes may return
+            # buildings that are not in our script.
+            fo_building_type = fo.getBuildingType(type_id)
+            if fo_building_type and fo_building_type.canBeProduced(empire.empireID, homeworld.id):
+                possible_building_type_ids.append(type_id)
+
         if possible_building_type_ids:
             debug("Possible building types to build:")
             for type_id in possible_building_type_ids:
@@ -171,25 +205,9 @@ def generate_production_orders():
                     )
                 )
 
-            possible_building_types = [
-                fo.getBuildingType(type_id) and fo.getBuildingType(type_id).name
-                for type_id in possible_building_type_ids
-            ]  # makes sure is not None before getting name
+            possible_building_types = [fo.getBuildingType(type_id).name for type_id in possible_building_type_ids]
 
-            debug("")
-            debug("Buildings already in Production Queue:")
-            production_queue = empire.productionQueue
-            capital_queued_buildings = []
-            for element in [e for e in production_queue if (e.buildType == EmpireProductionTypes.BT_BUILDING)]:
-                building_expense += element.allocation
-                if element.locationID == homeworld.id:
-                    capital_queued_buildings.append(element)
-            for bldg in capital_queued_buildings:
-                debug("    %s turns: %s PP: %s" % (bldg.name, bldg.turnsLeft, bldg.allocation))
-            if not capital_queued_buildings:
-                debug("No capital queued buildings")
-            debug("")
-            queued_building_names = [bldg.name for bldg in capital_queued_buildings]
+            queued_building_names = _get_queued_buildings(capital_id)
 
             if "BLD_AUTO_HISTORY_ANALYSER" in possible_building_types:
                 for pid in find_automatic_historic_analyzer_candidates():
@@ -198,24 +216,26 @@ def generate_production_orders():
                         "Enqueueing BLD_AUTO_HISTORY_ANALYSER at planet %s - result %d" % (universe.getPlanet(pid), res)
                     )
                     if res:
-                        cost, time = empire.productionCostAndTime(production_queue[production_queue.size - 1])
+                        cost, time = empire.productionCostAndTime(
+                            empire.productionQueue[empire.productionQueue.size - 1]
+                        )
                         building_expense += cost / time
-                        res = fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
+                        res = fo.issueRequeueProductionOrder(empire.productionQueue.size - 1, 0)  # move to front
                         debug(
                             "Requeueing %s to front of build queue, with result %d" % ("BLD_AUTO_HISTORY_ANALYSER", res)
                         )
 
             # TODO: check existence of BLD_INDUSTRY_CENTER (and other buildings) in other locations in case we captured it
             if (
-                (total_pp > 40 or ((current_turn > 40) and (population_with_industry_focus() >= 20)))
+                (empire.productionPoints > 40 or ((current_turn > 40) and (population_with_industry_focus() >= 20)))
                 and ("BLD_INDUSTRY_CENTER" in possible_building_types)
                 and ("BLD_INDUSTRY_CENTER" not in (capital_buildings + queued_building_names))
-                and (building_expense < building_ratio * total_pp)
+                and (building_expense < building_ratio * empire.productionPoints)
             ):
                 res = fo.issueEnqueueBuildingProductionOrder("BLD_INDUSTRY_CENTER", homeworld.id)
                 debug("Enqueueing BLD_INDUSTRY_CENTER, with result %d" % res)
                 if res:
-                    cost, time = empire.productionCostAndTime(production_queue[production_queue.size - 1])
+                    cost, time = empire.productionCostAndTime(empire.productionQueue[empire.productionQueue.size - 1])
                     building_expense += cost / time
 
             if ("BLD_SHIPYARD_BASE" in possible_building_types) and (
@@ -231,27 +251,24 @@ def generate_production_orders():
                 if (
                     (building_name in possible_building_types)
                     and (building_name not in (capital_buildings + queued_building_names))
-                    and (building_expense < building_ratio * total_pp)
+                    and (building_expense < building_ratio * empire.productionPoints)
                 ):
                     try:
                         res = fo.issueEnqueueBuildingProductionOrder(building_name, homeworld.id)
                         debug("Enqueueing %s at capital, with result %d" % (building_name, res))
                         if res:
-                            cost, time = empire.productionCostAndTime(production_queue[production_queue.size - 1])
+                            cost, time = empire.productionCostAndTime(
+                                empire.productionQueue[empire.productionQueue.size - 1]
+                            )
                             building_expense += cost / time
-                            res = fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
+                            res = fo.issueRequeueProductionOrder(empire.productionQueue.size - 1, 0)  # move to front
                             debug("Requeueing %s to front of build queue, with result %d" % (building_name, res))
                     except:  # noqa: E722
                         error("Exception triggered and caught: ", exc_info=True)
 
-            if ("BLD_IMPERIAL_PALACE" in possible_building_types) and (
-                "BLD_IMPERIAL_PALACE" not in (capital_buildings + queued_building_names)
-            ):
-                res = fo.issueEnqueueBuildingProductionOrder("BLD_IMPERIAL_PALACE", homeworld.id)
-                debug("Enqueueing BLD_IMPERIAL_PALACE at %s, with result %d" % (homeworld.name, res))
-                if res:
-                    res = fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
-                    debug("Requeueing BLD_IMPERIAL_PALACE to front of build queue, with result %d" % res)
+            building_type = BuildingType.PALACE
+            if building_type.available() and not building_type.built_or_queued_at():
+                building_expense += _try_enqueue(building_type, capital_id, at_front=True, ignore_dislike=True)
 
             # ok, BLD_NEUTRONIUM_SYNTH is not currently unlockable, but just in case... ;-p
             if ("BLD_NEUTRONIUM_SYNTH" in possible_building_types) and (
@@ -260,7 +277,7 @@ def generate_production_orders():
                 res = fo.issueEnqueueBuildingProductionOrder("BLD_NEUTRONIUM_SYNTH", homeworld.id)
                 debug("Enqueueing BLD_NEUTRONIUM_SYNTH, with result %d" % res)
                 if res:
-                    res = fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
+                    res = fo.issueRequeueProductionOrder(empire.productionQueue.size - 1, 0)  # move to front
                     debug("Requeueing BLD_NEUTRONIUM_SYNTH to front of build queue, with result %d" % res)
 
     max_defense_portion = aistate.character.max_defense_portion()
@@ -270,7 +287,7 @@ def generate_production_orders():
         defense_allocation = 0.0
         target_orbitals = aistate.character.target_number_of_orbitals()
         debug("Orbital Defense Check -- target Defense Orbitals: %s" % target_orbitals)
-        for element in production_queue:
+        for element in empire.productionQueue:
             if (element.buildType == EmpireProductionTypes.BT_SHIP) and (
                 aistate.get_ship_role(element.designID) == ShipRoleType.BASE_DEFENSE
             ):
@@ -288,7 +305,7 @@ def generate_production_orders():
         for sys_id, pids in get_colonized_planets().items():
             if aistate.systemStatus.get(sys_id, {}).get("fleetThreat", 1) > 0:
                 continue  # don't build orbital shields if enemy fleet present
-            if defense_allocation > max_defense_portion * total_pp:
+            if defense_allocation > max_defense_portion * empire.productionPoints:
                 break
             sys_orbital_defenses[sys_id] = 0
             fleets_here = aistate.systemStatus.get(sys_id, {}).get("myfleets", [])
@@ -314,343 +331,34 @@ def generate_production_orders():
                     debug("queueing %d Orbital Defenses at %s" % (num_needed, PlanetUtilsAI.planet_string(pid)))
                     if retval != 0:
                         if num_needed > 1:
-                            fo.issueChangeProductionQuantityOrder(production_queue.size - 1, 1, num_needed)
-                        cost, time = empire.productionCostAndTime(production_queue[production_queue.size - 1])
-                        defense_allocation += production_queue[production_queue.size - 1].blocksize * cost / time
-                        fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
+                            fo.issueChangeProductionQuantityOrder(empire.productionQueue.size - 1, 1, num_needed)
+                        cost, time = empire.productionCostAndTime(
+                            empire.productionQueue[empire.productionQueue.size - 1]
+                        )
+                        defense_allocation += (
+                            empire.productionQueue[empire.productionQueue.size - 1].blocksize * cost / time
+                        )
+                        fo.issueRequeueProductionOrder(empire.productionQueue.size - 1, 0)  # move to front
                         break
 
-    building_type = fo.getBuildingType("BLD_SHIPYARD_BASE")
-    queued_shipyard_locs = [element.locationID for element in production_queue if (element.name == "BLD_SHIPYARD_BASE")]
-    system_colonies = {}
-    colony_systems = {}
-    empire_species = get_empire_planets_by_species()
-    systems_with_species = get_colonized_planets().keys()
-    for spec_name in get_colony_builders():
-        if not get_colony_builder_locations(spec_name) and (
-            spec_name in empire_species
-        ):  # not enough current shipyards for this species #TODO: also allow orbital incubators and/or asteroid ships
-            for pid in get_empire_planets_with_species(
-                spec_name
-            ):  # SP_EXOBOT may not actually have a colony yet but be in empireColonizers
-                if pid in queued_shipyard_locs:
-                    break  # won't try building more than one shipyard at once, per colonizer
-            else:  # no queued shipyards, get planets with target pop >=3, and queue a shipyard on the one with biggest current pop
-                planets = (universe.getPlanet(x) for x in get_empire_planets_with_species(spec_name))
-                pops = sorted(
-                    (planet_.initialMeterValue(fo.meterType.population), planet_.id)
-                    for planet_ in planets
-                    if (planet_ and planet_.initialMeterValue(fo.meterType.targetPopulation) >= 3.0)
-                )
-                pids = [pid for pop, pid in pops if building_type.canBeProduced(empire.empireID, pid)]
-                if pids:
-                    build_loc = pids[-1]
-                    res = fo.issueEnqueueBuildingProductionOrder("BLD_SHIPYARD_BASE", build_loc)
-                    debug(
-                        "Enqueueing BLD_SHIPYARD_BASE at planet %d (%s) for colonizer species %s, with result %d"
-                        % (build_loc, universe.getPlanet(build_loc).name, spec_name, res)
-                    )
-                    if res:
-                        queued_shipyard_locs.append(build_loc)
-                        break  # only start at most one new shipyard per species per turn
-        for pid in get_empire_planets_with_species(spec_name):
-            planet = universe.getPlanet(pid)
-            if planet:
-                system_colonies.setdefault(planet.systemID, {}).setdefault("pids", []).append(pid)
-                colony_systems[pid] = planet.systemID
-
-    acirema_systems = {}
-    for pid in get_empire_planets_with_species("SP_ACIREMA"):
-        acirema_systems.setdefault(universe.getPlanet(pid).systemID, []).append(pid)
-        if (pid in queued_shipyard_locs) or not building_type.canBeProduced(empire.empireID, pid):
-            continue  # but not 'break' because we want to build shipyards at *every* Acirema planet
-        res = fo.issueEnqueueBuildingProductionOrder("BLD_SHIPYARD_BASE", pid)
-        debug(
-            "Enqueueing BLD_SHIPYARD_BASE at planet %d (%s) for Acirema, with result %d"
-            % (pid, universe.getPlanet(pid).name, res)
-        )
-        if res:
-            queued_shipyard_locs.append(pid)
-            res = fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
-            debug("Requeueing Acirema BLD_SHIPYARD_BASE to front of build queue, with result %d" % res)
-
-    top_pilot_systems = {}
-    for pid, _ in get_pilot_ratings().items():
-        if (_ <= medium_pilot_rating()) and (_ < GREAT_PILOT_RATING):
-            continue
-        top_pilot_systems.setdefault(universe.getPlanet(pid).systemID, []).append((pid, _))
-        if (pid in queued_shipyard_locs) or not building_type.canBeProduced(empire.empireID, pid):
-            continue  # but not 'break' because we want to build shipyards all top pilot planets
-        res = fo.issueEnqueueBuildingProductionOrder("BLD_SHIPYARD_BASE", pid)
-        debug(
-            "Enqueueing BLD_SHIPYARD_BASE at planet %d (%s) for top pilot, with result %d"
-            % (pid, universe.getPlanet(pid).name, res)
-        )
-        if res:
-            queued_shipyard_locs.append(pid)
-            res = fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
-            debug("Requeueing BLD_SHIPYARD_BASE to front of build queue, with result %d" % res)
-
-    pop_ctrs = list(get_inhabited_planets())
-    red_popctrs = sorted(
-        [
-            (get_rating_for_planet(pid), pid)
-            for pid in pop_ctrs
-            if colony_systems.get(pid, INVALID_ID) in AIstate.empireStars.get(fo.starType.red, [])
-        ],
-        reverse=True,
+    info = _build_basic_shipyards()
+    queued_shipyard_pids = info.queued_shipyard_pids
+    colony_systems = info.colony_systems
+    top_pilot_systems = info.top_pilot_systems
+    blackhole_pilots, red_pilots, building_expense = _build_energy_shipyards(
+        queued_shipyard_pids, colony_systems, building_ratio, building_expense
     )
-    red_pilots = [pid for _, pid in red_popctrs if _ == best_pilot_rating()]
-    blue_popctrs = sorted(
-        [
-            (get_rating_for_planet(pid), pid)
-            for pid in pop_ctrs
-            if colony_systems.get(pid, INVALID_ID) in AIstate.empireStars.get(fo.starType.blue, [])
-        ],
-        reverse=True,
-    )
-    blue_pilots = [pid for _, pid in blue_popctrs if _ == best_pilot_rating()]
-    bh_popctrs = sorted(
-        [
-            (get_rating_for_planet(pid), pid)
-            for pid in pop_ctrs
-            if colony_systems.get(pid, INVALID_ID) in AIstate.empireStars.get(fo.starType.blackHole, [])
-        ],
-        reverse=True,
-    )
-    bh_pilots = [pid for _, pid in bh_popctrs if _ == best_pilot_rating()]
-    enrgy_shipyard_locs = {}
-    for building_name in ["BLD_SHIPYARD_ENRG_COMP"]:
-        if empire.buildingTypeAvailable(building_name):
-            queued_building_locs = [
-                element.locationID for element in production_queue if (element.name == building_name)
-            ]
-            building_type = fo.getBuildingType(building_name)
-            for pid in bh_pilots + blue_pilots:
-                if len(queued_building_locs) > 1:  # build a max of 2 at once
-                    break
-                this_planet = universe.getPlanet(pid)
-                if not (
-                    this_planet and can_build_ship_for_species(this_planet.speciesName)
-                ):  # TODO: also check that not already one for this spec in this sys
-                    continue
-                enrgy_shipyard_locs.setdefault(this_planet.systemID, []).append(pid)
-                if pid not in queued_building_locs and building_type.canBeProduced(empire.empireID, pid):
-                    res = fo.issueEnqueueBuildingProductionOrder(building_name, pid)
-                    debug(
-                        "Enqueueing %s at planet %s, with result %d"
-                        % (building_name, universe.getPlanet(pid).name, res)
-                    )
-                    if res:
-                        queued_building_locs.append(pid)
-                        cost, time = empire.productionCostAndTime(production_queue[production_queue.size - 1])
-                        building_expense += cost / time  # production_queue[production_queue.size -1].blocksize *
-                        res = fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
-                        debug("Requeueing %s to front of build queue, with result %d", building_name, res)
-
-    bld_name = "BLD_SHIPYARD_ENRG_SOLAR"
-    queued_bld_locs = [element.locationID for element in production_queue if (element.name == bld_name)]
-    if empire.buildingTypeAvailable(bld_name) and not queued_bld_locs:
-        # TODO: check that production is not frozen at a queued location
-        bld_type = fo.getBuildingType(bld_name)
-        for pid in bh_pilots:
-            this_planet = universe.getPlanet(pid)
-            if not (
-                this_planet and can_build_ship_for_species(this_planet.speciesName)
-            ):  # TODO: also check that not already one for this spec in this sys
-                continue
-            if bld_type.canBeProduced(empire.empireID, pid):
-                res = fo.issueEnqueueBuildingProductionOrder(bld_name, pid)
-                debug("Enqueueing %s at planet %s, with result %d", bld_name, universe.getPlanet(pid), res)
-                if res:
-                    cost, time = empire.productionCostAndTime(production_queue[production_queue.size - 1])
-                    building_expense += cost / time  # production_queue[production_queue.size -1].blocksize *
-                    res = fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
-                    debug("Requeueing %s to front of build queue, with result %d", bld_name, res)
-                    break
-
-    building_name = "BLD_SHIPYARD_BASE"
-    if (
-        empire.buildingTypeAvailable(building_name)
-        and (building_expense < building_ratio * total_pp)
-        and (total_pp > 50 or current_turn > 80)
-    ):
-        building_type = fo.getBuildingType(building_name)
-        for sys_id in enrgy_shipyard_locs:  # Todo ensure only one or 2 per sys
-            for pid in enrgy_shipyard_locs[sys_id][:2]:
-                if pid not in queued_shipyard_locs and building_type.canBeProduced(
-                    empire.empireID, pid
-                ):  # TODO: verify that canBeProduced() checks for prexistence of a barring building
-                    res = fo.issueEnqueueBuildingProductionOrder(building_name, pid)
-                    debug(
-                        "Enqueueing %s at planet %d (%s) , with result %d",
-                        building_name,
-                        pid,
-                        universe.getPlanet(pid).name,
-                        res,
-                    )
-                    if res:
-                        queued_shipyard_locs.append(pid)
-                        cost, time = empire.productionCostAndTime(production_queue[production_queue.size - 1])
-                        building_expense += cost / time  # production_queue[production_queue.size -1].blocksize *
-                        res = fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
-                        debug("Requeueing %s to front of build queue, with result %d", building_name, res)
-                        break  # only start one per turn
-
-    for bld_name in ["BLD_SHIPYARD_ORG_ORB_INC"]:
-        build_ship_facilities(bld_name)
-
+    _build_ship_facilities(Shipyard.ORG_ORB_INC)
     # gating by life cycle manipulation helps delay these until they are closer to being worthwhile
     if tech_is_complete(AIDependencies.GRO_LIFE_CYCLE) or empire.researchProgress(AIDependencies.GRO_LIFE_CYCLE) > 0:
-        for bld_name in ["BLD_SHIPYARD_ORG_XENO_FAC", "BLD_SHIPYARD_ORG_CELL_GRO_CHAMB"]:
-            build_ship_facilities(bld_name)
+        for building_type in (Shipyard.XENO_FACILITY, Shipyard.ORG_CELL_GRO_CHAMB):
+            _build_ship_facilities(building_type)
+    building_expense += _build_asteroid_processor(top_pilot_systems, queued_shipyard_pids)
 
-    shipyard_type = fo.getBuildingType("BLD_SHIPYARD_BASE")
-    building_name = "BLD_SHIPYARD_AST"
-    if empire.buildingTypeAvailable(building_name) and aistate.character.may_build_building(building_name):
-        queued_building_locs = [element.locationID for element in production_queue if (element.name == building_name)]
-        if not queued_building_locs:
-            building_type = fo.getBuildingType(building_name)
-            asteroid_systems = {}
-            asteroid_yards = {}
-            shipyard_systems = {}
-            builder_systems = {}
-            for pid in get_all_empire_planets():
-                planet = universe.getPlanet(pid)
-                this_spec = planet.speciesName
-                sys_id = planet.systemID
-                if planet.size == fo.planetSize.asteroids and sys_id in systems_with_species:
-                    asteroid_systems.setdefault(sys_id, []).append(pid)
-                    if (pid in queued_building_locs) or (
-                        building_name in [universe.getBuilding(bldg).buildingTypeName for bldg in planet.buildingIDs]
-                    ):
-                        asteroid_yards[sys_id] = pid  # shouldn't ever overwrite another, but ok if it did
-                if can_build_ship_for_species(this_spec):
-                    if pid in get_ship_builder_locations(this_spec):
-                        shipyard_systems.setdefault(sys_id, []).append(pid)
-                    else:
-                        builder_systems.setdefault(sys_id, []).append((planet.speciesName, pid))
-            # check if we need to build another asteroid processor:
-            # check if local shipyard to go with the asteroid processor
-            yard_locs = []
-            need_yard = {}
-            top_pilot_locs = []
-            for sys_id in set(asteroid_systems.keys()).difference(asteroid_yards.keys()):
-                if sys_id in top_pilot_systems:
-                    for pid, _ in top_pilot_systems[sys_id]:
-                        if pid not in queued_shipyard_locs:  # will catch it later if shipyard already present
-                            top_pilot_locs.append((_, pid, sys_id))
-            top_pilot_locs.sort(reverse=True)
-            for _, _, sys_id in top_pilot_locs:
-                if sys_id not in yard_locs:
-                    yard_locs.append(sys_id)  # prioritize asteroid yards for acirema and/or other top pilots
-                    for pid, _ in top_pilot_systems[sys_id]:
-                        if pid not in queued_shipyard_locs:  # will catch it later if shipyard already present
-                            need_yard[sys_id] = pid
-            if (not yard_locs) and len(asteroid_yards.values()) <= int(
-                current_turn // 50
-            ):  # not yet building & not enough current locs, find a location to build one
-                colonizer_loc_choices = []
-                builder_loc_choices = []
-                bld_systems = set(asteroid_systems.keys()).difference(asteroid_yards.keys())
-                for sys_id in bld_systems.intersection(builder_systems.keys()):
-                    for this_spec, pid in builder_systems[sys_id]:
-                        if can_build_colony_for_species(this_spec):
-                            if pid in (get_colony_builder_locations(this_spec) + queued_shipyard_locs):
-                                colonizer_loc_choices.insert(0, sys_id)
-                            else:
-                                colonizer_loc_choices.append(sys_id)
-                                need_yard[sys_id] = pid
-                        else:
-                            if pid in (get_ship_builder_locations(this_spec) + queued_shipyard_locs):
-                                builder_loc_choices.insert(0, sys_id)
-                            else:
-                                builder_loc_choices.append(sys_id)
-                                need_yard[sys_id] = pid
-                yard_locs.extend(
-                    (colonizer_loc_choices + builder_loc_choices)[:1]
-                )  # add at most one of these non top pilot locs
-            new_yard_count = len(queued_building_locs)
-            for sys_id in yard_locs:  # build at most 2 new asteroid yards at a time
-                if new_yard_count >= 2:
-                    break
-                pid = asteroid_systems[sys_id][0]
-                if sys_id in need_yard:
-                    pid2 = need_yard[sys_id]
-                    if shipyard_type.canBeProduced(empire.empireID, pid2):
-                        res = fo.issueEnqueueBuildingProductionOrder("BLD_SHIPYARD_BASE", pid2)
-                        debug(
-                            "Enqueueing %s at planet %d (%s) to go with Asteroid Processor , with result %d",
-                            "BLD_SHIPYARD_BASE",
-                            pid2,
-                            universe.getPlanet(pid2).name,
-                            res,
-                        )
-                        if res:
-                            queued_shipyard_locs.append(pid2)
-                            cost, time = empire.productionCostAndTime(production_queue[production_queue.size - 1])
-                            building_expense += cost / time  # production_queue[production_queue.size -1].blocksize *
-                            res = fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
-                            debug("Requeueing %s to front of build queue, with result %d", "BLD_SHIPYARD_BASE", res)
-                if pid not in queued_building_locs and building_type.canBeProduced(empire.empireID, pid):
-                    res = fo.issueEnqueueBuildingProductionOrder(building_name, pid)
-                    debug(
-                        "Enqueueing %s at planet %d (%s) , with result %d on turn %d",
-                        building_name,
-                        pid,
-                        universe.getPlanet(pid).name,
-                        res,
-                        current_turn,
-                    )
-                    if res:
-                        new_yard_count += 1
-                        queued_building_locs.append(pid)
-                        cost, time = empire.productionCostAndTime(production_queue[production_queue.size - 1])
-                        building_expense += cost / time  # production_queue[production_queue.size -1].blocksize *
-                        res = fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
-                        debug("Requeueing %s to front of build queue, with result %d", building_name, res)
-
-    building_name = "BLD_GAS_GIANT_GEN"
-    max_gggs = 1
-    if empire.buildingTypeAvailable(building_name) and aistate.character.may_build_building(building_name):
-        queued_building_locs = [element.locationID for element in production_queue if (element.name == building_name)]
-        building_type = fo.getBuildingType(building_name)
-        for (
-            pid
-        ) in (
-            get_all_empire_planets()
-        ):  # TODO: check to ensure that a resource center exists in system, or GGG would be wasted
-            if pid not in queued_building_locs and building_type.canBeProduced(
-                empire.empireID, pid
-            ):  # TODO: verify that canBeProduced() checks for preexistence of a barring building
-                planet = universe.getPlanet(pid)
-                if planet.systemID in systems_with_species:
-                    gg_list = []
-                    can_use_gg = False
-                    system = universe.getSystem(planet.systemID)
-                    for opid in system.planetIDs:
-                        other_planet = universe.getPlanet(opid)
-                        if other_planet.size == fo.planetSize.gasGiant:
-                            gg_list.append(opid)
-                        if other_planet.owner == empire.empireID and (
-                            FocusType.FOCUS_INDUSTRY in list(other_planet.availableFoci) + [other_planet.focus]
-                        ):
-                            can_use_gg = True
-                    if pid in sorted(gg_list)[:max_gggs] and can_use_gg:
-                        res = fo.issueEnqueueBuildingProductionOrder(building_name, pid)
-                        if res:
-                            queued_building_locs.append(pid)
-                            cost, time = empire.productionCostAndTime(production_queue[production_queue.size - 1])
-                            building_expense += cost / time  # production_queue[production_queue.size -1].blocksize *
-                            res = fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
-                            debug("Requeueing %s to front of build queue, with result %d", building_name, res)
-                        debug(
-                            "Enqueueing %s at planet %d (%s) , with result %d",
-                            building_name,
-                            pid,
-                            universe.getPlanet(pid).name,
-                            res,
-                        )
+    building_expense += _build_gas_giant_generator()
+    building_expense += _build_translator()
+    building_expense += _build_regional_administration()
+    building_expense += _build_military_command()
 
     building_name = "BLD_SOL_ORB_GEN"
     if empire.buildingTypeAvailable(building_name) and aistate.character.may_build_building(building_name):
@@ -675,7 +383,7 @@ def generate_production_orders():
         else:
             use_new_loc = True
             queued_building_locs = [
-                element.locationID for element in production_queue if (element.name == building_name)
+                element.locationID for element in (empire.productionQueue) if (element.name == building_name)
             ]
             if queued_building_locs:
                 queued_star_types = {}
@@ -720,9 +428,11 @@ def generate_production_orders():
                             res,
                         )
                         if res:
-                            cost, time = empire.productionCostAndTime(production_queue[production_queue.size - 1])
+                            cost, time = empire.productionCostAndTime(
+                                empire.productionQueue[empire.productionQueue.size - 1]
+                            )
                             building_expense += cost / time  # production_queue[production_queue.size -1].blocksize *
-                            res = fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
+                            res = fo.issueRequeueProductionOrder(empire.productionQueue.size - 1, 0)  # move to front
                             debug("Requeueing %s to front of build queue, with result %d", building_name, res)
                     except:  # noqa: E722
                         debug("problem queueing BLD_SOL_ORB_GEN at planet %s of system", use_loc, use_sys)
@@ -741,9 +451,9 @@ def generate_production_orders():
             ]:
                 already_got_one = True  # has been built, needs one turn to activate
         queued_building_locs = [
-            element.locationID for element in production_queue if (element.name == building_name)
+            element.locationID for element in (empire.productionQueue) if (element.name == building_name)
         ]  # TODO: check that queued locs or already built one are at red stars
-        if not bh_pilots and len(queued_building_locs) == 0 and (red_pilots or not already_got_one):
+        if not blackhole_pilots and len(queued_building_locs) == 0 and (red_pilots or not already_got_one):
             use_loc = None
             nominal_home = homeworld or universe.getPlanet(
                 (red_pilots + get_owned_planets_in_system(AIstate.empireStars[fo.starType.red][0]))[0]
@@ -777,10 +487,10 @@ def generate_production_orders():
                     res = fo.issueEnqueueBuildingProductionOrder(building_name, use_loc)
                     debug("Enqueueing %s at planet %s , with result %d", building_name, planet_used, res)
                     if res:
-                        res = fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
+                        res = fo.issueRequeueProductionOrder(empire.productionQueue.size - 1, 0)  # move to front
                         debug("Requeueing %s to front of build queue, with result %d", building_name, res)
                 except:  # noqa: E722
-                    debug("problem queueing %s at planet %s" % (building_name, planet_used))
+                    debug(f"problem queueing {building_name} at planet {planet_used}")
 
     building_name = "BLD_BLACK_HOLE_POW_GEN"
     if empire.buildingTypeAvailable(building_name) and aistate.character.may_build_building(building_name):
@@ -791,7 +501,9 @@ def generate_production_orders():
                 bld.buildingTypeName for bld in map(universe.getBuilding, planet.buildingIDs)
             ]:
                 already_got_one = True
-        queued_building_locs = [element.locationID for element in production_queue if (element.name == building_name)]
+        queued_building_locs = [
+            element.locationID for element in (empire.productionQueue) if (element.name == building_name)
+        ]
         if (
             (len(AIstate.empireStars.get(fo.starType.blackHole, [])) > 0)
             and len(queued_building_locs) == 0
@@ -825,7 +537,7 @@ def generate_production_orders():
                         res,
                     )
                     if res:
-                        res = fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
+                        res = fo.issueRequeueProductionOrder(empire.productionQueue.size - 1, 0)  # move to front
                         debug("Requeueing %s to front of build queue, with result %d" % (building_name, res))
                 except:  # noqa: E722
                     warning("problem queueing BLD_BLACK_HOLE_POW_GEN at planet %s of system %s", use_loc, use_sys)
@@ -839,7 +551,7 @@ def generate_production_orders():
                 bld.buildingTypeName for bld in map(universe.getBuilding, planet.buildingIDs)
             ]:
                 already_got_one = True
-        queued_locs = [element.locationID for element in production_queue if (element.name == building_name)]
+        queued_locs = [element.locationID for element in (empire.productionQueue) if (element.name == building_name)]
         if len(queued_locs) == 0 and homeworld and not already_got_one:
             try:
                 res = fo.issueEnqueueBuildingProductionOrder(building_name, capital_id)
@@ -851,7 +563,7 @@ def generate_production_orders():
                     res,
                 )
                 if res:
-                    res = fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
+                    res = fo.issueRequeueProductionOrder(empire.productionQueue.size - 1, 0)  # move to front
                     debug("Requeueing %s to front of build queue, with result %d", building_name, res)
             except:  # noqa: E722
                 pass
@@ -865,7 +577,7 @@ def generate_production_orders():
                 bld.buildingTypeName for bld in map(universe.getBuilding, planet.buildingIDs)
             ]:
                 already_got_one = True
-        queued_locs = [element.locationID for element in production_queue if (element.name == building_name)]
+        queued_locs = [element.locationID for element in (empire.productionQueue) if (element.name == building_name)]
         if len(queued_locs) == 0 and homeworld and not already_got_one:
             try:
                 res = fo.issueEnqueueBuildingProductionOrder(building_name, capital_id)
@@ -877,7 +589,7 @@ def generate_production_orders():
                     res,
                 )
                 if res:
-                    res = fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
+                    res = fo.issueRequeueProductionOrder(empire.productionQueue.size - 1, 0)  # move to front
                     debug("Requeueing %s to front of build queue, with result %d", building_name, res)
             except:  # noqa: E722
                 pass
@@ -886,7 +598,7 @@ def generate_production_orders():
     already_got_extractor = False
     if (
         empire.buildingTypeAvailable(building_name)
-        and [element.locationID for element in production_queue if (element.name == building_name)] == []
+        and [element.locationID for element in (empire.productionQueue) if (element.name == building_name)] == []
         and AIstate.empireStars.get(fo.starType.neutron, [])
     ):
         # building_type = fo.getBuildingType(building_name)
@@ -929,22 +641,18 @@ def generate_production_orders():
                         res,
                     )
                     if res:
-                        res = fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
+                        res = fo.issueRequeueProductionOrder(empire.productionQueue.size - 1, 0)  # move to front
                         debug("Requeueing %s to front of build queue, with result %d", building_name, res)
                 except:  # noqa: E722
-                    warning("problem queueing BLD_NEUTRONIUM_EXTRACTOR at planet %s of system %s" % (use_loc, use_sys))
+                    warning(f"problem queueing BLD_NEUTRONIUM_EXTRACTOR at planet {use_loc} of system {use_sys}")
 
-    bld_name = "BLD_SHIPYARD_CON_GEOINT"
-    build_ship_facilities(bld_name)
+    _build_ship_facilities(Shipyard.GEO)
 
     # with current stats the AI considers Titanic Hull superior to Scattered Asteroid, so don't bother building for now
     # TODO: uncomment once dynamic assessment of prospective designs is enabled & indicates building is worthwhile
-    bld_name = "BLD_SHIPYARD_AST_REF"
-    build_ship_facilities(bld_name)
+    _build_ship_facilities(Shipyard.ASTEROID_REF)
 
-    bld_name = "BLD_NEUTRONIUM_FORGE"
-
-    build_ship_facilities(bld_name, get_priority_locations())
+    _build_ship_facilities(Shipyard.NEUTRONIUM_FORGE, get_priority_locations())
 
     colony_ship_map = {}
     for fid in FleetUtilsAI.get_empire_fleet_ids_by_role(MissionType.COLONISATION):
@@ -957,7 +665,6 @@ def generate_production_orders():
                 colony_ship_map.setdefault(ship.speciesName, []).append(1)
 
     building_name = "BLD_CONC_CAMP"
-    verbose_camp = False
     building_type = fo.getBuildingType(building_name)
     for pid in get_inhabited_planets():
         planet = universe.getPlanet(pid)
@@ -971,7 +678,6 @@ def generate_production_orders():
         t_ind = planet.currentMeterValue(fo.meterType.targetIndustry)
         c_ind = planet.currentMeterValue(fo.meterType.industry)
         pop_disqualified = (c_pop <= 32) or (c_pop < 0.9 * t_pop)
-        built_camp = False
         this_spec = planet.speciesName
         safety_margin_met = (
             can_build_colony_for_species(this_spec)
@@ -980,24 +686,6 @@ def generate_production_orders():
         if (
             pop_disqualified or not safety_margin_met
         ):  # check even if not aggressive, etc, just in case acquired planet with a ConcCamp on it
-            if can_build_camp:
-                if pop_disqualified:
-                    if verbose_camp:
-                        debug(
-                            "Conc Camp disqualified at %s due to low pop: current %.1f target: %.1f",
-                            planet.name,
-                            c_pop,
-                            t_pop,
-                        )
-                else:
-                    if verbose_camp:
-                        debug(
-                            "Conc Camp disqualified at %s due to safety margin; species %s, colonizing planets %s, with %d colony ships",
-                            planet.name,
-                            planet.speciesName,
-                            get_empire_planets_with_species(planet.speciesName),
-                            len(colony_ship_map.get(planet.speciesName, [])),
-                        )
             for bldg in planet.buildingIDs:
                 if universe.getBuilding(bldg).buildingTypeName == building_name:
                     res = fo.issueScrapOrder(bldg)
@@ -1011,14 +699,9 @@ def generate_production_orders():
                 continue
                 # now that focus setting takes these into account, probably works ok to have conc camp, but let's not push it
             queued_building_locs = [
-                element.locationID for element in production_queue if (element.name == building_name)
+                element.locationID for element in (empire.productionQueue) if (element.name == building_name)
             ]
-            if c_pop < 0.95 * t_pop:
-                if verbose_camp:
-                    debug(
-                        "Conc Camp disqualified at %s due to pop: current %.1f target: %.1f", planet.name, c_pop, t_pop
-                    )
-            else:
+            if c_pop >= 0.95 * t_pop:
                 if pid not in queued_building_locs:
                     if planet.focus in [FocusType.FOCUS_INDUSTRY]:
                         if c_ind >= t_ind + c_pop:
@@ -1033,7 +716,6 @@ def generate_production_orders():
                             universe.updateMeterEstimates([pid])
                             continue
                     res = fo.issueEnqueueBuildingProductionOrder(building_name, pid)
-                    built_camp = res
                     debug(
                         "Enqueueing %s at planet %d (%s) , with result %d",
                         building_name,
@@ -1043,133 +725,26 @@ def generate_production_orders():
                     )
                     if res:
                         queued_building_locs.append(pid)
-                        fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
+                        fo.issueRequeueProductionOrder(empire.productionQueue.size - 1, 0)  # move to front
                     else:
                         # TODO: enable location condition reporting a la mapwnd BuildDesignatorWnd
                         warning(
                             "Enqueing Conc Camp at %s despite building_type.canBeProduced(empire.empireID, pid) reporting %s"
                             % (planet, can_build_camp)
                         )
-        if verbose_camp:
-            debug("conc camp status at %s : checkedCamp: %s, built_camp: %s", planet.name, can_build_camp, built_camp)
+    building_expense += _build_scanning_facility()
 
-    building_name = "BLD_SCANNING_FACILITY"
-    if empire.buildingTypeAvailable(building_name):
-        queued_locs = [element.locationID for element in production_queue if (element.name == building_name)]
-        scanner_locs = {}
-        for pid in get_all_empire_planets():
-            planet = universe.getPlanet(pid)
-            if planet:
-                if (pid in queued_locs) or (
-                    building_name in [bld.buildingTypeName for bld in map(universe.getBuilding, planet.buildingIDs)]
-                ):
-                    scanner_locs[planet.systemID] = True
-        max_scanner_builds = max(1, int(empire.productionPoints / 30))
-        debug(
-            "Considering building %s, found current and queued systems %s",
-            building_name,
-            PlanetUtilsAI.sys_name_ids(scanner_locs),
-        )
-        for sys_id in get_owned_planets().keys():
-            if len(queued_locs) >= max_scanner_builds:
-                break
-            if sys_id in scanner_locs:
-                continue
-            need_scanner = False
-            for nSys in get_neighbors(sys_id):
-                if universe.getVisibility(nSys, empire.empireID) < fo.visibility.partial:
-                    need_scanner = True
-                    break
-            if not need_scanner:
-                continue
-            build_locs = []
-            for pid in get_owned_planets_in_system(sys_id):
-                planet = universe.getPlanet(pid)
-                if not planet:
-                    continue
-                if not fo.isProducibleBuilding(building_name, pid):
-                    continue
-                if not fo.isEnqueuableBuilding(building_name, pid):
-                    continue
-                build_locs.append((planet.currentMeterValue(fo.meterType.maxTroops), pid))
-            if not build_locs:
-                continue
-            for troops, loc in sorted(build_locs):
-                planet = universe.getPlanet(loc)
-                res = fo.issueEnqueueBuildingProductionOrder(building_name, loc)
-                debug("Enqueueing %s at planet %d (%s) , with result %d", building_name, loc, planet.name, res)
-                if res:
-                    res = fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
-                    debug("Requeueing %s to front of build queue, with result %d", building_name, res)
-                    queued_locs.append(planet.systemID)
-                    break
-
-    building_name = "BLD_SHIPYARD_ORBITAL_DRYDOCK"
-    if empire.buildingTypeAvailable(building_name):
-        queued_locs = [element.locationID for element in production_queue if (element.name == building_name)]
-        queued_sys = set()
-        for pid in queued_locs:
-            dd_planet = universe.getPlanet(pid)
-            if dd_planet:
-                queued_sys.add(dd_planet.systemID)
-        cur_drydoc_sys = set(get_empire_drydocks().keys()).union(queued_sys)
-        covered_drydoc_locs = set()
-        for start_set, dest_set in [
-            (cur_drydoc_sys, covered_drydoc_locs),
-            (covered_drydoc_locs, covered_drydoc_locs),
-        ]:  # coverage of neighbors up to 2 jumps away from a drydock
-            for dd_sys_id in start_set.copy():
-                dest_set.add(dd_sys_id)
-                dest_set.update(get_neighbors(dd_sys_id))
-
-        max_dock_builds = int(0.8 + empire.productionPoints / 120.0)
-        debug(
-            "Considering building %s, found current and queued systems %s",
-            building_name,
-            PlanetUtilsAI.sys_name_ids(cur_drydoc_sys.union(queued_sys)),
-        )
-        for sys_id, pids in get_colonized_planets().items():  # TODO: sort/prioritize in some fashion
-            local_top_pilots = dict(top_pilot_systems.get(sys_id, []))
-            local_drydocks = get_empire_drydocks().get(sys_id, [])
-            if len(queued_locs) >= max_dock_builds:
-                debug("Drydock enqueing halted with %d of max %d", len(queued_locs), max_dock_builds)
-                break
-            if (sys_id in covered_drydoc_locs) and not local_top_pilots:
-                continue
-            else:
-                pass
-            for _, pid in sorted([(local_top_pilots.get(pid, 0), pid) for pid in pids], reverse=True):
-                if has_shipyard(pid):
-                    continue
-                if pid in local_drydocks or pid in queued_locs:
-                    break
-                if not fo.isProducibleBuilding(building_name, pid):
-                    continue
-                if not fo.isEnqueuableBuilding(building_name, pid):
-                    continue
-                planet = universe.getPlanet(pid)
-                res = fo.issueEnqueueBuildingProductionOrder(building_name, pid)
-                debug("Enqueueing %s at planet %d (%s) , with result %d", building_name, pid, planet.name, res)
-                if res:
-                    queued_locs.append(planet.systemID)
-                    covered_drydoc_locs.add(planet.systemID)
-                    covered_drydoc_locs.update(get_neighbors(planet.systemID))
-                    if max_dock_builds >= 2:
-                        res = fo.issueRequeueProductionOrder(production_queue.size - 1, 0)  # move to front
-                        debug("Requeueing %s to front of build queue, with result %d", building_name, res)
-                    break
-                else:
-                    warning("Failed enqueueing %s at %s, with result %d" % (building_name, planet, res))
+    _build_orbital_drydock(top_pilot_systems)
 
     building_name = "BLD_XENORESURRECTION_LAB"
-    queued_xeno_lab_locs = [element.locationID for element in production_queue if element.name == building_name]
+    queued_xeno_lab_locs = [element.locationID for element in (empire.productionQueue) if element.name == building_name]
     for pid in get_all_empire_planets():
         if pid in queued_xeno_lab_locs or not empire.canBuild(fo.buildType.BT_BUILDING, building_name, pid):
             continue
         res = fo.issueEnqueueBuildingProductionOrder(building_name, pid)
         debug("Enqueueing %s at planet %d (%s) , with result %d", building_name, pid, planet.name, res)
         if res:
-            res = fo.issueRequeueProductionOrder(production_queue.size - 1, 2)  # move to near front
+            res = fo.issueRequeueProductionOrder(empire.productionQueue.size - 1, 2)  # move to near front
             debug("Requeueing %s to front of build queue, with result %d", building_name, res)
             break
         else:
@@ -1178,13 +753,13 @@ def generate_production_orders():
     # ignore acquired-under-construction colony buildings for which our empire lacks the species
     queued_clny_bld_locs = [
         element.locationID
-        for element in production_queue
+        for element in (empire.productionQueue)
         if (element.name.startswith("BLD_COL_") and empire_has_colony_bld_species(element.name))
     ]
     colony_bldg_entries = [
         entry
-        for entry in aistate.colonisablePlanetIDs.items()
-        if entry[1][0] > 60
+        for entry in get_colonisable_planet_ids().items()
+        if entry[1][0] > MINIMUM_COLONY_SCORE
         and entry[0] not in queued_clny_bld_locs
         and entry[0] in get_empire_outposts()
         and not already_has_completed_colony_building(entry[0])
@@ -1195,12 +770,15 @@ def generate_production_orders():
         building_name = "BLD_COL_" + entry[1][1][3:]
         planet = universe.getPlanet(pid)
         building_type = fo.getBuildingType(building_name)
+        # We may have conquered a planet with a queued colony.
+        # If we want to build another species, we have to remove the queued one.
+        _remove_other_colonies(pid, building_name)
         if not (building_type and building_type.canBeEnqueued(empire.empireID, pid)):
             continue
         res = fo.issueEnqueueBuildingProductionOrder(building_name, pid)
         debug("Enqueueing %s at planet %d (%s) , with result %d", building_name, pid, planet.name, res)
         if res:
-            res = fo.issueRequeueProductionOrder(production_queue.size - 1, 2)  # move to near front
+            res = fo.issueRequeueProductionOrder(empire.productionQueue.size - 1, 2)  # move to near front
             debug("Requeueing %s to front of build queue, with result %d", building_name, res)
             break
         else:
@@ -1220,9 +798,9 @@ def generate_production_orders():
     total_pp_spent = fo.getEmpire().productionQueue.totalSpent
     debug("  Total Production Points Spent: %s", total_pp_spent)
 
-    wasted_pp = max(0, total_pp - total_pp_spent)
+    wasted_pp = max(0, empire.productionPoints - total_pp_spent)
     debug("  Wasted Production Points: %s", wasted_pp)  # TODO: add resource group analysis
-    avail_pp = total_pp - total_pp_spent - 0.0001
+    avail_pp = empire.productionPoints - total_pp_spent - 0.0001
 
     production_queue = empire.productionQueue
     queued_colony_ships = {}
@@ -1322,7 +900,7 @@ def generate_production_orders():
             per_turn_cost = float(prod_cost) / prod_time
             if (
                 troopers_needed > 0
-                and total_pp > 3 * per_turn_cost * queued_troop_ships
+                and empire.productionPoints > 3 * per_turn_cost * queued_troop_ships
                 and aistate.character.may_produce_troops()
             ):
                 retval = fo.issueEnqueueShipProductionOrder(best_design_id, loc)
@@ -1398,13 +976,13 @@ def generate_production_orders():
     for pty in filtered_priorities:
         filtered_priorities[pty] **= scaling_power
 
-    available_pp = dict(
-        [(tuple(el.key()), el.data()) for el in empire.planetsWithAvailablePP]
-    )  # keys are sets of ints; data is doubles
-    allocated_pp = dict(
-        [(tuple(el.key()), el.data()) for el in empire.planetsWithAllocatedPP]
-    )  # keys are sets of ints; data is doubles
-    planets_with_wasted_pp = set([tuple(pidset) for pidset in empire.planetsWithWastedPP])
+    available_pp = {
+        tuple(el.key()): el.data() for el in empire.planetsWithAvailablePP
+    }  # keys are sets of ints; data is doubles
+    allocated_pp = {
+        tuple(el.key()): el.data() for el in empire.planetsWithAllocatedPP
+    }  # keys are sets of ints; data is doubles
+    planets_with_wasted_pp = {tuple(pidset) for pidset in empire.planetsWithWastedPP}
     debug("avail_pp ( <systems> : pp ):")
     for planet_set in available_pp:
         debug(
@@ -1631,6 +1209,26 @@ def generate_production_orders():
     print_production_queue(after_turn=True)
 
 
+def _get_queued_buildings(pid: PlanetId) -> list[BuildingName]:
+    debug("Buildings already in Production Queue:")
+    capital_queued_buildings = _get_queued_buildings_for_planet(pid)
+    for bldg in capital_queued_buildings:
+        debug(f"    {bldg.name} turns: {bldg.turnsLeft} PP: {bldg.allocation}")
+    if not capital_queued_buildings:
+        debug("No capital queued buildings")
+    queued_building_names = [bldg.name for bldg in capital_queued_buildings]
+    return queued_building_names
+
+
+def _is_queued_building_on_planet(e: "fo.productionQueueElement", pid: PlanetId) -> bool:
+    return e.buildType == EmpireProductionTypes.BT_BUILDING and e.locationID == pid
+
+
+def _get_queued_buildings_for_planet(pid: PlanetId) -> Sequence["fo.productionQueueElement"]:
+    queue = fo.getEmpire().productionQueue
+    return [e for e in queue if _is_queued_building_on_planet(e, pid)]
+
+
 def update_stockpile_use():
     """Decide which elements in the production_queue will be enabled for drawing from the imperial stockpile.  This
     initial version simply ensures that every resource group with at least one item on the queue has its highest
@@ -1641,7 +1239,7 @@ def update_stockpile_use():
     # TODO: Do a priority and risk evaluation to decide on enabling stockpile draws
     empire = fo.getEmpire()
     production_queue = empire.productionQueue
-    resource_groups = set(tuple(el.key()) for el in empire.planetsWithAvailablePP)
+    resource_groups = {tuple(el.key()) for el in empire.planetsWithAvailablePP}
     planets_in_stockpile_enabled_group = set()
     for queue_index, element in enumerate(production_queue):
         if element.locationID in planets_in_stockpile_enabled_group:
@@ -1675,63 +1273,60 @@ def already_has_completed_colony_building(planet_id) -> bool:
     return any(universe.getBuilding(bldg).name.startswith("BLD_COL_") for bldg in planet.buildingIDs)
 
 
-def build_ship_facilities(bld_name, top_locs=None):
+def _build_ship_facilities(building_type: Shipyard, top_pids: set[PlanetId] = frozenset()) -> None:
     # TODO: add total_pp checks below, so don't overload queue
-    if top_locs is None:
-        top_locs = set()
+    if not building_type.available():
+        return
     universe = fo.getUniverse()
-    empire = fo.getEmpire()
-    total_pp = empire.productionPoints
-    __, prereq_bldg, this_cost, time = AIDependencies.SHIP_FACILITIES.get(bld_name, (None, "", -1, -1))
-    if not get_aistate().character.may_build_building(bld_name):
-        return
-    bld_type = fo.getBuildingType(bld_name)
-    if not empire.buildingTypeAvailable(bld_name):
-        return
-    queued_bld_locs = [element.locationID for element in empire.productionQueue if element.name == bld_name]
-    if bld_name in AIDependencies.SYSTEM_SHIP_FACILITIES:
-        current_locs = get_systems_with_building(bld_name)
-        current_coverage = current_locs.union(universe.getPlanet(planet_id).systemID for planet_id in queued_bld_locs)
-        open_systems = set(
-            universe.getPlanet(pid).systemID for pid in get_best_pilot_facilities("BLD_SHIPYARD_BASE")
-        ).difference(current_coverage)
-        try_systems = open_systems.intersection(get_systems_with_building(prereq_bldg)) if prereq_bldg else open_systems
-        try_locs = set(pid for sys_id in try_systems for pid in get_owned_planets_in_system(sys_id))
+    total_pp = fo.getEmpire().productionPoints
+    prerequisite_type = building_type.prerequisite()
+    queued_bld_pids = building_type.queued_at()
+    if building_type in Shipyard.get_system_ship_facilities():
+        current_coverage = building_type.built_or_queued_at_sys()
+        open_systems = {
+            universe.getPlanet(pid).systemID for pid in get_best_pilot_facilities(Shipyard.BASE.value)
+        }.difference(current_coverage)
+        try_systems = open_systems & prerequisite_type.built_or_queued_at_sys() if prerequisite_type else open_systems
+        try_pids = {pid for sys_id in try_systems for pid in get_owned_planets_in_system(sys_id)}
     else:
-        current_locs = get_best_pilot_facilities(bld_name)
-        try_locs = get_best_pilot_facilities(prereq_bldg).difference(queued_bld_locs, current_locs)
+        current_pids = get_best_pilot_facilities(building_type.value)
+        try_pids = get_best_pilot_facilities(prerequisite_type.value).difference(queued_bld_pids, current_pids)
     debug(
         "Considering constructing a %s, have %d already built and %d queued",
-        bld_name,
-        len(current_locs),
-        len(queued_bld_locs),
+        building_type,
+        len(building_type.built_at()),
+        len(building_type.queued_at()),
     )
-    max_under_construction = max(1, (time * total_pp) // (5 * this_cost))
-    max_total = max(1, (time * total_pp) // (2 * this_cost))
-    debug("Allowances: max total: %d, max under construction: %d", max_total, max_under_construction)
-    if len(current_locs) >= max_total:
+    if not try_pids:
         return
-    valid_locs = list(
-        loc for loc in try_locs.intersection(top_locs) if bld_type.canBeProduced(empire.empireID, loc)
-    ) + list(loc for loc in try_locs.difference(top_locs) if bld_type.canBeProduced(empire.empireID, loc))
-    debug("Have %d potential locations: %s", len(valid_locs), [universe.getPlanet(x) for x in valid_locs])
+    # ship facilities all have location independent costs
+    turn_cost = building_type.turn_cost(list(try_pids)[0])
+    max_under_construction = max(1, int(total_pp) // (int(5 * turn_cost)))
+    max_total = max(1, int(total_pp) // int(2 * turn_cost))
+    debug("Allowances: max total: %d, max under construction: %d", max_total, max_under_construction)
+    if len(building_type.built_at()) >= max_total:
+        return
+    try_top_pids = [pid for pid in try_pids & top_pids if building_type.can_be_produced(pid)]
+    try_other_pids = [pid for pid in try_pids - top_pids if building_type.can_be_produced(pid)]
+    valid_pids = try_top_pids + try_other_pids
+    debug("Have %d potential locations: %s", len(valid_pids), [universe.getPlanet(x) for x in valid_pids])
     # TODO: rank by defense ability, etc.
-    num_queued = len(queued_bld_locs)
+    num_queued = len(queued_bld_pids)
     already_covered = []  # just those covered on this turn
-    while valid_locs:
+    while valid_pids:
         if num_queued >= max_under_construction:
             break
-        pid = valid_locs.pop()
+        pid = valid_pids.pop()
         if pid in already_covered:
             continue
-        res = fo.issueEnqueueBuildingProductionOrder(bld_name, pid)
-        debug("Enqueueing %s at planet %s , with result %d", bld_name, universe.getPlanet(pid), res)
+        res = building_type.enqueue(pid)
+        debug("Enqueueing %s at planet %s , with result %d", building_type, universe.getPlanet(pid), res)
         if res:
             num_queued += 1
             already_covered.extend(get_owned_planets_in_system(universe.getPlanet(pid).systemID))
 
 
-def find_automatic_historic_analyzer_candidates() -> List[int]:
+def find_automatic_historic_analyzer_candidates() -> list[int]:
     """
     Find possible locations for the BLD_AUTO_HISTORY_ANALYSER building and return a subset of chosen building locations.
 
@@ -1812,3 +1407,564 @@ def get_number_of_existing_outpost_and_colony_ships() -> int:
     num_colony_fleets = len(FleetUtilsAI.get_empire_fleet_ids_by_role(MissionType.COLONISATION))
     num_outpost_fleets = len(FleetUtilsAI.get_empire_fleet_ids_by_role(MissionType.OUTPOST))
     return num_outpost_fleets + num_colony_fleets
+
+
+def _location_rating(planet: fo.planet) -> float:
+    """Get a rating how good this planet would be for a building"""
+    # Simple value so far, should be enhanced, e.g. a scanner should go to the planet with species that
+    # has the best basic visions
+    return planet.currentMeterValue(fo.meterType.maxTroops)
+
+
+def _try_enqueue(
+    building_type: BuildingTypeBase,
+    candidates: Union[PlanetId, Iterable[PlanetId]],
+    *,
+    at_front: bool = False,
+    ignore_dislike: bool = False,
+) -> float:
+    """
+    Enqueue building at one of the planets in candidates.
+    If at_front, building is added at the front of the queue.
+    Returns PP per turn spent on the new building or 0.0 if nothing was enqueued.
+    """
+    universe = fo.getUniverse()
+    empire = fo.getEmpire()
+    opinion = building_type.get_opinions()
+    locations = []
+    preferred_locations = []
+    if isinstance(candidates, int):  # isinstance(candidates, PlanetId) does not work, at least not in python-3.9
+        candidates = [candidates]
+    for pid in candidates:
+        planet = universe.getPlanet(pid)
+        if not planet:
+            error(f"Got pid {pid} in candidate, which does not seem to be a planetID")
+            continue
+        if not ignore_dislike and pid in opinion.dislikes:
+            continue
+        if not building_type.can_be_produced(pid) or not building_type.can_be_enqueued(pid):
+            continue
+        if pid in opinion.likes:
+            preferred_locations.append((_location_rating(planet), pid))
+        else:
+            locations.append((_location_rating(planet), pid))
+    for _, pid in sorted(preferred_locations, reverse=True) + sorted(locations, reverse=True):
+        planet = universe.getPlanet(pid)
+        res = building_type.enqueue(pid)
+        debug("Enqueueing %s at planet %d (%s) , with result %d", building_type, pid, planet.name, res)
+        if res:
+            if at_front:
+                res = fo.issueRequeueProductionOrder(empire.productionQueue.size - 1, 0)  # move to front
+                debug("Requeueing %s to front of build queue, with result %d", building_type, res)
+            return building_type.turn_cost(pid)
+    return 0.0
+
+
+def _may_enqueue_for_stability(building_type: BuildingTypeBase, new_turn_cost: float) -> float:
+    """
+    Build building if it seems worth doing so to increase stability.
+    Only builds of locations.planets_enqueued is empty and new_turn_cost is 0.0,
+    i.e. there are currently no build queue entries for the given building.
+    returns new_turn_cost or turn_cost of the building enqueued by this function.
+    """
+    if building_type.queued_at() or new_turn_cost:
+        return new_turn_cost
+    # this can be improved a lot, taking into account value of planets, actual stability and
+    # what effects the change would have. For the moment, keep it simple.
+    # Note that the strongest effect is always on the building's planet itself.
+    opinion = building_type.get_opinions()
+    universe = fo.getUniverse()
+    if len(opinion.likes) >= len(opinion.dislikes) * PlanetUtilsAI.dislike_factor():
+        like_candidates = opinion.likes - building_type.built_or_queued_at()
+        # plans may change, so consider only actual colonies that like it
+        candidates = [pid for pid in like_candidates if universe.getPlanet(pid).speciesName]
+        return _try_enqueue(building_type, candidates)
+    return 0.0
+
+
+def _build_scanning_facility() -> float:
+    """Consider building Scanning Facilities, return added turn costs."""
+    building_type = BuildingType.SCANNING_FACILITY
+    empire = fo.getEmpire()
+    if not building_type.available():
+        return 0.0
+
+    universe = fo.getUniverse()
+    turn_cost = 0.0
+    opinion = building_type.get_opinions()
+    # TBD use actual cost?
+    max_scanner_builds = max(1, int(empire.productionPoints / 30)) - len(building_type.queued_at())
+    scanner_systems = building_type.built_or_queued_at_sys()
+    debug(
+        "Considering building %s, found current and queued systems %s, planets that like it %s, #dislikes: %d",
+        building_type,
+        PlanetUtilsAI.sys_name_ids(scanner_systems),
+        PlanetUtilsAI.sys_name_ids(opinion.likes),
+        len(opinion.dislikes),
+    )
+    for sys_id in get_owned_planets():
+        if max_scanner_builds <= 0:
+            break
+        if sys_id in scanner_systems:
+            continue
+        need_scanner = False
+        for neighbor in get_neighbors(sys_id):
+            if universe.getVisibility(neighbor, empire.empireID) < fo.visibility.partial:
+                need_scanner = True
+                break
+        if not need_scanner:
+            continue
+        # TBD: chose based on detection range
+        cost = _try_enqueue(building_type, get_owned_planets_in_system(sys_id), at_front=True)
+        if cost:
+            max_scanner_builds -= 1
+        turn_cost += cost
+    return _may_enqueue_for_stability(building_type, turn_cost)
+
+
+def _build_gas_giant_generator() -> float:  # noqa: max-complexity
+    """Consider building Gas Giant Generators, return added turn costs."""
+    building_type = BuildingType.GAS_GIANT_GEN
+    if not building_type.available():
+        return 0.0
+
+    ggg_min_stability = get_named_real("BLD_GAS_GIANT_GEN_MIN_STABILITY")
+    universe = fo.getUniverse()
+    colonized_planets = get_colonized_planets()
+    opinion = building_type.get_opinions()
+    systems = []
+    for sys in colonized_planets.keys():
+        planets = [(pid, universe.getPlanet(pid)) for pid in get_owned_planets_in_system(sys)]
+        if sys in building_type.built_or_queued_at_sys() or fo.planetSize.gasGiant not in [x[1].size for x in planets]:
+            continue
+        rating = 0
+        gas_giant = None
+        best_gg = -2
+        debug(f"Gas Giant Generator rating for {universe.getSystem(sys).name} ...")
+        for pid, planet in planets:
+            likes = opinion.value(pid, 1, 0, -1 * PlanetUtilsAI.dislike_factor())
+            debug(f"  {planet.name} likes {likes}")
+            # TBD -4 if build here...
+            stability = planet.currentMeterValue(fo.meterType.targetHappiness) + likes
+            rating += 3 * likes
+            debug(f"  rating now {rating} from likes {likes} ")
+            if planet.size == fo.planetSize.gasGiant:
+                val = likes
+                if val > best_gg:
+                    best_gg = val
+                    gas_giant = pid
+            if planet.focus == FocusType.FOCUS_INDUSTRY and stability >= ggg_min_stability:
+                rating += 20 + min(5, stability - ggg_min_stability)
+                debug(f"  rating now {rating} from industry planet stability {stability} ")
+            elif FocusType.FOCUS_INDUSTRY in planet.availableFoci and stability >= ggg_min_stability:
+                rating += 5 + min(5, stability - ggg_min_stability)
+                debug(f"  rating now {rating} from pot. industry planet stability {stability} ")
+        if gas_giant:
+            # if the inhabitants do not like it, this will require two other planets that profit from it
+            rating += 15 * best_gg
+            debug(f"  from best_gg {best_gg}, final rating: {rating}")
+            systems.append((rating, gas_giant))
+    # sorting so that highest ratings come last, which means they end up at the front of the queue
+    systems.sort()
+    turn_cost = 0.0
+    for rating, gas_giant in systems:
+        # 20 = one industry planet with exactly ggg_min_stability
+        if rating >= 20:
+            turn_cost += _try_enqueue(building_type, gas_giant, at_front=True, ignore_dislike=True)
+    return _may_enqueue_for_stability(building_type, turn_cost)
+
+
+def _build_translator():
+    """Consider building Near Universal Translators, return added turn costs."""
+    building_type = BuildingType.TRANSLATOR
+    if building_type.available() and translators_wanted() and candidate_for_translator:
+        # starting one per turn should be enough
+        have_one = bool(building_type.built_or_queued_at())
+        return _try_enqueue(building_type, candidate_for_translator, at_front=not have_one)
+    return 0.0
+    # may_enqueue_for_stability? Building is rather expensive...
+
+
+def _build_regional_administration() -> float:
+    """Consider building Imperial Regional Administrations, return added turn costs."""
+    building_type = BuildingType.REGIONAL_ADMIN
+    current_admin_systems = building_type.built_or_queued_at_sys() | BuildingType.PALACE.built_or_queued_at_sys()
+    # No administrations at all means no palace. If we cannot even find a place for the palace,
+    # there is no point in building regional administrations.
+    if not building_type.available() or not current_admin_systems:
+        return 0.0
+    universe = fo.getUniverse()
+    jumps_to_admin = [
+        (min(universe.jumpDistance(sys_id, admin) for admin in current_admin_systems), sys_id)
+        for sys_id in get_owned_planets()
+    ]
+    jumps_to_admin.sort(reverse=True)
+    # Currently, 6 is required, this is supposed to change. Note that the game allows to enqueue several ones
+    # close to each other, but only one will get finished.
+    if jumps_to_admin[0][0] < 6:
+        return 0.0
+    debug(f"current_admin_systems: {current_admin_systems}, jumps_to_admin = {jumps_to_admin}")
+    # with minimum distance 6, systems 3 jumps away from current admins cannot get closer
+    systems_that_may_profit = [value for value in jumps_to_admin if value[0] > 3]
+    best_sys_id = None
+    # without a threshold the AI would build at the first planet 6 steps away from others,
+    # although it may not give much and is possible quite exposed.
+    best_rating = 10.0
+    for distance, candidate in jumps_to_admin:
+        if distance < 6:
+            break
+        rating = _rate_system_for_admin(candidate, systems_that_may_profit)
+        if rating > best_rating:
+            best_sys_id = candidate
+            best_rating = rating
+    # To add more than one, we'd have to recalculate everything, but one per turn is good enough.
+    # In practice more than one would hardly ever be possible anyway.
+    debug(f"best_sys_id={best_sys_id}, best_rating={best_rating}, planets: {get_owned_planets_in_system(best_sys_id)}")
+    if not best_sys_id:
+        return 0.0
+    return _try_enqueue(building_type, get_owned_planets_in_system(best_sys_id))
+
+
+def _rate_system_for_admin(sys_id: SystemId, systems_that_may_profit: list[tuple[int, SystemId]]) -> float:
+    opinion = BuildingType.REGIONAL_ADMIN.get_opinions()
+    planets = set(get_owned_planets_in_system(sys_id))
+    dislikes = planets & opinion.dislikes
+    likes = planets & opinion.likes
+    if dislikes == planets:
+        return 0.0
+    # First like gets a big bonus, but we can build it only on one.
+    # Number of planets to prefer better defended systems.
+    rating = 1.5 * (len(likes) - len(dislikes) * PlanetUtilsAI.dislike_factor()) + 3 * (likes != set()) + len(planets)
+
+    universe = fo.getUniverse()
+    for current_distance, other_sys_id in systems_that_may_profit:
+        difference = current_distance - universe.jumpDistance(sys_id, other_sys_id)
+        if difference > 0:
+            for pid in get_colonized_planets_in_system(other_sys_id):
+                planet = universe.getPlanet(pid)
+                if Tags.INDEPENDENT not in fo.getSpecies(planet.speciesName).tags:
+                    stability = planet.currentMeterValue(fo.meterType.targetHappiness)
+                    rating += difference
+                    # reaching 10 gives a lot of bonuses
+                    if stability < 0 or stability < 10 <= stability + difference:
+                        rating += 2
+    debug(f"admin rating {universe.getSystem(sys_id)}={rating}")
+    return rating
+
+
+def _build_military_command() -> float:
+    """
+    Consider building a Military Command, return added turn costs.
+    Since its major purpose is to provide policy slots, and we may need the production for more important
+    things, do not build it too early. Won't build it at all, if all our planets dislike it.
+    """
+    building_type = BuildingType.MILITARY_COMMAND
+    palace_planet = BuildingType.PALACE.built_at()
+    # an empire can only build one, and if we do not have a palace, this is definitely more important
+    if building_type.built_or_queued_at() or not palace_planet:
+        return 0.0
+    # cost is independent of the location, but we need a valid location
+    if fo.getEmpire().productionPoints > building_type.turn_cost(list(palace_planet)[0]) * 1.5:
+        # default selection should prefer the capital, unless its species dislikes it.
+        return _try_enqueue(building_type, get_inhabited_planets())
+    return 0.0
+
+
+TopPilotSystems = NewType("TopPilotSystems", dict[SystemId, list[tuple[PlanetId, float]]])
+
+
+class ShipYardInfo(NamedTuple):
+    queued_shipyard_pids: list[PlanetId]
+    colony_systems: dict[PlanetId, SystemId]
+    top_pilot_systems: TopPilotSystems
+
+
+def _build_basic_shipyards() -> ShipYardInfo:  # noqa: max-complexity
+    """
+    Consider building basic ship yards and also determine some value needed for other shipyard buildings.
+    """
+    building_type = Shipyard.BASE
+    universe = fo.getUniverse()
+    queued_shipyard_pids = building_type.queued_at()
+    system_colonies = {}
+    colony_systems = {}
+    empire_species = get_empire_planets_by_species()
+    for spec_name in get_colony_builders():
+        if not get_colony_builder_locations(spec_name) and (
+            spec_name in empire_species
+        ):  # not enough current shipyards for this species #TODO: also allow orbital incubators and/or asteroid ships
+            for pid in get_empire_planets_with_species(
+                spec_name
+            ):  # SP_EXOBOT may not actually have a colony yet but be in empireColonizers
+                if pid in queued_shipyard_pids:
+                    break  # won't try building more than one shipyard at once, per colonizer
+            else:
+                # no queued shipyards: get planets with target pop >=3 and
+                # queue a shipyard on the one with the biggest current population
+                planets = (universe.getPlanet(x) for x in get_empire_planets_with_species(spec_name))
+                pops = sorted(
+                    (planet_.initialMeterValue(fo.meterType.population), planet_.id)
+                    for planet_ in planets
+                    if (planet_ and planet_.initialMeterValue(fo.meterType.targetPopulation) >= 3.0)
+                )
+                pids = [pid for pop, pid in pops if building_type.can_be_produced(pid)]
+                if pids:
+                    build_loc = pids[-1]
+                    res = _try_enqueue(building_type, build_loc)  # do not ignore dislikes here
+                    if res > 0:
+                        queued_shipyard_pids.append(build_loc)
+                        break  # only start at most one new shipyard per species per turn
+        for pid in get_empire_planets_with_species(spec_name):
+            planet = universe.getPlanet(pid)
+            if planet:
+                system_colonies.setdefault(planet.systemID, {}).setdefault("pids", []).append(pid)
+                colony_systems[pid] = planet.systemID
+
+    for pid in get_empire_planets_with_species("SP_ACIREMA"):
+        if (pid in queued_shipyard_pids) or not building_type.can_be_produced(pid):
+            continue  # but not 'break' because we want to build shipyards at *every* Acirema planet
+        # currently Acirema do not dislike ship yards, but if that changes, do not build shipyards anymore
+        res = _try_enqueue(building_type, pid, at_front=True)
+        if res > 0:
+            queued_shipyard_pids.append(pid)
+
+    top_pilot_systems = TopPilotSystems({})
+    for pid, rating in get_pilot_ratings().items():
+        if (rating <= medium_pilot_rating()) and (rating < GREAT_PILOT_RATING):
+            continue
+        top_pilot_systems.setdefault(universe.getPlanet(pid).systemID, []).append((pid, rating))
+        if (pid in queued_shipyard_pids) or not building_type.can_be_produced(pid):
+            continue  # but not 'break' because we want to build shipyards all top pilot planets
+        # so far we ignore dislikes here, but this may have to change for Mu Ursh
+        res = _try_enqueue(building_type, pid, at_front=True, ignore_dislike=True)
+        if res:
+            queued_shipyard_pids.append(pid)
+    return ShipYardInfo(queued_shipyard_pids, colony_systems, top_pilot_systems)  # TBD return added costs?
+
+
+def _build_energy_shipyards(  # noqa: max-complexity
+    queued_shipyard_pids: list[PlanetId],
+    colony_systems: dict[PlanetId, SystemId],
+    building_ratio: float,
+    building_expense: float,
+) -> tuple[list[tuple[float, PlanetId]], list[tuple[float, PlanetId]], float]:
+    """
+    Consider building Energy Compressor and Solar Containment Unit.
+    Also determines pilot rating for planets in system with red stars and black holes.
+    Returns blackhole_pilots, red_pilots and new value of building_expense.
+    """
+    universe = fo.getUniverse()
+    empire = fo.getEmpire()
+    pop_ctrs = list(get_inhabited_planets())
+    red_population_centres = sorted(
+        [
+            (get_rating_for_planet(pid), pid)
+            for pid in pop_ctrs
+            if colony_systems.get(pid, INVALID_ID) in AIstate.empireStars.get(fo.starType.red, [])
+        ],
+        reverse=True,
+    )
+    red_pilots = [pid for _, pid in red_population_centres if _ == best_pilot_rating()]
+    blue_population_centres = sorted(
+        [
+            (get_rating_for_planet(pid), pid)
+            for pid in pop_ctrs
+            if colony_systems.get(pid, INVALID_ID) in AIstate.empireStars.get(fo.starType.blue, [])
+        ],
+        reverse=True,
+    )
+    blue_pilots = [pid for _, pid in blue_population_centres if _ == best_pilot_rating()]
+    blackhole_pilots = sorted(
+        [
+            (get_rating_for_planet(pid), pid)
+            for pid in pop_ctrs
+            if colony_systems.get(pid, INVALID_ID) in AIstate.empireStars.get(fo.starType.blackHole, [])
+        ],
+        reverse=True,
+    )
+    blackhole_pilots = [pid for _, pid in blackhole_pilots if _ == best_pilot_rating()]
+    energy_shipyard_pids = {}
+    building_type = Shipyard.ENRG_COMP
+    if building_type.available():
+        queued_building_pids = building_type.queued_at()
+        for pid in blackhole_pilots + blue_pilots:
+            if len(queued_building_pids) > 1:  # build a max of 2 at once
+                break
+            this_planet = universe.getPlanet(pid)
+            if not (
+                this_planet and can_build_ship_for_species(this_planet.speciesName)
+            ):  # TODO: also check that not already one for this spec in this sys
+                continue
+            energy_shipyard_pids.setdefault(this_planet.systemID, []).append(pid)
+            if pid not in queued_building_pids and building_type.can_be_produced(pid):
+                building_expense += _try_enqueue(building_type, pid, at_front=True)
+
+    building_type = Shipyard.ENRG_SOLAR
+    if building_type.available() and not building_type.queued_at():
+        # TODO: check that production is not frozen at a queued location
+        for pid in blackhole_pilots:
+            this_planet = universe.getPlanet(pid)
+            if not (
+                this_planet and can_build_ship_for_species(this_planet.speciesName)
+            ):  # TODO: also check that not already one for this spec in this sys
+                continue
+            if building_type.can_be_produced(pid):
+                building_expense += _try_enqueue(building_type, pid, at_front=True)
+
+    total_pp = empire.productionPoints
+    building_type = Shipyard.BASE
+    if building_type.available() and (building_expense < building_ratio * total_pp) and (total_pp > 50):
+        for sys_id in energy_shipyard_pids:  # Todo ensure only one or 2 per sys
+            # only start one per turn (TBD why [:2]?)
+            for pid in energy_shipyard_pids[sys_id][:2]:
+                res = _try_enqueue(building_type, pid, at_front=True)
+                if res > 0:
+                    queued_shipyard_pids.append(pid)
+                    break  # only start one per turn
+    return blackhole_pilots, red_pilots, building_expense
+
+
+def _build_asteroid_processor(  # noqa: max-complexity
+    top_pilot_systems: TopPilotSystems, queued_shipyard_pids: list[PlanetId]
+) -> float:
+    """Consider building asteroid processor, return added turn costs."""
+    building_type = Shipyard.ASTEROID
+    building_expense = 0.0
+    if building_type.available():
+        universe = fo.getUniverse()
+        queued_building_pids = building_type.queued_at()
+        if not queued_building_pids:
+            asteroid_systems = {}
+            asteroid_yards = {}
+            builder_systems = {}
+            for pid in get_all_empire_planets():
+                planet = universe.getPlanet(pid)
+                this_spec = planet.speciesName
+                sys_id = planet.systemID
+                if planet.size == fo.planetSize.asteroids and sys_id in get_colonized_planets():
+                    asteroid_systems.setdefault(sys_id, []).append(pid)
+                    if pid in building_type.built_or_queued_at():
+                        asteroid_yards[sys_id] = pid  # shouldn't ever overwrite another, but ok if it did
+                if can_build_ship_for_species(this_spec):
+                    if pid not in get_ship_builder_locations(this_spec):
+                        builder_systems.setdefault(sys_id, []).append((planet.speciesName, pid))
+            # check if we need to build another asteroid processor:
+            # check if local shipyard to go with the asteroid processor
+            yard_systems = []
+            need_yard = {}
+            top_pilot_locations = []
+            for sys_id in set(asteroid_systems.keys()).difference(asteroid_yards.keys()):
+                if sys_id in top_pilot_systems:
+                    for pid, rating in top_pilot_systems[sys_id]:
+                        if pid not in queued_shipyard_pids:  # will catch it later if shipyard already present
+                            top_pilot_locations.append((rating, pid, sys_id))
+            top_pilot_locations.sort(reverse=True)
+            for _, _, sys_id in top_pilot_locations:
+                if sys_id not in yard_systems:
+                    yard_systems.append(sys_id)  # prioritize asteroid yards for acirema and/or other top pilots
+                    for pid, _ in top_pilot_systems[sys_id]:
+                        if pid not in queued_shipyard_pids:  # will catch it later if shipyard already present
+                            need_yard[sys_id] = pid
+            if (not yard_systems) and len(asteroid_yards.values()) <= int(
+                fo.currentTurn() // 50
+            ):  # not yet building & not enough current locs, find a location to build one
+                colonizer_loc_choices = []
+                builder_loc_choices = []
+                bld_systems = set(asteroid_systems.keys()).difference(asteroid_yards.keys())
+                for sys_id in bld_systems.intersection(builder_systems.keys()):
+                    for this_spec, pid in builder_systems[sys_id]:
+                        if can_build_colony_for_species(this_spec):
+                            if pid in (get_colony_builder_locations(this_spec) + queued_shipyard_pids):
+                                colonizer_loc_choices.insert(0, sys_id)
+                            else:
+                                colonizer_loc_choices.append(sys_id)
+                                need_yard[sys_id] = pid
+                        else:
+                            if pid in (get_ship_builder_locations(this_spec) + queued_shipyard_pids):
+                                builder_loc_choices.insert(0, sys_id)
+                            else:
+                                builder_loc_choices.append(sys_id)
+                                need_yard[sys_id] = pid
+                yard_systems.extend(
+                    (colonizer_loc_choices + builder_loc_choices)[:1]
+                )  # add at most one of these non top pilot locs
+            new_yard_count = len(queued_building_pids)
+            for sys_id in yard_systems:  # build at most 2 new asteroid yards at a time
+                if new_yard_count >= 2:
+                    break
+                pid = asteroid_systems[sys_id][0]
+                if sys_id in need_yard:
+                    pid2 = need_yard[sys_id]
+                    res = _try_enqueue(Shipyard.BASE, pid2, at_front=True)
+                    if res > 0:
+                        queued_shipyard_pids.append(pid2)
+                        building_expense += res
+                if pid not in queued_building_pids and building_type.can_be_produced(pid):
+                    res = _try_enqueue(building_type, pid, at_front=True)
+                    if res > 0:
+                        new_yard_count += 1
+                        queued_building_pids.append(pid)
+                        building_expense += res
+    return building_expense
+
+
+def _build_orbital_drydock(top_pilot_systems: TopPilotSystems) -> None:  # noqa: max-complexity
+    """Consider building orbital drydocks."""
+    building_type = Shipyard.ORBITAL_DRYDOCK
+    if building_type.available():
+        empire = fo.getEmpire()
+        universe = fo.getUniverse()
+        queued_pids = building_type.queued_at()
+        current_drydock_sys = building_type.built_or_queued_at_sys()
+        covered_drydock_systems = set()
+        for start_set, dest_set in [
+            (current_drydock_sys, covered_drydock_systems),
+            (covered_drydock_systems, covered_drydock_systems),
+        ]:  # coverage of neighbors up to 2 jumps away from a drydock
+            for dd_sys_id in start_set.copy():
+                dest_set.add(dd_sys_id)
+                dest_set.update(get_neighbors(dd_sys_id))
+
+        max_dock_builds = int(0.8 + empire.productionPoints / 120.0)
+        debug(
+            "Considering building %s, found current and queued systems %s",
+            building_type,
+            PlanetUtilsAI.sys_name_ids(current_drydock_sys),
+        )
+        for sys_id, pids in get_colonized_planets().items():  # TODO: sort/prioritize in some fashion
+            local_top_pilots = dict(top_pilot_systems.get(sys_id, []))
+            local_drydocks = get_empire_drydocks().get(sys_id, [])
+            if len(queued_pids) >= max_dock_builds:
+                debug("Drydock enqueing halted with %d of max %d", len(queued_pids), max_dock_builds)
+                break
+            if (sys_id in covered_drydock_systems) and not local_top_pilots:
+                continue
+            else:
+                pass
+            for _, pid in sorted([(local_top_pilots.get(pid, 0), pid) for pid in pids], reverse=True):
+                if has_shipyard(pid):
+                    continue
+                if pid in local_drydocks or pid in queued_pids:
+                    break
+                if not building_type.can_be_enqueued(pid):
+                    continue
+                res = _try_enqueue(building_type, pid, at_front=(max_dock_builds >= 2))
+                if res > 0:
+                    queued_pids.append(pid)
+                    system_id = universe.getPlanet(pid).systemID
+                    covered_drydock_systems.add(system_id)
+                    covered_drydock_systems.update(get_neighbors(system_id))
+
+
+def _remove_other_colonies(pid: PlanetId, building_name: str) -> None:
+    """
+    Removes enqueued colony buildings at the given planet.
+    Since colonies cannot be queued in parallel, to allow enqueuing building_name, all others must be removed.
+    If building_name is already enqueued, it's fine of course.
+    """
+    numbered_queue = list(enumerate(fo.getEmpire().productionQueue))
+    # It should not be more than one, except possibly when loading an old safe file, just to be sure, remove all.
+    # Start at the end to avoid changing the numbers of further elements when removing one.
+    for num, entry in reversed(numbered_queue):
+        if entry.locationID == pid and entry.name.startswith("BLD_COL_") and entry.name != building_name:
+            fo.issueDequeueProductionOrder(num)

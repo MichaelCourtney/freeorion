@@ -20,7 +20,8 @@ using namespace GG;
 
 namespace {
 
-unsigned int MinDueToMargin(unsigned int cell_margin, std::size_t num_rows_or_columns, std::size_t row_or_column)
+unsigned int MinDueToMargin(unsigned int cell_margin, std::size_t num_rows_or_columns,
+                            std::size_t row_or_column)
 {
     return (row_or_column == 0 || row_or_column == num_rows_or_columns - 1) ?
         static_cast<unsigned int>(std::ceil(cell_margin / 2.0)) :
@@ -33,7 +34,7 @@ unsigned int MinDueToMargin(unsigned int cell_margin, std::size_t num_rows_or_co
 // WndPosition
 Layout::WndPosition::WndPosition(std::size_t first_row_, std::size_t first_column_,
                                  std::size_t last_row_, std::size_t last_column_,
-                                 Flags<Alignment> alignment_, const Pt& original_ul_, const Pt& original_size_) :
+                                 Flags<Alignment> alignment_, Pt original_ul_, Pt original_size_) :
     first_row(first_row_),
     first_column(first_column_),
     last_row(last_row_),
@@ -44,7 +45,7 @@ Layout::WndPosition::WndPosition(std::size_t first_row_, std::size_t first_colum
 {}
 
 Layout::Layout(X x, Y y, X w, Y h, std::size_t rows, std::size_t columns,
-               unsigned int border_margin/* = 0*/, unsigned int cell_margin/* = INVALID_CELL_MARGIN*/) :
+               unsigned int border_margin, unsigned int cell_margin) :
     Wnd(x, y, w, h, NO_WND_FLAGS),
     m_cells(rows, std::vector<std::weak_ptr<Wnd>>(columns)),
     m_border_margin(border_margin),
@@ -56,12 +57,6 @@ Layout::Layout(X x, Y y, X w, Y h, std::size_t rows, std::size_t columns,
     assert(columns);
 }
 
-Pt Layout::MinUsableSize() const
-{ return m_min_usable_size; }
-
-std::size_t Layout::Rows() const
-{ return m_cells.size(); }
-
 std::size_t Layout::Columns() const
 { return m_cells.empty() ? 0 : m_cells[0].size(); }
 
@@ -72,12 +67,6 @@ Flags<Alignment> Layout::ChildAlignment(const Wnd* wnd) const
         throw NoSuchChild("Layout::ChildAlignment() : Alignment of a nonexistent child was requested");
     return it->second.alignment;
 }
-
-unsigned int Layout::BorderMargin() const
-{ return m_border_margin; }
-
-unsigned int Layout::CellMargin() const
-{ return m_cell_margin; }
 
 double Layout::RowStretch(std::size_t row) const
 { return m_row_params[row].stretch; }
@@ -139,10 +128,7 @@ std::vector<std::vector<Rect>> Layout::RelativeCellRects() const
     return retval;
 }
 
-bool Layout::RenderOutline() const
-{ return m_render_outline; }
-
-void Layout::StartingChildDragDrop(const Wnd* wnd, const Pt& offset)
+void Layout::StartingChildDragDrop(const Wnd* wnd, Pt offset)
 {
     if (auto&& parent = Parent())
         parent->StartingChildDragDrop(wnd, offset);
@@ -160,7 +146,7 @@ void Layout::ChildrenDraggedAway(const std::vector<Wnd*>& wnds, const Wnd* desti
         parent->ChildrenDraggedAway(wnds, destination);
 }
 
-void Layout::SizeMove(const Pt& ul, const Pt& lr)
+void Layout::SizeMove(Pt ul, Pt lr)
 { DoLayout(ul, lr); }
 
 void Layout::DoLayout(Pt ul, Pt lr)
@@ -384,11 +370,11 @@ void Layout::DoLayout(Pt ul, Pt lr)
         current_origin += m_column_params[i].current_width;
     }
 
-    if (m_row_params.back().current_origin + m_row_params.back().current_width != Value(Height()) - m_border_margin)
-        throw FailedCalculationCheck("Layout::DoLayout() : calculated row positions do not sum to the height of the layout");
+    //if (m_row_params.back().current_origin + m_row_params.back().current_width != Value(Height()) - m_border_margin)
+    //    throw FailedCalculationCheck("Layout::DoLayout() : calculated row positions do not sum to the height of the layout");
 
-    if (m_column_params.back().current_origin + m_column_params.back().current_width != Value(Width()) - m_border_margin)
-        throw FailedCalculationCheck("Layout::DoLayout() : calculated column positions do not sum to the width of the layout");
+    //if (m_column_params.back().current_origin + m_column_params.back().current_width != Value(Width()) - m_border_margin)
+    //    throw FailedCalculationCheck("Layout::DoLayout() : calculated column positions do not sum to the width of the layout");
 
     // resize cells and their contents
     m_ignore_child_resize = true;
@@ -492,12 +478,12 @@ void Layout::Render()
 }
 
 void Layout::Add(std::shared_ptr<Wnd> wnd, std::size_t row, std::size_t column,
-                 Flags<Alignment> alignment/* = ALIGN_NONE*/)
+                 Flags<Alignment> alignment)
 { Add(std::move(wnd), row, column, 1, 1, alignment); }
 
 void Layout::Add(std::shared_ptr<Wnd> wnd, std::size_t row, std::size_t column,
                  std::size_t num_rows, std::size_t num_columns,
-                 Flags<Alignment> alignment/* = ALIGN_NONE*/)
+                 Flags<Alignment> alignment)
 {
     std::size_t last_row = row + num_rows;
     std::size_t last_column = column + num_columns;
@@ -658,7 +644,7 @@ void Layout::SetMinimumColumnWidths(std::vector<X> widths)
 void Layout::RenderOutline(bool render_outline)
 { m_render_outline = render_outline; }
 
-void Layout::MouseWheel(const Pt& pt, int move, Flags<ModKey> mod_keys)
+void Layout::MouseWheel(Pt pt, int move, Flags<ModKey> mod_keys)
 { ForwardEventToParent(); }
 
 void Layout::KeyPress(Key key, std::uint32_t key_code_point, Flags<ModKey> mod_keys)
@@ -678,18 +664,16 @@ float Layout::TotalStretch(const std::vector<RowColParams>& params_vec)
 X Layout::TotalMinWidth() const
 {
     X retval = X(2 * m_border_margin);
-    for (const RowColParams& column_param : m_column_params) {
+    for (const RowColParams& column_param : m_column_params)
         retval += static_cast<int>(column_param.effective_min);
-    }
     return retval;
 }
 
 Y Layout::TotalMinHeight() const
 {
     Y retval = Y(2 * m_border_margin);
-    for (const RowColParams& row_param : m_row_params) {
+    for (const RowColParams& row_param : m_row_params)
         retval += static_cast<int>(row_param.effective_min);
-    }
     return retval;
 }
 

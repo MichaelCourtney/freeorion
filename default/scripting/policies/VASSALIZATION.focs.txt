@@ -18,7 +18,7 @@ Policy
                                             ]
                                         ])
     prerequisites = [ "PLC_CONFEDERATION" "PLC_SYSTEM_INFRA" ]
-    exclusions = [ "PLC_RACIAL_PURITY" "PLC_NATIVE_APPROPRIATION" "PLC_THE_HUNT" "PLC_ISOLATION" ]
+    exclusions = [ "PLC_ISOLATION" "PLC_NATIVE_APPROPRIATION" "PLC_RACIAL_PURITY" "PLC_THE_HUNT" ]
     unlock = Item type = Policy name = "PLC_COLONIALISM"
     effectsgroups = [
         [[SPECIES_LIKES_OR_DISLIKES_POLICY_STABILITY_EFFECTS]]
@@ -43,14 +43,15 @@ Policy
                 ]
             ]
             effects = SetTargetInfluence value = Value +
-                (NamedReal name = "PLC_VASSALIZATION_INFLUENCE_SCALING" value = 3.0) *
+                (NamedReal name = "PLC_VASSALIZATION_INFLUENCE_SCALING" value = 2.0) *
                 (Statistic Sum value = LocalCandidate.Population condition = And [
                     InSystem id = Target.SystemID
                     Planet
                     Unowned
                     Species
                     Not Species name = Source.Species
-                    Not Species name = Target.Species                    
+                    Not Species name = Target.Species
+                    Not Species name = "SP_ANCIENT_GUARDIANS"
                 ] ^ 0.5) / max(1.0,
                 (Statistic Count condition = And [ // spreads bonus over eligible recipient planets in system
                     Planet
@@ -60,7 +61,7 @@ Policy
                     InSystem id = Target.SystemID
                 ]))
     ]
-    graphic = "icons/policies/vassalization.png"
+    graphic = "icons/policies/economic_vassalization.png"
 
 #include "/scripting/policies/policies.macros"
 #include "/scripting/common/priorities.macros"

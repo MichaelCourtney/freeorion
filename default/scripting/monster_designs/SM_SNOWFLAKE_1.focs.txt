@@ -7,7 +7,7 @@ ShipDesign
         ""
         ""
         ""
-        ""
+        "SP_SOLAR_CONCENTRATOR"
         ]
     icon = "icons/monsters/snowflake-1.png"
     model = "seed"

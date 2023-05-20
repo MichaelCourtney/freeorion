@@ -6,18 +6,19 @@
 #include "../../UI/SDLGUI.h"
 #include "../../UI/ClientUI.h"
 #include "../../util/OptionsDB.h"
+#include "HumanClientFSM.h"
 #include <boost/statechart/event_base.hpp>
 #include <memory>
 #include <mutex>
 #include <queue>
 #include <string>
 
-struct HumanClientFSM;
+
 class MultiPlayerLobbyWnd;
 struct PreviewInformation;
 
 /** the application framework class for the human player FreeOrion client. */
-class GGHumanClientApp :
+class GGHumanClientApp final :
     public ClientApp,
     public SDLGUI
 {
@@ -37,6 +38,11 @@ public:
 
     const GGHumanClientApp& operator=(const GGHumanClientApp&) = delete;
     GGHumanClientApp& operator=(const GGHumanClientApp&&) = delete;
+
+    [[nodiscard]] int SelectedSystemID() const override;
+    [[nodiscard]] int SelectedPlanetID() const override;
+    [[nodiscard]] int SelectedFleetID() const override;
+    [[nodiscard]] int SelectedShipID() const override;
 
     int EffectsProcessingThreads() const override;
     bool SinglePlayerGame() const;  ///< returns true iff this game is a single-player game
@@ -87,8 +93,7 @@ public:
     void DecAutoTurns(int n = 1);       ///< Decrease auto turn counter
     void EliminateSelf();               ///< Resign from the game
 
-    [[nodiscard]] ClientUI& GetClientUI()
-    { return *m_ui.get(); }
+    [[nodiscard]] ClientUI& GetClientUI() { return *m_ui.get(); }
 
     void Reinitialize();
     [[nodiscard]] float GLVersion() const;
@@ -110,7 +115,7 @@ public:
     [[nodiscard]] static std::pair<int, int> GetWindowWidthHeight();
     [[nodiscard]] static std::pair<int, int> GetWindowLeftTop();
 
-    [[nodiscard]] static GGHumanClientApp*   GetApp(); ///< returns GGHumanClientApp pointer to the single instance of the app
+    [[nodiscard]] static GGHumanClientApp* GetApp() noexcept { return static_cast<GGHumanClientApp*>(GG::GUI::GetGUI()); }
 
     /** Adds window dimension options to OptionsDB after the start of main, but before GGHumanClientApp constructor.
         OSX will not tolerate static initialization of SDL, to check screen size. */
@@ -126,7 +131,7 @@ public:
     void PostDeferredEvent(boost::intrusive_ptr<const boost::statechart::event_base> event);
 
 protected:
-    void Initialize() override;
+    void Initialize() noexcept override {};
 
 private:
     /** Starts a server process on localhost.
@@ -144,7 +149,8 @@ private:
 
 
     std::mutex m_event_queue_guard;
-    std::list<boost::intrusive_ptr<const boost::statechart::event_base>> m_posted_event_queue;
+    using event_ptr_t = boost::intrusive_ptr<const boost::statechart::event_base>;
+    std::queue<event_ptr_t> m_posted_event_queue;
 
     void HandleSystemEvents() override;
     void RenderBegin() override;
@@ -173,11 +179,8 @@ private:
         games. \p exit_code is the exit code. */
     void ResetOrExitApp(bool reset, bool skip_savegame, int exit_code = 0);
 
-    std::unique_ptr<HumanClientFSM> m_fsm;
-
-
-
-    Process m_server_process;   ///< the server process (when hosting a game or playing single player); will be empty when playing multiplayer as a non-host player
+    HumanClientFSM m_fsm;
+    Process        m_server_process;   ///< the server process (when hosting a game or playing single player); will be empty when playing multiplayer as a non-host player
 
     /** The only instance of the ClientUI. */
     std::unique_ptr<ClientUI> m_ui;

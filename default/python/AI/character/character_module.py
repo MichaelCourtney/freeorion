@@ -225,10 +225,6 @@ class Trait(metaclass=abc.ABCMeta):
         """
         return 0.0
 
-    def may_dither_focus_to_gain_research(self):  # pylint: disable=no-self-use,unused-argument
-        """Return True if permitted to trade production at a loss for research"""
-        return True
-
     def may_research_heavily(self):  # pylint: disable=no-self-use,unused-argument
         """Return true if allowed to target research/industry > 1.5"""
         return True
@@ -348,7 +344,7 @@ class Aggression(Trait):
     def target_number_of_orbitals(self):
         aggression_index = max(1, self.aggression)
         return min(
-            int(((fo.currentTurn() + 4) / (8.0 * aggression_index ** 1.5)) ** 0.8),
+            int(((fo.currentTurn() + 4) / (8.0 * aggression_index**1.5)) ** 0.8),
             fo.aggression.maniacal - aggression_index,
         )
 
@@ -384,9 +380,6 @@ class Aggression(Trait):
 
     def military_safety_factor(self):
         return [4.0, 3.0, 2.0, 1.5, 1.2, 1.0][self.aggression]
-
-    def may_dither_focus_to_gain_research(self):
-        return self.aggression >= fo.aggression.aggressive
 
     def may_research_heavily(self):
         return self.aggression > fo.aggression.cautious
@@ -615,7 +608,6 @@ for funcname in [
     "may-invade_with_bases",
     "may_build_building",
     "may_produce_troops",
-    "may_dither_focus_to_gain_research",
     "may_research_heavily",
     "may_use_growth_focus",
     "may_travel_beyond_supply",
@@ -774,12 +766,12 @@ def get_trait_bypass_value(name: str, default: int, sentinel: int) -> int:
     :return: The trait
     """
 
-    force_option = "ai.trait.%s.force.enabled" % (name.lower(),)
+    force_option = f"ai.trait.{name.lower()}.force.enabled"
     if not fo.getOptionsDBOptionBool(force_option):
         return default
 
-    per_id_option = "ai.trait.%s.%s" % (name.lower(), fo.playerName().lower())
-    all_id_option = "ai.trait.%s.default" % (name.lower(),)
+    per_id_option = f"ai.trait.{name.lower()}.{fo.playerName().lower()}"
+    all_id_option = f"ai.trait.{name.lower()}.default"
 
     trait = fo.getOptionsDBOptionInt(per_id_option)
     if trait is None or trait == sentinel:

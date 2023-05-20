@@ -25,10 +25,10 @@ Policy
 
                 // increase stability growth rate
                 SetHappiness value = Value + min(abs(Value(Target.TargetHappiness) - Value), 1) *
-                    (Statistic If condition = And [ Target (Value < Value(Target.TargetHappiness))])
+                    (Value < Value(Target.TargetHappiness))
             ]
     ]
-    graphic = "icons/policies/boot.png"
+    graphic = "icons/policies/economic_colonial_bootstrapping.png"
 
 #include "/scripting/common/base_prod.macros"
 #include "/scripting/policies/policies.macros"

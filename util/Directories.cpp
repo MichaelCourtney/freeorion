@@ -11,11 +11,6 @@
 #include <cstdlib>
 #include <mutex>
 
-#if defined(FREEORION_WIN32)
-#  include <codecvt>
-#  include <locale>
-#endif
-
 #if defined(FREEORION_MACOSX)
 #  include <iostream>
 #  include <sys/param.h>
@@ -35,9 +30,9 @@
 #endif
 
 #if defined(FREEORION_LINUX) || defined(FREEORION_FREEBSD) || defined(FREEORION_OPENBSD) || defined(FREEORION_NETBSD) || defined(FREEORION_DRAGONFLY) || defined(FREEORION_HAIKU) || defined(FREEORION_ANDROID)
-#include "binreloc.h"
-#include <unistd.h>
-#include <boost/filesystem/fstream.hpp>
+#  include "binreloc.h"
+#  include <unistd.h>
+#  include <boost/filesystem/fstream.hpp>
 
 #  if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__DragonFly__)
 #    include <sys/sysctl.h>
@@ -47,11 +42,14 @@
 #  endif
 #endif
 
-# if defined(FREEORION_WIN32) || defined(FREEORION_MACOSX) || defined(FREEORION_LINUX) || defined(FREEORION_FREEBSD) || defined(FREEORION_OPENBSD) || defined(FREEORION_NETBSD) || defined(FREEORION_DRAGONFLY) || defined(FREEORION_HAIKU) || defined(FREEORION_ANDROID)
-# else
+#if defined(FREEORION_WIN32) || defined(FREEORION_MACOSX) || defined(FREEORION_LINUX) || defined(FREEORION_FREEBSD) || defined(FREEORION_OPENBSD) || defined(FREEORION_NETBSD) || defined(FREEORION_DRAGONFLY) || defined(FREEORION_HAIKU) || defined(FREEORION_ANDROID)
+#else
 #  error Neither FREEORION_LINUX, FREEORION_MACOSX, FREEORION_FREEBSD, FREEORION_OPENBSD, FREEORION_NETBSD, FREEORION_DRAGONFLY, FREEORION_WIN32, FREEORION_HAIKU nor FREEORION_ANDROID set
 #endif
 
+#if defined(FREEORION_WIN32)
+#  include <windows.h>
+#endif
 
 namespace fs = ::boost::filesystem;
 
@@ -235,11 +233,11 @@ namespace {
     }
 
     constexpr auto PathTypesImpl() {
-        static_assert(std::is_same_v<std::underlying_type_t<PathType>, int>);
-        static_assert(int(PathType::PATH_INVALID) > 0);
+        static_assert(std::is_same_v<std::underlying_type_t<PathType>, int8_t>);
+        static_assert(int8_t(PathType::PATH_INVALID) > 0);
         std::array<PathType, NUM_PATH_TYPES> retval{};
 
-        for (PathType pt = PathType(0); pt < PathType::PATH_INVALID; pt = PathType(int(pt) + 1))
+        for (PathType pt = PathType(0); pt < PathType::PATH_INVALID; pt = PathType(int8_t(pt) + 1))
             retval[std::size_t(pt)] = pt;
         return retval;
     }
@@ -260,7 +258,7 @@ auto PathTypeToString(PathType path_type) -> std::string_view
 std::array<PathType, NUM_PATH_TYPES> PathTypes()
 { return PathTypesImpl(); }
 
-auto PathTypeStrings() -> const std::array<std::string_view, NUM_PATH_TYPES>&
+auto PathTypeStrings() noexcept -> const std::array<std::string_view, NUM_PATH_TYPES>&
 { return path_type_views; }
 
 void InitBinDir(std::string const& argv0)
@@ -287,7 +285,7 @@ void InitBinDir(std::string const& argv0)
         mib[1] = KERN_PROC;
         mib[2] = KERN_PROC_PATHNAME;
         mib[3] = -1;
-        size_t buf_size = sizeof(buf);
+        std::size_t buf_size = sizeof(buf);
         sysctl(mib, 4, buf, &buf_size, 0, 0);
 #endif
 #if defined(FREEORION_NETBSD)
@@ -296,7 +294,7 @@ void InitBinDir(std::string const& argv0)
         mib[1] = KERN_PROC_ARGS;
         mib[2] = -1;
         mib[3] = KERN_PROC_PATHNAME;
-        size_t buf_size = sizeof(buf);
+        std::size_t buf_size = sizeof(buf);
         sysctl(mib, 4, buf, &buf_size, 0, 0);
 #endif
 #if defined(FREEORION_OPENBSD)
@@ -343,7 +341,7 @@ void InitBinDir(std::string const& argv0)
             bin_dir = p;
         }
     }
-#elif defined(FREEORION_MACOSX) || defined(FREEORION_ADROID)
+#elif defined(FREEORION_MACOSX) || defined(FREEORION_ANDROID)
     // no binary directory setup required.
 #endif
 }
@@ -391,7 +389,7 @@ void InitDirs(std::string const& argv0)
     s_root_data_dir =   app_path / "Resources";
     s_user_dir      =   fs::path(getenv("HOME")) / "Library" / "Application Support" / "FreeOrion";
     s_bin_dir       =   app_path / "Executables";
-    s_python_home   =   app_path / "Frameworks" / "Python.framework" / "Versions" / BOOST_PP_STRINGIZE(BOOST_PP_CAT(BOOST_PP_CAT(PY_MAJOR_VERSION, .), PY_MINOR_VERSION));
+    s_python_home   =   app_path / "SharedSupport";
 
     fs::path p = s_user_dir;
     if (!exists(p))
@@ -503,7 +501,7 @@ void InitDirs(std::string const& argv0)
 
     s_python_home = s_cache_dir / "python";
     fs::create_directories(s_python_home / "lib");
-    CopyInitialResourceAndroid("lib/python36.zip");
+    CopyInitialResourceAndroid("lib/python39.zip");
 #endif
 
     g_initialized = true;
@@ -657,7 +655,7 @@ void CompleteXDGMigration()
         const std::string options_save_dir = GetOptionsDB().Get<std::string>("save.path");
         const fs::path old_path = fs::path(getenv("HOME")) / ".freeorion";
         if (fs::path(options_save_dir) == old_path)
-            GetOptionsDB().Set<std::string>("save.path", GetUserDataDir().string());
+            GetOptionsDB().Set("save.path", GetUserDataDir().string());
     }
 }
 
@@ -681,6 +679,7 @@ auto GetResourceDir() -> fs::path const
 {
     std::scoped_lock res_dir_lock(res_dir_mutex);
     if (init) {
+        [[unlikely]]
         init = false;
         res_dir = FilenameToPath(GetOptionsDB().Get<std::string>("resource.path"));
         if (!fs::exists(res_dir) || !fs::is_directory(res_dir))
@@ -737,9 +736,9 @@ auto RelativePath(fs::path const& from, fs::path const& to) -> fs::path
         ++to_it;
     }
     for (; from_it != end_from_it; ++from_it)
-    { retval /= ".."; }
+        retval /= "..";
     for (; to_it != end_to_it; ++to_it)
-    { retval /= *to_it; }
+        retval /= *to_it;
     return retval;
 }
 
@@ -747,26 +746,33 @@ auto FilenameToPath(std::string const& path_str) -> fs::path
 {
 #if defined(FREEORION_WIN32)
     // convert UTF-8 directory string to UTF-16
-    fs::path::string_type directory_native = std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}.from_bytes(path_str);
-#if (BOOST_VERSION >= 106300)
-    return fs::path(directory_native).generic_path();
+    int utf16_sz = MultiByteToWideChar(CP_UTF8, 0, path_str.data(), path_str.length(), NULL, 0);
+    std::wstring utf16_string(utf16_sz, 0);
+    if (utf16_sz > 0)
+        MultiByteToWideChar(CP_UTF8, 0, path_str.data(), path_str.size(), utf16_string.data(), utf16_sz);
+    static_assert(std::is_same_v<fs::path::string_type, std::wstring>);
+    return fs::path(utf16_string).generic_path();
 #else
-    return fs::path(directory_native);
-#endif
-#else // defined(FREEORION_WIN32)
     return fs::path(path_str);
-#endif // defined(FREEORION_WIN32)
+#endif
 }
 
 auto PathToString(fs::path const& path) -> std::string
 {
 #if defined(FREEORION_WIN32)
     fs::path::string_type native_string = path.generic_wstring();
-    std::string retval = std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>{}.to_bytes(native_string);
-    return retval;
-#else // defined(FREEORION_WIN32)
+    // convert UTF-16 native path to UTF-8
+    int utf8_sz = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
+                                      native_string.data(), native_string.size(),
+                                      NULL, 0, NULL, NULL);
+    std::string utf8_string(utf8_sz, 0);
+    if (utf8_sz > 0)
+        WideCharToMultiByte(CP_UTF8, 0, native_string.data(), native_string.size(),
+                            utf8_string.data(), utf8_sz, NULL, NULL);
+    return utf8_string;
+#else
     return path.string();
-#endif // defined(FREEORION_WIN32)
+#endif
 }
 
 #if !defined(FREEORION_ANDROID)
@@ -847,9 +853,8 @@ auto ListDir(const fs::path& path, std::function<bool (const fs::path&)> predica
                 fs::path file = dir / filename;
                 DebugLogger() << "ListDir: found file " << file.string();
                 env->ReleaseStringUTFChars(jstr, filename);
-                if (predicate(file)) {
-                    retval.emplace_back(file);
-                }
+                if (predicate(file))
+                    retval.push_back(file);
 
                 directories.push_front(std::move(file));
             }
@@ -870,16 +875,15 @@ auto ListDir(const fs::path& path, std::function<bool (const fs::path&)> predica
              dir_it != fs::recursive_directory_iterator(); ++dir_it)
         {
             if (predicate(dir_it->path()))
-                retval.emplace_back(dir_it->path());
+                retval.push_back(dir_it->path());
             else
                 TraceLogger() << "ListDir: Discarding non-matching path: " << PathToString(dir_it->path());
         }
     }
 #endif
 
-    if (retval.empty()) {
+    if (retval.empty())
         DebugLogger() << "ListDir: No paths found for " << path.string();
-    }
 
     return retval;
 }

@@ -3,8 +3,8 @@ LIVING_HULL_EFFECTS_GROUPS
 '''EffectsGroup
     scope = Source
     effects = [
-        SetStructure value = Value + (2 * [[SHIP_STRUCTURE_FACTOR]])
-        SetDetection value = Value + 50
+        SetStructure value = Value + (NamedRealLookup name = "SHP_LIVING_HULL_REPAIR")
+        SetDetection value = Value + 40
     ]
 
     [[LIVING_HULL_BASE_FUEL_REGEN]]
@@ -22,9 +22,9 @@ LIVING_HULL_BASE_FUEL_REGEN
     stackinggroup = "BASE_FUEL_REGEN"
     accountinglabel = "BASE_FUEL_REGEN_LABEL"
     priority = [[EARLY_AFTER_ALL_TARGET_MAX_METERS_PRIORITY]]
-    effects = SetFuel value = min(Target.MaxFuel, Value + 0.3001)
+    effects = SetFuel value = min(Target.MaxFuel, Value + (NamedRealLookup name = "SHP_LIVING_HULL_FUEL_REGEN"))
 
-   [[REFUEL_MESSAGE(0.3001)]]
+   [[REFUEL_MESSAGE(0.3)]]
 '''
 
 #include "/scripting/common/priorities.macros"

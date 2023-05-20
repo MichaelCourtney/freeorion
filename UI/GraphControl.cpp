@@ -96,49 +96,49 @@ void GraphControl::AutoSetRange() {
     SetRange(x_min, x_max, y_min, y_max);
 }
 
-void GraphControl::ShowPoints(bool show/* = true*/) {
+void GraphControl::ShowPoints(bool show) {
     bool old_show_points = m_show_points;
     m_show_points = show;
     if (show != old_show_points)
         DoLayout();
 }
 
-void GraphControl::ShowLines(bool show/* = true*/) {
+void GraphControl::ShowLines(bool show) {
     bool old_show_lines = m_show_lines;
     m_show_lines = show;
     if (show != old_show_lines)
         DoLayout();
 }
 
-void GraphControl::ShowScale(bool show/* = true*/) {
+void GraphControl::ShowScale(bool show) {
     bool old_show_scale = m_show_scale;
     m_show_scale = show;
     if (show != old_show_scale)
         DoLayout();
 }
 
-void GraphControl::UseLogScale(bool log/* = true*/) {
+void GraphControl::UseLogScale(bool log) {
     bool old_log_scale = m_log_scale;
     m_log_scale = log;
     if (log != old_log_scale)
         DoLayout();
 }
 
-void GraphControl::ScaleToZero(bool zero/* = true*/) {
+void GraphControl::ScaleToZero(bool zero) {
     bool old_zero = m_zero_in_range;
     m_zero_in_range = zero;
     if (zero != old_zero)
         DoLayout();
 }
 
-void GraphControl::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
+void GraphControl::SizeMove(GG::Pt ul, GG::Pt lr) {
     GG::Pt old_sz = Size();
     GG::Control::SizeMove(ul, lr);
     if (Size() != old_sz)
         DoLayout();
 }
 
-void GraphControl::RClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) {
+void GraphControl::RClick(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) {
     auto popup = GG::Wnd::Create<CUIPopupMenu>(pt.x, pt.y);
 
     auto set_log_scale = [this]()
@@ -183,7 +183,7 @@ void GraphControl::Render() {
     if (!m_show_lines && !m_show_points)
         return;
 
-    constexpr int PAD = 1;
+    static constexpr int PAD = 1;
     const int WIDTH = Value(Width()) - 2*PAD;
     const int HEIGHT = Value(Height()) - 2*PAD;
 
@@ -237,7 +237,7 @@ void GraphControl::Render() {
 }
 
 void GraphControl::DoLayout() {
-    constexpr int PAD = 1;
+    static constexpr int PAD = 1;
     const int WIDTH = Value(Width()) - 2*PAD;
     const int HEIGHT = Value(Height()) - 2*PAD;
     m_vert_buf.clear();

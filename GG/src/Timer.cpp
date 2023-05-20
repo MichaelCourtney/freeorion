@@ -16,26 +16,21 @@
 using namespace GG;
 
 namespace {
-
-void FiredSignalEcho(unsigned int ticks, Timer* timer)
-{
-    std::cerr << "GG SIGNAL : Timer::FiredSignal(ticks=" << ticks
-                << ", timer=" << timer << ")\n";
+    void FiredSignalEcho(unsigned int ticks, Timer* timer)
+    {
+        std::cerr << "GG SIGNAL : Timer::FiredSignal(ticks=" << ticks
+                    << ", timer=" << timer << ")\n";
+    }
 }
 
-}
-
-Timer::Timer() :
-    m_interval(0),
-    m_running(true),
-    m_last_fire(0)
+Timer::Timer()
 {
     GUI::GetGUI()->RegisterTimer(*this);
     if (INSTRUMENT_ALL_SIGNALS)
         FiredSignal.connect(&FiredSignalEcho);
 }
 
-Timer::Timer(unsigned int interval, unsigned int start_time/* = 0*/) :
+Timer::Timer(unsigned int interval, unsigned int start_time) :
     m_interval(interval),
     m_running(true),
     m_last_fire(start_time ? start_time : GUI::GetGUI()->Ticks())
@@ -51,13 +46,7 @@ Timer::~Timer()
         gui->RemoveTimer(*this);
 }
 
-unsigned int Timer::Interval() const
-{ return m_interval; }
-
-bool Timer::Running() const
-{ return m_running; }
-
-void Timer::Reset(unsigned int start_time/* = 0*/)
+void Timer::Reset(unsigned int start_time)
 { m_last_fire = start_time ? start_time : GUI::GetGUI()->Ticks(); }
 
 void Timer::SetInterval(unsigned int interval)

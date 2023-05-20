@@ -5,7 +5,7 @@
 #include "../universe/Conditions.h"
 #include "../universe/ValueRef.h"
 
-#include <boost/spirit/include/phoenix.hpp>
+#include <boost/phoenix.hpp>
 
 
 namespace qi = boost::spirit::qi;
@@ -73,7 +73,7 @@ namespace parse { namespace detail {
                 tok.Building_   [ _val = Condition::ContentType::CONTENT_BUILDING ]
             |   tok.Species_    [ _val = Condition::ContentType::CONTENT_SPECIES ]
             |   tok.Hull_       [ _val = Condition::ContentType::CONTENT_SHIP_HULL ]
-            |   tok.part_       [ _val = Condition::ContentType::CONTENT_SHIP_PART ]
+            |   tok.Part_       [ _val = Condition::ContentType::CONTENT_SHIP_PART ]
             |   tok.Special_    [ _val = Condition::ContentType::CONTENT_SPECIAL ]
             |   tok.Focus_      [ _val = Condition::ContentType::CONTENT_FOCUS ];
 

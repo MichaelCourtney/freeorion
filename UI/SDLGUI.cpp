@@ -29,13 +29,13 @@ namespace {
     }
 
     Pt SetSDLFullscreenSize(SDL_Window* window, int display_id, int width, int height) {
-        SDL_DisplayMode target;
+        SDL_DisplayMode target{};
         target.w = width;
         target.h = height;
         target.format = 0; // DOn't care
         target.driverdata = nullptr;
         target.refresh_rate = 0;
-        SDL_DisplayMode closest;
+        SDL_DisplayMode closest{};
         SDL_GetClosestDisplayMode(display_id, &target, &closest);
         SDL_SetWindowDisplayMode(window, &closest);
         return Pt(X(closest.w), Y(closest.h));
@@ -201,20 +201,8 @@ SDLGUI::SDLGUI(int w, int h, bool calc_FPS, std::string app_name, int x, int y,
 SDLGUI::~SDLGUI()
 { SDLQuit(); }
 
-X SDLGUI::AppWidth() const
-{ return m_app_width; }
-
-Y SDLGUI::AppHeight() const
-{ return m_app_height; }
-
 unsigned int SDLGUI::Ticks() const
 { return SDL_GetTicks(); }
-
-bool SDLGUI::Fullscreen() const
-{ return m_fullscreen; }
-
-bool SDLGUI::FakeModeChange() const
-{ return m_fake_mode_change; }
 
 std::string SDLGUI::ClipboardText() const {
     if (SDL_HasClipboardText()) {
@@ -264,7 +252,7 @@ bool SDLGUI::SetClipboardText(std::string text)
 SDLGUI* SDLGUI::GetGUI()
 { return dynamic_cast<SDLGUI*>(GUI::GetGUI()); }
 
-void SDLGUI::SetAppSize(const Pt& size) {
+void SDLGUI::SetAppSize(Pt size) {
     m_app_width = size.x;
     m_app_height = size.y;
 }
@@ -361,7 +349,7 @@ void SDLGUI::HandleSystemEvents() {
         EventType gg_event = EventType::MOUSEMOVE;
         Key key = Key::GGK_NONE;
         std::uint32_t key_code_point = 0;
-        Flags<ModKey> mod_keys = GetSDLModKeys();
+        GG::Flags<GG::ModKey> mod_keys = GetSDLModKeys();
         // In GiGi some events contain mouse position info,
         // where the corresponding sdl event does not.
         // Therefore we need to get the position,
@@ -533,7 +521,7 @@ void SDLGUI::SDLQuit() {
 void SDLGUI::Run() {
     try {
         Initialize();
-        RunModal(nullptr, m_done);
+        RunModal(m_done);
     } catch (const QuitSignal& e) {
         if (e.exit_code != 0)
             throw;
@@ -627,7 +615,7 @@ void SDLGUI::RelayTextInput(const SDL_TextInputEvent& text, GG::Pt mouse_pos) {
     const char* end = current + SDL_TEXTEDITINGEVENT_TEXT_SIZE;
     while (current != end && *current)
         ++current;
-    HandleGGEvent(EventType::TEXTINPUT, Key::GGK_NONE, 0u, Flags<ModKey>(), mouse_pos, Pt(X0, Y0),
+    HandleGGEvent(EventType::TEXTINPUT, Key::GGK_NONE, 0u, GG::Flags<GG::ModKey>(), mouse_pos, Pt(X0, Y0),
                   std::string(text.text, current));
 }
 

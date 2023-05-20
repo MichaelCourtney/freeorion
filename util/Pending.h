@@ -47,11 +47,10 @@ namespace Pending {
 
     template <typename T>
     [[nodiscard]] boost::optional<T> WaitForPendingUnlocked(Pending<T>&& pending, bool do_not_care_about_result = false) {
-        std::future_status status;
+        std::future_status status = std::future_status::deferred;
         do {
-            if (!pending.pending->valid()) {
+            if (!pending.pending->valid())
                 return boost::none;
-            }
 
             status = pending.pending->wait_for(std::chrono::seconds(1));
             if (status == std::future_status::timeout)
@@ -75,9 +74,7 @@ namespace Pending {
                 return boost::none;
             }
             DebugLogger() << "Retrieve result of parsing \"" << pending.filename << "\".";
-            auto x = std::move(pending.pending->get());
-            DebugLogger() << "Retrieved result of parsing \"" << pending.filename << "\".";
-            return std::move(x);
+            return pending.pending->get();
         } catch (const std::exception& e) {
             ErrorLogger() << "Parsing of \"" << pending.filename << "\" failed with error: " << e.what();
         }

@@ -76,15 +76,14 @@ private:
     /** Active fleet window.  mutable so expired ptr can be reset(). */
     mutable std::weak_ptr<FleetWnd>                               m_active_fleet_wnd;
 
-    std::vector<boost::signals2::connection> m_active_fleet_wnd_signals;
+    std::vector<boost::signals2::scoped_connection> m_active_fleet_wnd_signals;
 };
 
 /** This is the top level Fleet UI element.  It shows a list of fleets, a
     new-fleet drop target, and a detail view of the currently selected fleet
     (a FleetDetailPanel). */
-class FleetWnd : public MapWndPopup {
+class FleetWnd final : public MapWndPopup {
 public:
-    FleetWnd();
     FleetWnd(const std::vector<int>& fleet_ids, bool order_issuing_enabled,
              double allowed_bounding_box_leeway = 0,
              int selected_fleet_id = INVALID_OBJECT_ID,
@@ -109,7 +108,7 @@ public:
 
     void PreRender() override;
 
-    void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
+    void SizeMove(GG::Pt ul, GG::Pt lr) override;
 
     /** Deselect all fleets. */
     void DeselectAllFleets();
@@ -128,7 +127,7 @@ public:
 
 protected:
     void CloseClicked() override;
-    void LClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
+    void LClick(GG::Pt pt, GG::Flags<GG::ModKey> mod_keys) override;
     void DoLayout();
 
 private:
@@ -139,23 +138,23 @@ private:
     void AddFleet(int fleet_id);     ///< adds a new fleet row to this FleetWnd's ListBox of FleetRows and updates internal fleets bookkeeping
 
     void FleetSelectionChanged(const GG::ListBox::SelectionSet& rows);
-    void FleetRightClicked(GG::ListBox::iterator it, const GG::Pt& pt, const GG::Flags<GG::ModKey>& modkeys);
-    void FleetLeftClicked(GG::ListBox::iterator it, const GG::Pt& pt, const GG::Flags<GG::ModKey>& modkeys);
-    void FleetDoubleClicked(GG::ListBox::iterator it, const GG::Pt& pt, const GG::Flags<GG::ModKey>& modkeys);
+    void FleetRightClicked(GG::ListBox::iterator it, GG::Pt pt, GG::Flags<GG::ModKey> modkeys);
+    void FleetLeftClicked(GG::ListBox::iterator it, GG::Pt pt, GG::Flags<GG::ModKey> modkeys);
+    void FleetDoubleClicked(GG::ListBox::iterator it, GG::Pt pt, GG::Flags<GG::ModKey> modkeys);
 
     int         FleetInRow(GG::ListBox::iterator it) const;
     std::string TitleText() const;
     void        CreateNewFleetFromDrops(const std::vector<int>& ship_ids);
 
     void ShipSelectionChanged(const GG::ListBox::SelectionSet& rows);
-    void UniverseObjectDeleted(std::shared_ptr<const UniverseObject> obj);
+    void UniverseObjectDeleted(const std::shared_ptr<const UniverseObject>& obj);
 
     void SetStatIconValues();          ///< sets values for multi-fleet aggregate stat icons at top of FleetWnd
 
     mutable boost::signals2::signal<void (FleetWnd*)> ClosingSignal;
 
-    boost::signals2::connection              m_system_connection;
-    std::vector<boost::signals2::connection> m_fleet_connections;
+    boost::signals2::scoped_connection              m_system_connection;
+    std::vector<boost::signals2::scoped_connection> m_fleet_connections;
 
     std::set<int>   m_fleet_ids;                    ///< IDs of fleets shown in this wnd (always.  set when creating wnd, either by being passed in directly, or found by checking indicated system for indicated empire's fleets.  If set directly, never updates.  If set by checking system, updates when the system has a fleet added or removed.
     int             m_empire_id = ALL_EMPIRES;      ///< ID of empire whose fleets are shown in this wnd.  May be ALL_EMPIRES if this FleetWnd wasn't set to shown a particular empire's fleets.

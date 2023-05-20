@@ -14,8 +14,8 @@ public:
     ObjectListWnd(std::string_view config_name = "");
     void CompleteConstruction() override;
 
-    void            SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
-    void            Refresh();
+    void SizeMove(GG::Pt ul, GG::Pt lr) override;
+    void Refresh();
 
     mutable boost::signals2::signal<void ()>    SelectedObjectsChangedSignal;
     mutable boost::signals2::signal<void (int)> ObjectDoubleClickedSignal;
@@ -28,8 +28,8 @@ private:
     void            DoLayout();
 
     void            ObjectSelectionChanged(const GG::ListBox::SelectionSet& rows);
-    void            ObjectDoubleClicked(GG::ListBox::iterator it, const GG::Pt& pt, const GG::Flags<GG::ModKey>& modkeys);
-    void            ObjectRightClicked(GG::ListBox::iterator it, const GG::Pt& pt, const GG::Flags<GG::ModKey>& modkeys);
+    void            ObjectDoubleClicked(GG::ListBox::iterator it, GG::Pt pt, GG::Flags<GG::ModKey> modkeys);
+    void            ObjectRightClicked(GG::ListBox::iterator it, GG::Pt pt, GG::Flags<GG::ModKey> modkeys);
     int             ObjectInRow(GG::ListBox::iterator it) const;
 
     void            SetSelectedObjects(std::set<int> sel_ids);

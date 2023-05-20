@@ -1,9 +1,11 @@
 import os
-from typing import Generator
+from collections.abc import Generator
 
 
 def get_code_location(generator: Generator) -> str:
-    return "%s:%s" % (os.path.basename(generator.gi_code.co_filename), generator.gi_frame.f_lineno)
+    if generator.gi_yieldfrom:
+        return get_code_location(generator.gi_yieldfrom)
+    return f"{os.path.basename(generator.gi_code.co_filename)}:{generator.gi_frame.f_lineno}"
 
 
 def get_item_with_location(generator: Generator) -> Generator:
@@ -59,12 +61,10 @@ def get_common_instances() -> Generator:
     yield fo.getGameRules()
     ship_hull = fo.getShipHull("SH_XENTRONIUM")
     yield ship_hull
-    yield ship_hull.slots,
 
-    yield fo.getSpecies("SP_ABADDONI")
+    yield fo.getSpecies("SP_CRAY")
 
     fleets_int_vector = universe.fleetIDs
-    yield fleets_int_vector
 
     fleet = universe.getFleet(list(fleets_int_vector)[0])
     yield fleet
@@ -80,15 +80,11 @@ def get_common_instances() -> Generator:
     yield fo.getSpecial("MODERATE_TECH_NATIVES_SPECIAL")
     yield fo.getShipHull("SH_XENTRONIUM")
 
-    yield universe.effectAccounting
-    yield universe.buildingIDs
-
     ship = universe.getShip(list(universe.shipIDs)[0])
-    design = fo.getShipDesign(ship.designID)
-    part_meters = ship.partMeters
     yield ship
+
+    design = fo.getShipDesign(ship.designID)
     yield design
-    yield part_meters
 
     yield fo.diplomaticMessage(1, 2, fo.diplomaticMessageType.acceptPeaceProposal)
     yield empire_of_first_ai
@@ -104,43 +100,22 @@ def get_common_instances() -> Generator:
     building = list(planet.buildingIDs)[0]
     yield universe.getBuilding(building)
 
+    yield fo.getPolicy("PLC_LIBERTY")
+
 
 common_classes_to_exclude = {
-    "IntBoolMap",
-    "IntDblMap",
-    "IntFltMap",
-    "IntFltMap",
-    "IntPairVec",
-    "IntSetSet",
-    "MeterTypeMeterMap",
-    "MeterTypeStringPair",
-    "PairIntInt_IntMap",
-    "VisibilityIntMap",
-    "IntSet",
-    "StringSet",
-    "StringVec",
-    "IntIntDblMapMap",
-    "IntStringMap",
-    "String_IntStringMap_Map",
-    "StringIntMap",
-    "StringsMap",
+    "popCenter",  # parent class, it's not possible to get instance
+    "resourceCenter",  # parent class, it's not possible to get instance
+    "diplomaticStatusUpdate",  # this item is not used in generate orders/universe
+    "universeObject",  # parent class, it's not possible to get instance
 }
 
 classes_to_exclude_from_universe = {
-    "MeterTypeAccountingInfoVecMap",
-    "MonsterFleetPlan",
-    "RuleValueStringStringPair",
-    "ShipPartMeterMap",
-    "AccountingInfoVec",
+    "productionQueueElement",  # not applicable
+    "researchQueueElement",  # not applicable
+    *common_classes_to_exclude,
 }
 
 classes_to_exclude_from_ai = {
-    "ShipSlotVec",
-    "UnlockableItemVec",
-    "universeObject",
-    # this item cannot be get from generate orders
-    "diplomaticStatusUpdate",
+    *common_classes_to_exclude,
 }
-
-classes_to_exclude_from_ai.update(common_classes_to_exclude)
-classes_to_exclude_from_universe.update(common_classes_to_exclude)

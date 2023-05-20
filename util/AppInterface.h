@@ -1,6 +1,7 @@
 #ifndef _AppInterface_h_
 #define _AppInterface_h_
 
+#include "boost_fix.h"
 #include "Export.h"
 #include "../universe/Universe.h"
 #include "../network/Networking.h"
@@ -13,8 +14,6 @@ class SupplyManager;
 class Universe;
 class UniverseObject;
 class ObjectMap;
-class ResourceCenter;
-class PopCenter;
 class Planet;
 class System;
 class Ship;
@@ -30,17 +29,14 @@ protected:
 
 public:
     IApp(const IApp&) = delete;
-
     IApp(IApp&&) = delete;
-
     virtual ~IApp();
 
     const IApp& operator=(const IApp&) = delete;
-
     IApp& operator=(IApp&&) = delete;
 
     /** Returns a IApp pointer to the singleton instance of the app. */
-    static IApp* GetApp();
+    static IApp* GetApp() noexcept { return s_app; };
 
     //! Returns the ::Universe known to this application
     //!
@@ -59,34 +55,36 @@ public:
     virtual void StartBackgroundParsing(const PythonParser& python, std::promise<void>&& barrier);
 
     /** Returns the set of known Empires for this application. */
-    [[nodiscard]] virtual EmpireManager& Empires() = 0;
+    [[nodiscard]] virtual EmpireManager& Empires() noexcept = 0;
 
     [[nodiscard]] virtual Empire* GetEmpire(int id) = 0;
 
-    [[nodiscard]] virtual SpeciesManager& GetSpeciesManager() = 0;
+    [[nodiscard]] virtual SpeciesManager& GetSpeciesManager() noexcept = 0;
 
-    [[nodiscard]] virtual const Species* GetSpecies(const std::string& name) = 0;
+    [[nodiscard]] virtual SupplyManager& GetSupplyManager() noexcept = 0;
 
-    [[nodiscard]] virtual SupplyManager& GetSupplyManager() = 0;
-
-    /** Accessor for known objects of specified empire. */
-    [[nodiscard]] virtual ObjectMap& EmpireKnownObjects(int empire_id) = 0;
-
-    [[nodiscard]] virtual std::string GetVisibleObjectName(std::shared_ptr<const UniverseObject> object) = 0;
+    [[nodiscard]] virtual std::string GetVisibleObjectName(const UniverseObject& object) = 0;
 
     /** On server or clients with no player: ALL_EMPIRES
       * On clients with a player: that player's ID */
-    [[nodiscard]] virtual int EmpireID() const = 0;
+    [[nodiscard]] virtual int EmpireID() const noexcept = 0;
 
     //! Returns the current game turn
     //!
     //! @return The number representing the current game turn.
-    [[nodiscard]] virtual int CurrentTurn() const = 0;
+    [[nodiscard]] virtual int CurrentTurn() const noexcept = 0;
 
-    [[nodiscard]] static int MAX_AI_PLAYERS(); ///<Maximum number of AIs
+    /** On server or AI clients, returns INVALID_OBJECT_ID
+      * On UI clients, returns the ID of the object currently selected. */
+    [[nodiscard]] virtual int SelectedSystemID() const { return INVALID_OBJECT_ID; }
+    [[nodiscard]] virtual int SelectedPlanetID() const { return INVALID_OBJECT_ID; }
+    [[nodiscard]] virtual int SelectedFleetID() const { return INVALID_OBJECT_ID; }
+    [[nodiscard]] virtual int SelectedShipID() const { return INVALID_OBJECT_ID; }
+
+    [[nodiscard]] static int MAX_AI_PLAYERS() noexcept;
 
     /** Returns the galaxy setup data used for the current game */
-    [[nodiscard]] virtual const GalaxySetupData& GetGalaxySetupData() const = 0;
+    [[nodiscard]] virtual const GalaxySetupData& GetGalaxySetupData() const noexcept = 0;
 
     /** Returns the networking client type for the given empire_id. */
     [[nodiscard]] virtual Networking::ClientType GetEmpireClientType(int empire_id) const = 0;
@@ -105,7 +103,7 @@ protected:
 };
 
 /** Accessor for the App's empire manager */
-[[nodiscard]] inline EmpireManager& Empires()
+[[nodiscard]] inline EmpireManager& Empires() noexcept
 { return IApp::GetApp()->Empires(); }
 
 /** Accessor for Empires */
@@ -113,24 +111,16 @@ protected:
 { return IApp::GetApp()->GetEmpire(id); }
 
 /** Accessor for the App's species manager */
-[[nodiscard]] inline SpeciesManager& GetSpeciesManager()
+[[nodiscard]] inline SpeciesManager& GetSpeciesManager() noexcept
 { return IApp::GetApp()->GetSpeciesManager(); }
 
-/** Accessor for Species */
-[[nodiscard]] inline const Species* GetSpecies(const std::string& name)
-{ return IApp::GetApp()->GetSpecies(name); }
-
 /** Accessor for the App's empire supply manager */
-[[nodiscard]] inline SupplyManager& GetSupplyManager()
+[[nodiscard]] inline SupplyManager& GetSupplyManager() noexcept
 { return IApp::GetApp()->GetSupplyManager(); }
 
 /** Accessor for the App's universe object */
 [[nodiscard]] inline Universe& GetUniverse() noexcept
 { return IApp::GetApp()->GetUniverse(); }
-
-/** Accessor for the App's universe object */
-[[nodiscard]] inline std::shared_ptr<const Pathfinder> GetPathfinder()
-{ return IApp::GetApp()->GetUniverse().GetPathfinder(); }
 
 /** Accessor for all (on server) or all known (on client) objects ObjectMap */
 [[nodiscard]] inline ObjectMap& Objects() {
@@ -139,27 +129,23 @@ protected:
     return app ? app->GetUniverse().Objects() : empty_objects;
 }
 
-/** Accessor for known objects of specified empire. */
-[[nodiscard]] inline ObjectMap& EmpireKnownObjects(int empire_id)
-{ return IApp::GetApp()->EmpireKnownObjects(empire_id); }
-
 /** Returns the object name of the universe object. This can be apperant object
  * name, if the application isn't supposed to see the real object name. */
-[[nodiscard]] inline std::string GetVisibleObjectName(std::shared_ptr<const UniverseObject> object)
+[[nodiscard]] inline std::string GetVisibleObjectName(const UniverseObject& object)
 { return IApp::GetApp()->GetVisibleObjectName(object); }
 
 /** Returns app's empire ID. This may be an actual empire ID or may be
   * ALL_EMPIRES. */
-[[nodiscard]] inline int AppEmpireID()
+[[nodiscard]] inline int AppEmpireID() noexcept
 { return IApp::GetApp()->EmpireID(); }
 
 /** Returns current game turn.  This is >= 1 during a game, BEFORE_FIRST_TURN
   * during galaxy setup, or is INVALID_GAME_TURN at other times */
-[[nodiscard]] inline int CurrentTurn()
+[[nodiscard]] inline int CurrentTurn() noexcept
 { return IApp::GetApp()->CurrentTurn(); }
 
 /** Returns the galaxy setup settings used in the current game. */
-[[nodiscard]] inline const GalaxySetupData& GetGalaxySetupData()
+[[nodiscard]] inline const GalaxySetupData& GetGalaxySetupData() noexcept
 { return IApp::GetApp()->GetGalaxySetupData(); }
 
 [[nodiscard]] inline Networking::ClientType GetEmpireClientType(int empire_id)

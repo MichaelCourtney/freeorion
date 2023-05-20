@@ -18,6 +18,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "../../util/boost_fix.h"
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/find_iterator.hpp>
@@ -33,7 +34,7 @@
 #include <boost/preprocessor/stringize.hpp>
 #include <boost/spirit/include/lex_lexertl.hpp>
 #include <boost/spirit/include/lex_lexertl_position_token.hpp>
-#include <boost/spirit/include/phoenix.hpp>
+#include <boost/phoenix.hpp>
 #include <boost/spirit/include/qi.hpp>
 #include <boost/spirit/include/qi_as.hpp>
 #include <boost/spirit/include/support_argument.hpp>
@@ -50,3 +51,4 @@
 #include <boost/preprocessor/control/if.hpp>
 #include <boost/preprocessor/facilities/is_empty_variadic.hpp>
 #endif
+

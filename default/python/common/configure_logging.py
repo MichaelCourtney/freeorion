@@ -80,7 +80,6 @@ import traceback
 try:
     import freeorion_logger  # FreeOrion logger interface pylint: disable=import-error
 except ImportError:
-
     # Create an alternative logger for use in testing when the server is unavailable
     class _FreeOrionLoggerForTest:
         """A stub freeorion_logger for testing"""
@@ -149,7 +148,7 @@ class _LoggerHandler(logging.Handler):
     """A handler to send logs to the C++ process."""
 
     def __init__(self, level):
-        super(_LoggerHandler, self).__init__(level)
+        super().__init__(level)
         self.logger = {
             logging.DEBUG: freeorion_logger.debug,
             logging.INFO: freeorion_logger.info,
@@ -192,7 +191,7 @@ class _SingleLevelFilter(logging.Filter):
     """This filter selects for only one log level."""
 
     def __init__(self, _level):
-        super(_SingleLevelFilter, self).__init__()
+        super().__init__()
         self.level = _level
 
     def filter(self, record):
@@ -210,7 +209,7 @@ def _create_narrow_handler(level):
 
 
 def _unhandled_exception_hook(*exc_info):
-    traceback_msg = "Uncaught exception: {0}".format("".join(traceback.format_exception(*exc_info)))
+    traceback_msg = "Uncaught exception: {}".format("".join(traceback.format_exception(*exc_info)))
     logging.getLogger().error(traceback_msg)
 
 

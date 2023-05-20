@@ -27,9 +27,6 @@
 
 namespace fs = boost::filesystem;
 
-using std::vector;
-using std::string;
-
 namespace {
     constexpr GG::X SAVE_FILE_DIALOG_WIDTH(600);
     constexpr GG::Y SAVE_FILE_DIALOG_HEIGHT(400);
@@ -60,7 +57,6 @@ namespace {
         "monster_freq", "native_freq", "planet_freq", "specials_freq", "starlane_freq", "ai_aggression",
         "number_of_empires", "number_of_humans"
     };
-    constexpr unsigned int VALID_PREVIEW_COLUMN_COUNT = VALID_PREVIEW_COLUMNS.size();
     constexpr int WHEEL_INCREMENT = 80;
 
     std::string operator+(std::string_view lhs, std::string_view rhs) {
@@ -322,13 +318,13 @@ public:
     }
 
     /** Excludes border from the client area. */
-    GG::Pt ClientUpperLeft() const override {
+    GG::Pt ClientUpperLeft() const noexcept override {
         return UpperLeft() + GG::Pt(GG::X(SAVE_FILE_CELL_MARGIN),
                                     GG::Y(SAVE_FILE_CELL_MARGIN));
     }
 
     /** Excludes border from the client area. */
-    GG::Pt ClientLowerRight() const override {
+    GG::Pt ClientLowerRight() const noexcept override {
         return LowerRight() - GG::Pt(GG::X(SAVE_FILE_CELL_MARGIN * 2),
                                      GG::Y(SAVE_FILE_CELL_MARGIN));
     }
@@ -506,7 +502,7 @@ public:
         if (abs_path.is_relative())
             abs_path = GetSaveDir() / path;
 
-        vector<FullPreview> previews;
+        std::vector<FullPreview> previews;
         ::LoadSaveGamePreviews(abs_path, extension, previews);
         LoadSaveGamePreviews(std::move(previews));
     }
@@ -876,7 +872,7 @@ void SaveFileDialog::AskDelete() {
     }
 }
 
-void SaveFileDialog::DoubleClickRow(GG::ListBox::iterator row, const GG::Pt& pt, const GG::Flags<GG::ModKey>& modkeys) {
+void SaveFileDialog::DoubleClickRow(GG::ListBox::iterator row, GG::Pt pt, GG::Flags<GG::ModKey> modkeys) {
     m_file_list->SelectRow(row);
     Confirm();
 }
@@ -985,7 +981,7 @@ bool SaveFileDialog::CheckChoiceValidity() {
 void SaveFileDialog::FileNameEdited(const std::string& filename)
 { CheckChoiceValidity(); }
 
-void SaveFileDialog::DirectoryEdited(const string& filename)
+void SaveFileDialog::DirectoryEdited(const std::string& filename)
 { CheckChoiceValidity(); }
 
 std::string SaveFileDialog::GetDirPath() const {

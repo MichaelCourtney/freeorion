@@ -24,9 +24,6 @@ constexpr float SQRT2OVER2 = 0.70710678118654757274f; //std::sqrt(2.0) / 2.0;
 /// a stack of the currently-active clipping rects, in GG coordinates, not OpenGL scissor coordinates
 std::vector<Rect> g_scissor_clipping_rects;
 
-GLboolean g_prev_color_writemask[4];
-GLboolean g_prev_depth_writemask;
-
 /// the index of the next stencil bit to use for stencil clipping
 unsigned int g_stencil_bit = 0;
 
@@ -99,11 +96,11 @@ void Check(Pt ul, Pt lr, Clr color1, Clr color2, Clr color3)
 
     // all vertices
     GLfloat verts[][2] = {{-0.2f,  0.2f}, {-0.6f, -0.2f}, {-0.6f,  0.0f},
-                          {-0.2f,  0.4f}, {-0.8f,  0.0f}, { -0.2f,  0.6f},
+                          {-0.2f,  0.4f}, {-0.8f,  0.0f}, {-0.2f,  0.6f},
                           { 0.8f, -0.4f}, { 0.6f, -0.4f}, { 0.8f, -0.8f}};
 
     glPushMatrix();
-    constexpr float sf = 1.25f;                                                 // scale factor to make the check look right
+    static constexpr float sf = 1.25f;                                          // scale factor to make the check look right
     glTranslatef(Value(ul.x + wd / 2.0f), Value(ul.y + ht / 2.0f * sf), 0.0f);  // move origin to the center of the rectangle
     glScalef(Value(wd / 2.0f * sf), Value(ht / 2.0f * sf), 1.0f);               // map the range [-1,1] to the rectangle in both directions
 
@@ -150,22 +147,22 @@ void XMark(Pt ul, Pt lr, Clr color1, Clr color2, Clr color3)
     glDisable(GL_TEXTURE_2D);
 
     // all vertices
-    GLfloat verts[][2] = {{-0.4f, -0.6f}, {-0.6f, -0.4f}, {-0.4f, -0.4f}, {-0.2f,  0.0f}, {-0.6f,  0.4f},
-                          {-0.4f,  0.6f}, {-0.4f,  0.4f}, { 0.0f,  0.2f}, { 0.4f,  0.6f}, { 0.6f,  0.4f},
-                          { 0.4f,  0.4f}, { 0.2f,  0.0f}, { 0.6f, -0.4f}, { 0.4f, -0.6f}, { 0.4f, -0.4f},
-                          { 0.0f, -0.2f}, { 0.0f,  0.0f}};
+    static constexpr GLfloat verts[][2] = {{-0.4f, -0.6f}, {-0.6f, -0.4f}, {-0.4f, -0.4f}, {-0.2f,  0.0f}, {-0.6f,  0.4f},
+                                           {-0.4f,  0.6f}, {-0.4f,  0.4f}, { 0.0f,  0.2f}, { 0.4f,  0.6f}, { 0.6f,  0.4f},
+                                           { 0.4f,  0.4f}, { 0.2f,  0.0f}, { 0.6f, -0.4f}, { 0.4f, -0.6f}, { 0.4f, -0.4f},
+                                           { 0.0f, -0.2f}, { 0.0f,  0.0f}};
 
     glPushMatrix();
-    constexpr float sf = 1.75f;                                             // scale factor; the check wasn't the right size as drawn originally
+    static constexpr float sf = 1.75f;                                      // scale factor; the check wasn't the right size as drawn originally
     glTranslatef(Value(ul.x + wd / 2.0f), Value(ul.y + ht / 2.0f), 0.0f);   // move origin to the center of the rectangle
     glScalef(Value(wd / 2.0f * sf), Value(ht / 2.0f * sf), 1.0f);           // map the range [-1,1] to the rectangle in both directions
 
-    static std::size_t indices[44] = {12, 13, 14,
-                                      15,  0,  2, 16,  9, 11, 16, 10,
-                                      0,  1,  2,
-                                      13, 15, 16, 14,  3,  4,  6, 16,
-                                      4,  5,  6,  8,  9, 10,
-                                      14, 16, 11, 12,  2,  1,  3, 16, 16,  6,  5,  7, 16,  7,  8, 10};
+    static constexpr std::size_t indices[44] = {12, 13, 14,
+                                                15,  0,  2, 16,  9, 11, 16, 10,
+                                                0,  1,  2,
+                                                13, 15, 16, 14,  3,  4,  6, 16,
+                                                4,  5,  6,  8,  9, 10,
+                                                14, 16, 11, 12,  2,  1,  3, 16, 16,  6,  5,  7, 16,  7,  8, 10};
 
     GL2DVertexBuffer vert_buf;
     vert_buf.reserve(44);
@@ -216,8 +213,8 @@ void BubbleArc(Pt ul, Pt lr, Clr color1, Clr color2, Clr color3, double theta1, 
     const int      SLICES = std::min(3 + std::max(Value(wd), Value(ht)), 50);  // this is a good guess at how much to tesselate the circle coordinates (50 segments max)
     const double   HORZ_THETA = (2 * PI) / SLICES;
 
-    std::valarray<double>& unit_vertices = unit_circle_coords[SLICES];
-    std::valarray<Clr>&    colors = color_arrays[SLICES];
+    auto& unit_vertices = unit_circle_coords[SLICES];
+    auto& colors = color_arrays[SLICES];
     if (unit_vertices.size() == 0) {    // only calculate once, when empty
         unit_vertices.resize(2 * (SLICES + 1), 0.0);
         double theta = 0.0f;
@@ -288,13 +285,12 @@ void CircleArc(Pt ul, Pt lr, Clr color, Clr border_color1, Clr border_color2,
     else if (theta2 >= 2 * PI)
         theta2 -= int(theta2 / (2 * PI)) * 2 * PI;
 
-    const int      SLICES = std::min(3 + std::max(Value(wd), Value(ht)), 50);  // this is a good guess at how much to tesselate the circle coordinates (50 segments max)
-    const double   HORZ_THETA = (2 * PI) / SLICES;
+    const int SLICES = std::min(3 + std::max(Value(wd), Value(ht)), 50);  // this is a good guess at how much to tesselate the circle coordinates (50 segments max)
+    const double HORZ_THETA = (2 * PI) / SLICES;
 
-    std::valarray<double>& unit_vertices = unit_circle_coords[SLICES];
-    std::valarray<Clr>&    colors = color_arrays[SLICES];
-    bool calc_vertices = unit_vertices.size() == 0;
-    if (calc_vertices) {
+    auto& unit_vertices = unit_circle_coords[SLICES];
+    auto& colors = color_arrays[SLICES];
+    if (unit_vertices.size() == 0) {
         unit_vertices.resize(2 * (SLICES + 1), 0.0);
         double theta = 0.0f;
         for (int j = 0; j <= SLICES; theta += HORZ_THETA, ++j) { // calculate x,y values for each point on a unit circle divided into SLICES arcs
@@ -379,7 +375,7 @@ void RoundedRectangle(Pt ul, Pt lr, Clr color, Clr border_color1, Clr border_col
 
     int rad = static_cast<int>(corner_radius);
 
-    constexpr float color_scale_factor1 = (SQRT2OVER2 * (0 + 1) + 1) / 2;
+    static constexpr float color_scale_factor1 = (SQRT2OVER2 * (0 + 1) + 1) / 2;
     Clr clr = BlendClr(border_color1, border_color2, color_scale_factor1);
     // top
     vert_buf.store(lr.x - rad,      ul.y);
@@ -395,7 +391,7 @@ void RoundedRectangle(Pt ul, Pt lr, Clr color, Clr border_color1, Clr border_col
         colour_buf.store(clr);
 
 
-    constexpr float color_scale_factor2 = (SQRT2OVER2 * (-1 + 0) + 1) / 2;
+    static constexpr float color_scale_factor2 = (SQRT2OVER2 * (-1 + 0) + 1) / 2;
     clr = BlendClr(border_color1, border_color2, color_scale_factor2);
     // right
     vert_buf.store(lr.x,            ul.y + rad);
@@ -456,7 +452,7 @@ void BubbleRectangle(Pt ul, Pt lr, Clr color1, Clr color2, Clr color3, unsigned 
     int rad = static_cast<int>(corner_radius);
 
     // top
-    constexpr float color_scale_factor1 = (SQRT2OVER2 * (0 + 1) + 1) / 2;
+    static constexpr float color_scale_factor1 = (SQRT2OVER2 * (0 + 1) + 1) / 2;
     Clr scaled_color = BlendClr(color2, color3, color_scale_factor1);
 
     GL2DVertexBuffer verts;
@@ -484,7 +480,7 @@ void BubbleRectangle(Pt ul, Pt lr, Clr color1, Clr color2, Clr color3, unsigned 
     verts.store(ul.x + rad, ul.y + rad);
 
     // right
-    constexpr float color_scale_factor2 = (SQRT2OVER2 * (-1 + 0) + 1) / 2;
+    static constexpr float color_scale_factor2 = (SQRT2OVER2 * (-1 + 0) + 1) / 2;
     scaled_color = BlendClr(color2, color3, color_scale_factor2);
     colours.store(color1);
     colours.store(color1);
@@ -533,19 +529,13 @@ void BubbleRectangle(Pt ul, Pt lr, Clr color1, Clr color2, Clr color3, unsigned 
 }
 
 
-std::ostream& GG::operator<<(std::ostream& os, const GG::Clr& clr)
-{
-    os << "(" << +clr.r << ", " << +clr.g << ", " << +clr.b << ", " << +clr.a << ")";
-    return os;
-}
-
-void glColor(const Clr& clr)
+void glColor(Clr clr)
 { glColor4ub(clr.r, clr.g, clr.b, clr.a); }
 
 Clr GG::DisabledColor(Clr clr)
 {
     Clr retval = clr;
-    constexpr double gray_factor = 0.75; // amount to move clr in the direction of gray
+    static constexpr double gray_factor = 0.75; // amount to move clr in the direction of gray
     retval.r = static_cast<int>(retval.r + (CLR_GRAY.r - retval.r) * gray_factor);
     retval.g = static_cast<int>(retval.g + (CLR_GRAY.g - retval.g) * gray_factor);
     retval.b = static_cast<int>(retval.b + (CLR_GRAY.b - retval.b) * gray_factor);
@@ -604,8 +594,10 @@ void GG::BeginStencilClipping(Pt inner_ul, Pt inner_lr, Pt outer_ul, Pt outer_lr
             glDisable(GL_SCISSOR_TEST);
     }
 
-    glGetBooleanv(GL_COLOR_WRITEMASK, g_prev_color_writemask);
-    glGetBooleanv(GL_DEPTH_WRITEMASK, &g_prev_depth_writemask);
+    GLboolean prev_color_writemask[4] = {};
+    glGetBooleanv(GL_COLOR_WRITEMASK, prev_color_writemask);
+    GLboolean prev_depth_writemask = 0;
+    glGetBooleanv(GL_DEPTH_WRITEMASK, &prev_depth_writemask);
 
     glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
     glDepthMask(GL_FALSE);
@@ -638,11 +630,11 @@ void GG::BeginStencilClipping(Pt inner_ul, Pt inner_lr, Pt outer_ul, Pt outer_lr
     glVertexPointer(2, GL_INT, 0, inner_vertices);
     glDrawArrays(GL_QUADS, 0, 4);
 
-    glColorMask(g_prev_color_writemask[0],
-                g_prev_color_writemask[1],
-                g_prev_color_writemask[2],
-                g_prev_color_writemask[3]);
-    glDepthMask(g_prev_depth_writemask);
+    glColorMask(prev_color_writemask[0],
+                prev_color_writemask[1],
+                prev_color_writemask[2],
+                prev_color_writemask[3]);
+    glDepthMask(prev_depth_writemask);
 
     glStencilFunc(GL_EQUAL, mask, mask);
     glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
@@ -741,16 +733,16 @@ void GG::Triangle(X x1, Y y1, X x2, Y y2, X x3, Y y3, bool filled)
 }
 
 void GG::FlatRectangle(Pt ul, Pt lr, Clr color, Clr border_color,
-                       unsigned int border_thick/* = 2*/)
+                       unsigned int border_thick)
 {
     Rectangle(ul, lr, color, border_color, border_color, border_thick,
               true, true, true, true);
 }
 
 void GG::BeveledRectangle(Pt ul, Pt lr, Clr color, Clr border_color, bool up,
-                          unsigned int bevel_thick/* = 2*/, bool bevel_left/* = true*/,
-                          bool bevel_top/* = true*/, bool bevel_right/* = true*/,
-                          bool bevel_bottom/* = true*/)
+                          unsigned int bevel_thick, bool bevel_left,
+                          bool bevel_top, bool bevel_right,
+                          bool bevel_bottom)
 {
     Rectangle(ul, lr, color,
               (up ? LightenClr(border_color) : DarkenClr(border_color)),
@@ -759,16 +751,16 @@ void GG::BeveledRectangle(Pt ul, Pt lr, Clr color, Clr border_color, bool up,
 }
 
 void GG::FlatRoundedRectangle(Pt ul, Pt lr, Clr color, Clr border_color,
-                              unsigned int corner_radius/* = 5*/,
-                              unsigned int border_thick/* = 2*/)
+                              unsigned int corner_radius,
+                              unsigned int border_thick)
 {
     RoundedRectangle(ul, lr, color, border_color, border_color,
                      corner_radius, border_thick);
 }
 
 void GG::BeveledRoundedRectangle(Pt ul, Pt lr, Clr color, Clr border_color, bool up,
-                                 unsigned int corner_radius/* = 5*/,
-                                 unsigned int bevel_thick/* = 2*/)
+                                 unsigned int corner_radius,
+                                 unsigned int bevel_thick)
 {
     RoundedRectangle(ul, lr, color,
                      (up ? LightenClr(border_color) : DarkenClr(border_color)),
@@ -785,7 +777,7 @@ void GG::BeveledCheck(Pt ul, Pt lr, Clr color)
 void GG::FlatX(Pt ul, Pt lr, Clr color)
 { XMark(ul, lr, color, color, color); }
 
-void GG::Bubble(Pt ul, Pt lr, Clr color, bool up/* = true*/)
+void GG::Bubble(Pt ul, Pt lr, Clr color, bool up)
 {
     BubbleArc(ul, lr, color,
               (up ? DarkenClr(color) : LightenClr(color)),
@@ -793,10 +785,10 @@ void GG::Bubble(Pt ul, Pt lr, Clr color, bool up/* = true*/)
               0, 0);
 }
 
-void GG::FlatCircle(Pt ul, Pt lr, Clr color, Clr border_color, unsigned int thick/* = 2*/)
+void GG::FlatCircle(Pt ul, Pt lr, Clr color, Clr border_color, unsigned int thick)
 { CircleArc(ul, lr, color, border_color, border_color, thick, 0, 0); }
 
-void GG::BeveledCircle(Pt ul, Pt lr, Clr color, Clr border_color, bool up/* = true*/, unsigned int bevel_thick/* = 2*/)
+void GG::BeveledCircle(Pt ul, Pt lr, Clr color, Clr border_color, bool up, unsigned int bevel_thick)
 {
     CircleArc(ul, lr, color,
               (up ? DarkenClr(border_color) : LightenClr(border_color)),
@@ -804,7 +796,7 @@ void GG::BeveledCircle(Pt ul, Pt lr, Clr color, Clr border_color, bool up/* = tr
               bevel_thick, 0, 0);
 }
 
-void GG::BubbleRectangle(Pt ul, Pt lr, Clr color, bool up, unsigned int corner_radius/* = 5*/)
+void GG::BubbleRectangle(Pt ul, Pt lr, Clr color, bool up, unsigned int corner_radius)
 {
     ::BubbleRectangle(ul, lr, color,
                       (up ? LightenClr(color) : DarkenClr(color)),

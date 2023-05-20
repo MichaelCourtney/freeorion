@@ -4,25 +4,29 @@ Policy
     short_description = "PLC_LIBERTY_SHORT_DESC"
     category = "SOCIAL_CATEGORY"
     adoptioncost = floor(3.0 * [[POPULATION_OWNED_BY_EMPIRE]]^0.5)
-    exclusions = [ "PLC_MARTIAL_LAW" "PLC_TERROR_SUPPRESSION" "PLC_INDOCTRINATION" "PLC_CONFORMANCE" ]
+    exclusions = [ "PLC_CONFORMANCE" "PLC_DIVINE_AUTHORITY" "PLC_FEUDALISM" "PLC_INDOCTRINATION" "PLC_MARTIAL_LAW" "PLC_TERROR_SUPPRESSION" "PLC_THE_HUNT" ]
     effectsgroups = [
         [[SPECIES_LIKES_OR_DISLIKES_POLICY_STABILITY_EFFECTS]]
 
-        // used in setting stability adjustments for species likes / dislikes
+        // EmpireHasAdoptedPolicy PLC_LIBERTY is used in setting stability adjustments for species dislikes in
+        // species/common/happiness.macros (foci), buildings/buildings.macros and policies/policies.macros (policies)
 
-        // increases research but penalizes stability
+        // Increases research on research-focused planets with stability>5.
+        // Bonus grows with stability, up to a maximum of 0.15 / pop at 20.
         EffectsGroup
-        scope = And [
-            Planet
-            OwnedBy empire = Source.Owner
-            Species
-            Happiness low = (NamedReal name = "PLC_LIBERTY_MIN_STABILITY" value = 8)
-        ]
-        effects = [
-            SetTargetResearch value = Value + (NamedReal name = "PLC_LIBERTY_RESEARCH_BONUS_FLAT" value = 2.0)
-            SetTargetHappiness value = Value - (NamedReal name = "PLC_LIBERTY_STABILITY_PENALTY_FLAT" value = 2.0)
-        ]
+            scope = And [
+                Planet
+                OwnedBy empire = Source.Owner
+                Species
+                Focus type = "FOCUS_RESEARCH"
+                Happiness low = (NamedReal name = "PLC_LIBERTY_MIN_STABILITY" value = 5)
+            ]
+            priority = [[TARGET_AFTER_SCALING_PRIORITY]]
+            effects = SetTargetResearch value = Value +
+                (min(Target.Happiness, (NamedReal name = "PLC_LIBERTY_MAX_STABILITY" value = 20)) - NamedRealLookup name = "PLC_LIBERTY_MIN_STABILITY")
+                * Target.Population * (NamedReal name = "PLC_LIBERTY_RESEARCH_BONUS_SCALING" value = 0.01)
     ]
-    graphic = "icons/policies/liberty.png"
+    graphic = "icons/policies/social_liberty.png"
 
 #include "/scripting/policies/policies.macros"
+#include "/scripting/common/priorities.macros"

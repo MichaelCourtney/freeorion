@@ -184,7 +184,7 @@ void Sound::Enable()
 void Sound::Disable()
 { m_impl->Disable(); }
 
-void Sound::PlayMusic(const boost::filesystem::path& path, int loops /* = 0*/)
+void Sound::PlayMusic(const boost::filesystem::path& path, int loops)
 { m_impl->PlayMusic(path, loops); }
 
 void Sound::PauseMusic()
@@ -196,7 +196,7 @@ void Sound::ResumeMusic()
 void Sound::StopMusic()
 { m_impl->StopMusic(); }
 
-void Sound::PlaySound(const boost::filesystem::path& path, bool is_ui_sound/* = false*/)
+void Sound::PlaySound(const boost::filesystem::path& path, bool is_ui_sound)
 { m_impl->PlaySound(path, is_ui_sound); }
 
 void Sound::FreeSound(const boost::filesystem::path& path)
@@ -428,7 +428,7 @@ namespace {
         ogg_int64_t byte_size = ov_pcm_total(&ogg_file, -1) * vorbis_info_ptr->channels * 2;
 
         // check that size of file isn't too huge
-        constexpr ogg_int64_t MAX_BUFFER_SIZE = 1024 * 1024 * 1024;
+        static constexpr ogg_int64_t MAX_BUFFER_SIZE = 1024 * 1024 * 1024;
         if (byte_size > MAX_BUFFER_SIZE) {
             ErrorLogger() << "PlaySound: unable to open file " << filename << " : Too big to buffer. Aborting\n";
             return {0, false};
@@ -632,7 +632,7 @@ void Sound::Impl::SetMusicVolume(int vol) {
 
     // normalize value, then apply to all sound sources
     vol = std::max(0, std::min(vol, 255));
-    GetOptionsDB().Set<int>("audio.music.volume", vol);
+    GetOptionsDB().Set("audio.music.volume", vol);
 
     if (!alcGetCurrentContext())
         return;
@@ -650,7 +650,7 @@ void Sound::Impl::SetUISoundsVolume(int vol) {
 
     // normalize value, then apply to all sound sources
     vol = std::max(0, std::min(vol, 255));
-    GetOptionsDB().Set<int>("audio.effects.volume", vol);
+    GetOptionsDB().Set("audio.effects.volume", vol);
     if (!alcGetCurrentContext())
         return;
 

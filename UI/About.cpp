@@ -54,9 +54,9 @@ void About::CompleteConstruction() {
     // that changes the settings directory, the copyright notice should be unchanged
     m_license_str = ReadFile(GetRootDataDir() / "default" / "COPYING").value_or("");
 
-    m_done->LeftClickedSignal.connect(boost::bind(&GG::Wnd::EndRun, this));
-    m_license->LeftClickedSignal.connect(boost::bind(&About::ShowLicense, this));
-    m_vision->LeftClickedSignal.connect(boost::bind(&About::ShowVision, this));
+    m_done->LeftClickedSignal.connect([this]() { EndRun(); });
+    m_license->LeftClickedSignal.connect([this]() { ShowLicense(); });
+    m_vision->LeftClickedSignal.connect([this]() { ShowVision(); });
 }
 
 void About::KeyPress(GG::Key key, std::uint32_t key_code_point,
@@ -73,9 +73,9 @@ void About::ShowVision()
 { m_info->SetText(UserString("FREEORION_VISION")); }
 
 void About::DoLayout() {
-    constexpr GG::X BUTTONS_HORIZONTAL_SPACING{5};
-    constexpr GG::Y CONTENT_GROUPS_VERTICAL_SPACING{5};
-    constexpr GG::Pt BORDERS_SIZE{ GG::X{5}, GG::Y{5} };
+    static constexpr GG::X BUTTONS_HORIZONTAL_SPACING{5};
+    static constexpr GG::Y CONTENT_GROUPS_VERTICAL_SPACING{5};
+    static constexpr GG::Pt BORDERS_SIZE{ GG::X{5}, GG::Y{5} };
     const GG::Pt BUTTON_SIZE {
         std::max({ m_vision->MinUsableSize().x, m_license->MinUsableSize().x, m_done->MinUsableSize().x }),
         std::max({ m_vision->MinUsableSize().y, m_license->MinUsableSize().y, m_done->MinUsableSize().y }),

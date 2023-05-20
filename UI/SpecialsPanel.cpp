@@ -5,6 +5,7 @@
 #include "../util/OptionsDB.h"
 #include "../universe/Effect.h"
 #include "../universe/Special.h"
+#include "../universe/ValueRef.h"
 #include "../universe/UniverseObject.h"
 #include "../client/human/GGHumanClientApp.h"
 #include "ClientUI.h"
@@ -19,10 +20,9 @@ namespace {
 
 SpecialsPanel::SpecialsPanel(GG::X w, int object_id) :
     GG::Wnd(GG::X0, GG::Y0, w, GG::Y(32), GG::INTERACTIVE),
-    m_object_id(object_id),
-    m_icons()
+    m_object_id(object_id)
 {
-    SetName("SpecialsPanel");
+    SetName("SpecialsPanel"); // TODO: add a Wnd constructor that takes a name so this isn't needed
 }
 
 void SpecialsPanel::CompleteConstruction() {
@@ -30,24 +30,15 @@ void SpecialsPanel::CompleteConstruction() {
     Update();
 }
 
-bool SpecialsPanel::InWindow(const GG::Pt& pt) const {
-    bool retval = false;
-    for (const auto& entry : m_icons) {
-        if (entry.second->InWindow(pt)) {
-            retval = true;
-            break;
-        }
-    }
-    return retval;
+bool SpecialsPanel::InWindow(GG::Pt pt) const {
+    return std::any_of(m_icons.begin(), m_icons.end(),
+                       [pt](const auto& icon) { return icon->InWindow(pt); });
 }
 
-void SpecialsPanel::Render()
-{}
-
-void SpecialsPanel::MouseWheel(const GG::Pt& pt, int move, GG::Flags<GG::ModKey> mod_keys)
+void SpecialsPanel::MouseWheel(GG::Pt pt, int move, GG::Flags<GG::ModKey> mod_keys)
 { ForwardEventToParent(); }
 
-void SpecialsPanel::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
+void SpecialsPanel::SizeMove(GG::Pt ul, GG::Pt lr) {
     GG::Pt old_size = GG::Wnd::Size();
 
     GG::Wnd::SizeMove(ul, lr);
@@ -58,8 +49,8 @@ void SpecialsPanel::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
 
 void SpecialsPanel::Update() {
     //std::cout << "SpecialsPanel::Update" << std::endl;
-    for (auto& entry : m_icons)
-        DetachChild(entry.second);
+    for (auto& icon : m_icons)
+        DetachChild(icon);
     m_icons.clear();
 
 
@@ -69,6 +60,7 @@ void SpecialsPanel::Update() {
         ErrorLogger() << "SpecialsPanel::Update couldn't get object with id " << m_object_id;
         return;
     }
+    m_icons.reserve(obj->Specials().size());
 
     // get specials and use them to create specials icons
     // for specials with a nonzero
@@ -97,22 +89,19 @@ void SpecialsPanel::Update() {
         else
             desc += "\n" + UserString("ADDED_ON_INITIAL_TURN");
 
-        if (GetOptionsDB().Get<bool>("resource.effects.description.shown") && !special->Effects().empty()) {
+        if (GetOptionsDB().Get<bool>("resource.effects.description.shown") && !special->Effects().empty())
             desc += "\n" + Dump(special->Effects());
-        }
 
         graphic->SetBrowseInfoWnd(GG::Wnd::Create<IconTextBrowseWnd>(
-            ClientUI::SpecialIcon(special->Name()), UserString(special->Name()), desc));
-        m_icons[special_name] = graphic;
+            ClientUI::SpecialIcon(special_name), UserString(special_name), desc));
+        m_icons.push_back(graphic);
 
-        graphic->RightClickedSignal.connect([name{special_name}](const GG::Pt& pt) {
-            auto zoom_action = [name]() {
-                ClientUI::GetClientUI()->ZoomToSpecial(name);
-            };
+        graphic->RightClickedSignal.connect([name{special_name}](GG::Pt pt) {
 
             auto popup = GG::Wnd::Create<CUIPopupMenu>(pt.x, pt.y);
             std::string popup_label = boost::io::str(FlexibleFormat(UserString("ENC_LOOKUP")) % UserString(name));
 
+            auto zoom_action = [name]() { ClientUI::GetClientUI()->ZoomToSpecial(name); };
             popup->AddMenuItem(GG::MenuItem(std::move(popup_label), false, false, zoom_action));
 
             popup->Run();
@@ -123,8 +112,7 @@ void SpecialsPanel::Update() {
     GG::X x(EDGE_PAD);
     GG::Y y(EDGE_PAD);
 
-    for (auto& [icon_name, icon] : m_icons) {
-        (void)icon_name; // quiet ignored warning
+    for (auto& icon : m_icons) {
         icon->SizeMove(GG::Pt(x, y), GG::Pt(x,y) + GG::Pt(SPECIAL_ICON_WIDTH, SPECIAL_ICON_HEIGHT));
         AttachChild(icon);
 

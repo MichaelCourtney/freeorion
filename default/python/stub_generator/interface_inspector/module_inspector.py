@@ -1,7 +1,6 @@
 from collections import defaultdict
 from enum import Enum
 from logging import warning
-from typing import List, Tuple
 
 from stub_generator.interface_inspector.class_processor import ClassInfo, inspect_class
 from stub_generator.interface_inspector.enum_processor import EnumInfo, inspect_enum
@@ -60,14 +59,14 @@ def get_module_members(obj):
             continue
         type_key = get_type(member)
         if type_key == MemberType.UNKNOWN:
-            warning("Unknown: '%s' of type '%s': %s" % (name, type(member), member))
+            warning(f"Unknown: '{name}' of type '{type(member)}': {member}")
         else:
             type_inspector = _OBJECT_HANDLERS[type_key]
             module_members[type_key].append(type_inspector(name, member))
     return module_members
 
 
-def get_module_info(obj, instances) -> Tuple[List[ClassInfo], List[EnumInfo], List[FunctionInfo], List[InstanceInfo]]:
+def get_module_info(obj, instances) -> tuple[list[ClassInfo], list[EnumInfo], list[FunctionInfo], list[InstanceInfo]]:
     module_members = get_module_members(obj)
     return (
         module_members[MemberType.CLASS],

@@ -29,9 +29,7 @@ struct grammar {
 
     dict operator()(GameRulesTypeMap& game_rules) const {
         dict globals(import("builtins").attr("__dict__"));
-        std::function<object(const tuple&, const dict&)> f = [this, &game_rules](const tuple& args,
-                  const dict& kw) { return insert_rule_(*this, game_rules, args, kw); };
-        globals["GameRule"] = raw_function(f);
+        globals["GameRule"] = raw_function([this, &game_rules](const tuple& args, const dict& kw) { return insert_rule_(*this, game_rules, args, kw); });
         return globals;
     }
 };
@@ -74,7 +72,7 @@ object insert_rule_(const grammar& g, GameRulesTypeMap& game_rules, const tuple&
 
     } else if (type_ == g.m_parser.type_str) {
         auto default_value{extract<std::string>(kw["default"])()};
-        std::set<std::string> allowed{stl_input_iterator<std::string>(kw["allowed"]),
+        std::vector<std::string> allowed{stl_input_iterator<std::string>(kw["allowed"]),
                                       stl_input_iterator<std::string>()};
         DebugLogger() << "Adding String game rule with name: " << name
                       << ", desc: " << desc << ", default: \"" << default_value

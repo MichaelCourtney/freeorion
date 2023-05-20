@@ -19,23 +19,23 @@ struct FO_COMMON_API SaveGamePreviewData {
     bool Valid() const;         /// Checks that this is a valid preview
     void SetBinary(bool bin = true);         /// Sets the description string appropriate for a binary or XML save file header
 
-    static constexpr short  PREVIEW_PRESENT_MARKER = 0xDA;          /// A marker for the presence of the header
-    short                   magic_number = PREVIEW_PRESENT_MARKER;  /// This should always contain PREVIEW_PRESENT_MARKER
+    static constexpr int16_t PREVIEW_PRESENT_MARKER = 0xDA;         /// A marker for the presence of the header
+    int16_t                  magic_number = PREVIEW_PRESENT_MARKER; /// This should always contain PREVIEW_PRESENT_MARKER
 
     std::string         description;                    /// Bit of text explaining what this file contains as human-readable text
     std::string         freeorion_version;              /// By what version of FreeOrion was this save generated
 
     std::string         main_player_name;               /// The name of the hosting player, or the single human player in single player games
     std::string         main_player_empire_name;        /// The name of the empire of the main player
-    std::array<unsigned char, 4> main_player_empire_colour = {{192, 192, 255, 255}};/// The colour of the empire of the main player
-    int                 current_turn = -1;              /// The turn the game as saved one
+    std::array<uint8_t, 4> main_player_empire_colour = {{192, 192, 255, 255}};/// The colour of the empire of the main player
+    int32_t             current_turn = -1;              /// The turn the game as saved one
     std::string         save_time;                      /// The time the game was saved as ISO 8601 YYYY-MM-DD"T"HH:MM:SS±HH:MM or Z
-    short               number_of_empires = -1;         /// The number of empires in the game
-    short               number_of_human_players = -1;   /// The number of human players in the game
+    int16_t             number_of_empires = -1;         /// The number of empires in the game
+    int16_t             number_of_human_players = -1;   /// The number of human players in the game
 
     std::string         save_format_marker;             /// What format was used for this save?
-    unsigned int        uncompressed_text_size = 0;     /// How many bytes capacity does the uncompressed save text take up? (ie. the part that was / will be compressed with zlib for compressed xml format saves)
-    unsigned int        compressed_text_size = 0;       /// How many bytes capacity does the compressed save text take up?
+    uint32_t            uncompressed_text_size = 0;     /// How many bytes capacity does the uncompressed save text take up? (ie. the part that was / will be compressed with zlib for compressed xml format saves)
+    uint32_t            compressed_text_size = 0;       /// How many bytes capacity does the compressed save text take up?
 };
 
 /** Stores all aggregated information about a save file */

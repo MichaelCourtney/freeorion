@@ -46,22 +46,23 @@ BuildingType
     effectsgroups = [
         [[SPECIES_LIKES_OR_DISLIKES_BUILDING_STABILITY_EFFECTS]]
 
-        // flat bonus to influence of capital
+        // sets empire's capital
         EffectsGroup
             scope = And [
                 Object id = Source.PlanetID
                 Planet
                 OwnedBy empire = Source.ProducedByEmpireID
             ]
-            effects = [
-                SetEmpireCapital
-                SetTargetInfluence value = Value
-                     + (NamedReal name = "BLD_IMPERIAL_PALACE_TARGET_INFLUENCE_FLAT" value = 3) 
-            ]
+            effects = SetEmpireCapital
 
         // one economic policy slot
         EffectsGroup
-            scope = Source
+            scope = And [
+                Object id = Source.PlanetID
+                Planet
+                Capital
+            ]
+            stackinggroup = "IMPERIAL_PALACE_ECO_SLOT"
             effects = SetEmpireMeter empire = Source.Owner
                                      meter = "ECONOMIC_CATEGORY_NUM_POLICY_SLOTS" value = Value + 1
 
@@ -71,6 +72,7 @@ BuildingType
                 Object id = Source.PlanetID
                 Planet
                 OwnedBy empire = Source.ProducedByEmpireID
+                Capital
             ]
             stackinggroup = "IMPERIAL_PALACE_SUPPLY_EFFECT"
             effects = SetMaxSupply value = Value
@@ -82,6 +84,7 @@ BuildingType
                 Object id = Source.PlanetID
                 Planet
                 OwnedBy empire = Source.ProducedByEmpireID
+                Capital
             ]
             activation = Not Number low = 1 condition = And [
                 Building name = "BLD_MEGALITH"
@@ -91,7 +94,7 @@ BuildingType
             effects = SetTargetConstruction value = Value
                         + (NamedReal name = "BLD_IMPERIAL_PALACE_TARGET_CONSTRUCTION_FLAT" value = 20)
 
-        // flat bonus to stability of capital
+        // flat bonus to stability of capital species
         EffectsGroup
             scope = And [
                 Planet
@@ -110,9 +113,9 @@ BuildingType
             stackinggroup = "IMPERIAL_PALACE_HAPPINESS"
             accountinglabel = "IMPERIAL_PALACE_SPECIES_HAPPINESS"
             effects = SetTargetHappiness value = Value
-                        + (NamedReal name = "BLD_IMPERIAL_PALACE_TARGET_HAPPINESS_FLAT" value = 5) // min(10, max(0, 10 - Target.DistanceToSource/20))
+                        + (NamedReal name = "BLD_IMPERIAL_PALACE_TARGET_HAPPINESS_FLAT" value = 5)
 
-        // flat bonus to defense and troops
+        // flat bonus to defense, troops and influence
         EffectsGroup
             scope = And [
                 Object id = Source.PlanetID
@@ -121,12 +124,14 @@ BuildingType
             ]
             stackinggroup = "PALACE_DEFENSE_STACK"
             accountinglabel = "BLD_IMPERIAL_PALACE"
-            priority = [[TARGET_EARLY_BEFORE_SCALING_PRIORITY]]
+            priority = [[TARGET_AFTER_SCALING_PRIORITY]]
             effects = [
                 SetMaxDefense value = Value + (NamedReal name = "BLD_IMPERIAL_PALACE_MAX_DEFENSE_FLAT"
                                                          value = (5 * [[PLANET_DEFENSE_FACTOR]]))
                 SetMaxTroops value = Value
                     + (NamedReal name = "BLD_IMPERIAL_PALACE_MAX_TROOPS_FLAT" value = 6)
+                SetTargetInfluence value = Value
+                     + (NamedReal name = "BLD_IMPERIAL_PALACE_TARGET_INFLUENCE_FLAT" value = (GameRule name = "RULE_IMPERIAL_PALACE_INFLUENCE"))
             ]
     ]
     icon = "icons/building/palace.png"

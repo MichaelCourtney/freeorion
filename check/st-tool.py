@@ -13,9 +13,10 @@ import time
 import urllib.parse
 import urllib.request
 import webbrowser
-from collections import OrderedDict, namedtuple
+from collections import OrderedDict
+from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Iterator
+from typing import NamedTuple
 
 STRING_TABLE_KEY_PATTERN = re.compile(r"^[A-Z0-9_]+$")
 # Provides the named capture groups 'ref_type' and 'key'
@@ -75,7 +76,7 @@ def check_balanced_reference(text: str) -> bool:
     return not is_open
 
 
-class StringTableEntry(object):
+class StringTableEntry:
     def __init__(self, key, keyline, value, notes, value_times):
         if not STRING_TABLE_KEY_PATTERN.match(key):
             raise ValueError(f"Key doesn't match expected format [A-Z0-9_]+, was '{key}'")
@@ -106,7 +107,7 @@ class StringTableEntry(object):
         return f"StringTableEntry(key={self.key}, keyline={self.keyline}, value={self.value})"
 
 
-class StringTable(object):
+class StringTable:
     def __init__(self, fpath, language, notes, includes, entries):
         self.fpath = fpath
         self.language = language
@@ -136,7 +137,7 @@ class StringTable(object):
     def __len__(self):
         return len(self._ientries)
 
-    def __str__(self):
+    def __str__(self):  # noqa: max-complexity
         result = ""
         result += self.language + "\n"
 
@@ -172,17 +173,17 @@ class StringTable(object):
         return result
 
     def __repr__(self):
-        return "StringTable(fpath={}, language={}, entries={})".format(self.fpath, self.language, self.entries)
+        return f"StringTable(fpath={self.fpath}, language={self.language}, entries={self.entries})"
 
     def items(self):
         return self._entries
 
-    @staticmethod
-    def set_author(fpath, entries, blames):
+    @staticmethod  # noqa: max-complexity
+    def set_author(fpath, entries, blames):  # noqa: max-complexity
         blame_cmd = ["git", "blame", "--incremental", fpath]
         git_blame = subprocess.check_output(blame_cmd)
         git_blame = git_blame.decode("utf-8", "strict")
-        git_blame = git_blame.splitlines(True)
+        git_blame = git_blame.splitlines(keepends=True)
 
         value_times = {}
         author_time = None
@@ -216,14 +217,16 @@ class StringTable(object):
                     continue
                 if entry.key not in value_times or len(value_times[entry.key]) != len(entry.value_times):
                     raise RuntimeError(
-                        "{}: git blame did not collect any matching author times for key {}".format(fpath, entry.key)
+                        f"{fpath}: git blame did not collect any matching author times for key {entry.key}"
                     )
                 entry.value_times = value_times[entry.key]
 
     @staticmethod
-    def from_file(fhandle, with_blame=True):
-        fpath = fhandle.name
+    def from_file(fhandle, with_blame=True) -> "StringTable":
+        return StringTable.from_text(fhandle.read(), fhandle.name, with_blame=with_blame)
 
+    @staticmethod
+    def from_text(text, fpath, with_blame=True) -> "StringTable":  # noqa: max-complexity
         is_quoted = False
 
         language = None
@@ -243,7 +246,7 @@ class StringTable(object):
         untranslated_keyline = None
         untranslated_lines = []
 
-        for fline, line in enumerate(fhandle, 1):
+        for fline, line in enumerate(text.splitlines(keepends=True), 1):
             if not is_quoted and not line.strip():
                 # discard empty lines when not in quoted value
                 if section:
@@ -262,7 +265,7 @@ class StringTable(object):
                             StringTableEntry(untranslated_key, untranslated_keyline, None, notes, untranslated_lines)
                         )
                     except ValueError as e:
-                        raise ValueError("{}:{}: {}".format(fpath, keyline, str(e)))
+                        raise ValueError(f"{fpath}:{keyline}: {str(e)}")
                     untranslated_key = None
                     untranslated_keyline = None
                     notes = []
@@ -309,7 +312,7 @@ class StringTable(object):
                             StringTableEntry(untranslated_key, untranslated_keyline, None, notes, untranslated_lines)
                         )
                     except ValueError as e:
-                        raise ValueError("{}:{}: {}".format(fpath, keyline, str(e)))
+                        raise ValueError(f"{fpath}:{keyline}: {str(e)}")
                     untranslated_key = None
                     untranslated_keyline = None
                     notes = []
@@ -348,7 +351,7 @@ class StringTable(object):
                     entries.append(StringTableEntry(key, keyline, value, notes, [0] * len(value_range)))
                     blames.update(value_range)
                 except ValueError as e:
-                    raise ValueError("{}:{}: {}".format(fpath, keyline, str(e)))
+                    raise ValueError(f"{fpath}:{keyline}: {e}")
 
                 key = None
                 keyline = None
@@ -375,23 +378,19 @@ class StringTable(object):
         return StringTable(fpath, language, fnotes, includes, entries)
 
     @staticmethod
-    def statistic(left, right):
-        STStatistic = namedtuple(
-            "STStatistic",
-            [
-                "left",
-                "left_only",
-                "left_older",
-                "left_pure_reference",
-                "right",
-                "right_only",
-                "right_older",
-                "right_pure_reference",
-                "untranslated",
-                "identical",
-                "layout_mismatch",
-            ],
-        )
+    def statistic(left: "StringTable", right: "StringTable"):  # noqa: max-complexity
+        class STStatistic(NamedTuple):
+            left: "StringTable"
+            left_only: set
+            left_older: set
+            left_pure_reference: set
+            right: "StringTable"
+            right_only: set
+            right_older: set
+            right_pure_reference: set
+            untranslated: set
+            identical: set
+            layout_mismatch: set
 
         all_keys = set(left).union(right)
 
@@ -795,7 +794,7 @@ class EditServerHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/plain ; charset=utf-8")
         self.send_header(
-            "Content-Disposition", 'attachment; filename="{}"'.format(os.path.basename(self.server.source_st.fpath))
+            "Content-Disposition", f'attachment; filename="{os.path.basename(self.server.source_st.fpath)}"'
         )
         self.end_headers()
 
@@ -847,11 +846,24 @@ class EditServerHandler(BaseHTTPRequestHandler):
 
 
 def format_action(args):
-    source_st = StringTable.from_file(args.source)
+    """
+    Format source file inline and exit.
 
-    print(source_st, end="")
+    If file was formatted exit status will be 1.
+    """
+    path = args.source.name
+    text = args.source.read()
+    source_st = StringTable.from_text(text=text, fpath=path)
+    new_text = str(source_st)
 
-    return 0
+    if text != new_text:
+        with open(path, "w") as f:
+            f.write(new_text)
+        print(f"{path} was reformatted")
+        return 1
+    else:
+        print(f"{path} is already well formatted")
+        return 0
 
 
 def sync_action(args):
@@ -898,8 +910,12 @@ def edit_action(args):
     server = HTTPServer(("localhost", 8080), EditServerHandler)
     server.reference_st = reference_st
     server.source_st = source_st
+    print("Starting server at http://localhost:8080/")
     webbrowser.open("http://localhost:8080/")
-    server.serve_forever()
+    try:
+        server.serve_forever()
+    except (KeyboardInterrupt, EOFError):
+        print("Stopping server")
 
     return 0
 
@@ -925,7 +941,6 @@ def check_action(args):
                     reference_key = match["key"]
                     references.add(reference_key)
                     if reference_key not in source_st:
-
                         if match["ref_type"].strip() in OPTIONAL_REF_TYPES:
                             continue
 

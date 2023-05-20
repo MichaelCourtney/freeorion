@@ -6,7 +6,27 @@ from logging import debug
 from aistate_interface import get_aistate
 from character.character_module import Aggression
 from character.character_strings_module import possible_greetings
+from common.fo_typing import EmpireId
+from common.option_tools import get_option_dict
 from freeorion_tools.translation import UserStringList
+
+gang_up_turn = int(get_option_dict().get("gang_up_turn", "99999"))
+
+
+def check_gang_up():
+    if fo.currentTurn() == gang_up_turn:
+        for empire_id in fo.allEmpireIDs():
+            player_id = fo.empirePlayerID(empire_id)
+            if not fo.playerIsAI(player_id):
+                fo.sendChatMessage(player_id, "Let's gang up to destroy this arrogant player!")
+            elif empire_id > fo.empireID():
+                offer = fo.diplomaticMessage(empire_id, fo.empireID(), fo.diplomaticMessageType.peaceProposal)
+                debug(f"Sending diplomatic message to empire {empire_id} of type {offer.type}")
+                fo.sendDiplomaticMessage(offer)
+
+
+def get_diplomatic_status(empire_id: EmpireId) -> fo.diplomaticStatus:
+    return fo.getDiplomaticStatus(fo.empireID(), empire_id)
 
 
 def handle_pregame_chat(sender_player_id, message_txt):
@@ -25,7 +45,7 @@ class DiplomaticCorp:
     def __init__(self):
         self.be_chatty = True
 
-    def handle_diplomatic_message(self, message):
+    def handle_diplomatic_message(self, message):  # noqa: max-complexity
         """Handle a diplomatic message update from the server,
         such as if another player declares war, accepts peace, or cancels a proposed peace treaty.
         :param message: message.recipient and message.sender are respective empire IDs
@@ -49,7 +69,9 @@ class DiplomaticCorp:
             attitude = aistate.character.attitude_to_empire(message.sender, aistate.diplomatic_logs)
             possible_acknowledgments = []
             aggression = aistate.character.get_trait(Aggression)
-            if aggression.key == fo.aggression.beginner:
+            if fo.currentTurn() >= gang_up_turn and fo.playerIsAI(fo.empirePlayerID(message.sender)):
+                accept_proposal = True
+            elif aggression.key == fo.aggression.beginner:
                 accept_proposal = True
             elif aggression.key == fo.aggression.turtle:
                 accept_proposal = attitude > 0
@@ -80,7 +102,7 @@ class DiplomaticCorp:
                 diplo_reply = fo.diplomaticMessage(
                     message.recipient, message.sender, fo.diplomaticMessageType.acceptAlliesProposal
                 )
-                debug("Sending diplomatic message to empire %s of type %s" % (message.sender, diplo_reply.type))
+                debug(f"Sending diplomatic message to empire {message.sender} of type {diplo_reply.type}")
                 fo.sendDiplomaticMessage(diplo_reply)
             debug(
                 "sending chat to player %d of empire %d, message body: '%s'"
@@ -112,11 +134,20 @@ class DiplomaticCorp:
                 % (len(possible_acknowledgments), acknowledgement)
             )
             fo.sendChatMessage(proposal_sender_player, acknowledgement)
-            if attitude > 0:
+            if fo.currentTurn() >= gang_up_turn and fo.playerIsAI(fo.empirePlayerID(message.sender)):
+                reply = fo.diplomaticMessage(
+                    message.recipient, message.sender, fo.diplomaticMessageType.acceptPeaceProposal
+                )
+                fo.sendDiplomaticMessage(reply)
+                allies = fo.diplomaticMessage(
+                    message.recipient, message.sender, fo.diplomaticMessageType.alliesProposal
+                )
+                fo.sendDiplomaticMessage(allies)
+            elif attitude > 0:
                 diplo_reply = fo.diplomaticMessage(
                     message.recipient, message.sender, fo.diplomaticMessageType.acceptPeaceProposal
                 )
-                debug("Sending diplomatic message to empire %s of type %s" % (message.sender, diplo_reply.type))
+                debug(f"Sending diplomatic message to empire {message.sender} of type {diplo_reply.type}")
                 fo.sendDiplomaticMessage(diplo_reply)
             debug(
                 "sending chat to player %d of empire %d, message body: '%s'"

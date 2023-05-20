@@ -9,13 +9,13 @@
 #include "../universe/EnumsFwd.h"
 
 #include <boost/spirit/include/qi.hpp>
-#include <boost/spirit/include/phoenix.hpp>
+#include <boost/phoenix.hpp>
 
 namespace Condition {
     struct Condition;
 }
 
-namespace parse { namespace detail {
+namespace parse::detail {
     // TODO: Investigate refactoring ValueRef to use variant,
     // for increased locality of reference.
     template <typename T>
@@ -206,7 +206,9 @@ namespace parse { namespace detail {
     }
 
     BOOST_PHOENIX_ADAPT_FUNCTION(void, open_and_register_as_string_, open_and_register_as_string, 3)
-}}
+}
+
+#include "EnumValueRefRules.h"
 
 namespace parse {
     struct string_parser_grammar : public detail::value_ref_grammar<std::string> {
@@ -223,6 +225,8 @@ namespace parse {
         detail::variable_rule<std::string>      value_wrapped_bound_variable;
         detail::value_ref_rule<std::string>     statistic_sub_value_ref;
         detail::statistic_rule<std::string>     statistic;
+        detail::value_ref_rule<std::string>     named_string_valueref;
+        detail::value_ref_rule<std::string>     named_lookup_expr;
         detail::expression_rule<std::string>    function_expr;
         detail::expression_rule<std::string>    operated_expr;
         detail::value_ref_rule<std::string>     expr;
@@ -237,10 +241,15 @@ namespace parse {
         int_complex_parser_grammar(const lexer& tok,
                                    detail::Labeller& label,
                                    const int_arithmetic_rules& _int_arith_rules,
+                                   const detail::condition_parser_grammar& condition_parser,
                                    const detail::value_ref_grammar<std::string>& string_grammar);
 
+        // imported grammars directly used in int_complex_parser_grammar
         const int_arithmetic_rules&         int_rules;
         ship_part_class_enum_grammar        ship_part_class_enum;
+        detail::planet_type_parser_rules    planet_type_rules;
+
+        // grammars defined by int_complex_parser_grammar
         detail::complex_variable_rule<int>  game_rule;
         detail::complex_variable_rule<int>  empire_name_ref;
         detail::complex_variable_rule<int>  empire_id_ref;
@@ -256,6 +265,7 @@ namespace parse {
         detail::complex_variable_rule<int>  slots_in_hull;
         detail::complex_variable_rule<int>  slots_in_ship_design;
         detail::complex_variable_rule<int>  special_added_on_turn;
+        detail::complex_variable_rule<int>  planet_type_difference;
         detail::complex_variable_rule<int>  start;
     };
 
@@ -322,10 +332,13 @@ namespace parse {
                                      const detail::condition_parser_grammar& condition_parser,
                                      const detail::value_ref_grammar<std::string>& string_grammar);
 
-        int_arithmetic_rules        int_rules;
-        double_parser_rules         double_rules;
-        detail::value_ref_rule<int> castable_expr;
-        detail::value_ref_rule<int> flexible_int;
+        int_arithmetic_rules                int_rules;
+        double_parser_rules                 double_rules;
+        detail::planet_type_parser_rules    planet_type_rules;
+        detail::value_ref_rule<int>         castable_expr;
+        detail::value_ref_rule<int>         enum_expr;
+        detail::value_ref_rule<int>         flexible_int;
+        detail::value_ref_rule<int>         enum_or_int;
     };
 }
 

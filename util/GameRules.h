@@ -21,8 +21,8 @@ FO_COMMON_API bool RegisterGameRules(GameRulesFn function);
 /** returns the single instance of the GameRules class */
 FO_COMMON_API GameRules& GetGameRules();
 
-struct FO_COMMON_API GameRule : public OptionsDB::Option {
-    enum class Type : int {
+struct FO_COMMON_API GameRule final : public OptionsDB::Option {
+    enum class Type : int8_t {
         INVALID = -1,
         TOGGLE,
         INT,
@@ -30,14 +30,10 @@ struct FO_COMMON_API GameRule : public OptionsDB::Option {
         STRING
     };
 
-    [[nodiscard]] static constexpr Type RuleTypeForType(bool)
-    { return Type::TOGGLE; }
-    [[nodiscard]] static constexpr Type RuleTypeForType(int)
-    { return Type::INT; }
-    [[nodiscard]] static constexpr Type RuleTypeForType(double)
-    { return Type::DOUBLE; }
-    [[nodiscard]] static inline Type RuleTypeForType(std::string)
-    { return Type::STRING; }
+    [[nodiscard]] static constexpr Type RuleTypeForType(bool) noexcept { return Type::TOGGLE; }
+    [[nodiscard]] static constexpr Type RuleTypeForType(int) noexcept { return Type::INT; }
+    [[nodiscard]] static constexpr Type RuleTypeForType(double) noexcept { return Type::DOUBLE; }
+    [[nodiscard]] static inline Type RuleTypeForType(std::string) noexcept { return Type::STRING; }
 
 
     GameRule() = default;
@@ -45,7 +41,7 @@ struct FO_COMMON_API GameRule : public OptionsDB::Option {
              boost::any default_value_, std::string description_,
              std::unique_ptr<ValidatorBase>&& validator_, bool engine_internal_,
              std::string category_ = std::string());
-    [[nodiscard]] bool IsInternal() const { return this->storable; }
+    [[nodiscard]] bool IsInternal() const noexcept { return this->storable; }
 
     Type type = Type::INVALID;
     std::string category;
@@ -84,17 +80,47 @@ public:
     [[nodiscard]] T Get(const std::string& name)
     {
         CheckPendingGameRules();
+
+        TraceLogger() << "Requested rule named " << name << " of type " << typeid(T).name();
+
+
         auto it = m_game_rules.find(name);
-        if (it == m_game_rules.end())
-            throw std::runtime_error("GameRules::Get<>() : Attempted to get nonexistent rule \"" + name + "\".");
+        if (it == m_game_rules.end()) {
+            ErrorLogger() << "GameRules::Get<>() : Attempted to get nonexistent rule \"" << name 
+                          << "\". Returning data-type default value instead: " << T();
+            return T();
+        }
+
+        if (it->second.value.type() != typeid(std::decay_t<T>)) {
+            if constexpr (std::is_same_v<std::decay_t<T>, double>) {
+                if (it->second.value.type() == typeid(int)) {
+                    DebugLogger() << "GameRules::Get<>() : Requested value of type " << typeid(T).name()
+                                  << " from rule of type " << it->second.value.type().name()
+                                  << " ... getting as int instead";
+                    try {
+                        return boost::any_cast<int>(it->second.value);
+                    } catch (const boost::bad_any_cast&) {
+                        ErrorLogger() << "Getting as int failed";
+                    }
+                }
+            }
+            DebugLogger() << "GameRules::Get<>() : Requested value of type " << typeid(T).name()
+                          << " from rule of type " << it->second.value.type().name()
+                          << ". Returning data-type default value instead: " << T();
+            return T();
+        }
+
         try {
             return boost::any_cast<T>(it->second.value);
         } catch (const boost::bad_any_cast&) {
-            ErrorLogger() << "bad any cast converting value of game rule named: " << name << ". Returning default value instead";
+            ErrorLogger() << "GameRules::Get<>() : bad any cast getting value of game rule named: " << name
+                          << " as type << " << typeid(T).name() << ". Returning default value of rule instead";
             try {
                 return boost::any_cast<T>(it->second.default_value);
             } catch (const boost::bad_any_cast&) {
-                ErrorLogger() << "bad any cast converting default value of game rule named: " << name << ". Returning data-type default value instead: " << T();
+                ErrorLogger() << "GameRules::Get<>() : bad any cast getting default value of game rule named: "
+                              << name << " that contains a value of type: " << it->second.value.type().name()
+                              << ". Returning " << typeid(T).name() << " default value instead: " << T();
                 return T();
             }
         }
@@ -132,10 +158,9 @@ public:
         m_game_rules.insert_or_assign(std::move(name), std::move(rule));
     }
 
-    template <typename T, typename V>
+    template <typename T, typename V> requires (std::is_convertible_v<V, Validator<T>>)
     void Add(std::string name, std::string description, std::string category, T default_value,
-             bool engine_internal, V&& validator,
-             typename std::enable_if_t<std::is_convertible_v<V, Validator<T>>>* = nullptr)
+             bool engine_internal, V&& validator)
     {
         Add(std::move(name), std::move(description), std::move(category), std::move(default_value),
             engine_internal, std::make_unique<V>(std::move(validator)));
@@ -145,13 +170,13 @@ public:
     void Add(Pending::Pending<GameRulesTypeMap>&& future);
 
     template <typename T>
-    void Set(const std::string& name, T value)
+    void Set(const std::string& name, T&& value)
     {
         CheckPendingGameRules();
         auto it = m_game_rules.find(name);
         if (it == m_game_rules.end())
             throw std::runtime_error("GameRules::Set<>() : Attempted to set nonexistent rule \"" + name + "\".");
-        it->second.SetFromValue(std::move(value));
+        it->second.SetFromValue(std::forward<T>(value));
     }
 
     void SetFromStrings(const std::map<std::string, std::string>& names_values);

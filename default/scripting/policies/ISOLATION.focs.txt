@@ -4,7 +4,7 @@ Policy
     short_description = "PLC_ISOLATION_SHORT_DESC"
     category = "SOCIAL_CATEGORY"
     adoptioncost = floor(5.0 * [[PLANETS_OWNED_BY_EMPIRE]]^0.5)
-    exclusions = [ "PLC_BOOTSTRAPPING" "PLC_CENTRALIZATION" "PLC_EXPLORATION"]
+    exclusions = [ "PLC_BOOTSTRAPPING" "PLC_CENTRALIZATION" "PLC_COLONIALISM" "PLC_EXPLORATION" "PLC_FEUDALISM" "PLC_VASSALIZATION" ]
     effectsgroups = [
         [[SPECIES_LIKES_OR_DISLIKES_POLICY_STABILITY_EFFECTS]]
 
@@ -56,6 +56,6 @@ Policy
             ]
             effects = SetStealth value = Value + (NamedReal name = "PLC_ISOLATION_STEALTH" value = 5.0)
     ]
-    graphic = "icons/policies/isolation.png"
+    graphic = "icons/policies/social_isolation.png"
 
 #include "/scripting/policies/policies.macros"

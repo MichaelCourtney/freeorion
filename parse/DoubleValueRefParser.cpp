@@ -5,7 +5,7 @@
 #include "../universe/ValueRef.h"
 #include "../universe/ValueRefs.h"
 
-#include <boost/spirit/include/phoenix.hpp>
+#include <boost/phoenix.hpp>
 
 parse::detail::simple_double_parser_rules::simple_double_parser_rules(const parse::lexer& tok) :
     simple_variable_rules("double", tok)
@@ -82,7 +82,7 @@ parse::double_parser_rules::double_parser_rules(
     int_rules(tok, label, condition_parser, string_grammar),
     simple_int_rules(tok),
     simple_double_rules(tok),
-    int_complex_grammar(tok, label, int_rules, string_grammar),
+    int_complex_grammar(tok, label, int_rules, condition_parser, string_grammar),
     double_complex_grammar(tok, label, condition_parser, string_grammar)
 {
     namespace phoenix = boost::phoenix;
